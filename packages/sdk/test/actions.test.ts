@@ -21,6 +21,8 @@ class FakeScheduler implements Scheduler {
   private timers: Array<{ at: number; fn: () => void; id: number }> = [];
   private next = 1;
   now(): number { return this.time; }
+  /** Timers that are still waiting: a leak shows up as a number. */
+  get pending(): number { return this.timers.length; }
   setTimeout(fn: () => void, ms: number): unknown {
     const id = this.next++;
     this.timers.push({ at: this.time + ms, fn, id });
@@ -53,7 +55,7 @@ const welcome = (estado: Record<string, unknown> = {}) => ({
 function setup(options: ActionsOptions = {}, withWelcome = true) {
   const transport = new FakeTransport();
   const scheduler = new FakeScheduler();
-  const client = new PokeIdleClient({ transport, actions: { ...options, scheduler } });
+  const client = new PokeIdleClient({ transport, actions: { confirmGraceMs: 0, ...options, scheduler } }); // no grace window unless a test asks for one
   client.start();
   const feed = (...packets: object[]) => packets.forEach((p) => transport.handlers?.onMessage(JSON.stringify(p)));
   if (withWelcome) feed(welcome());
@@ -633,18 +635,47 @@ test('an explicit `slot: null` is the Depot; any number is the team', async () =
   await pending;
 });
 
-test('two pokémon with the same name: the `venda` event (which carries only a name) cannot confirm, the list can', async () => {
-  const { actions, feed, scheduler } = setupSell();
+test('two pokémon with the same name: the `venda` event still counts (the game emits it), but only as probable', async () => {
+  const { actions, feed } = setupSell();
   feed(sellWelcome([pokemon(1, { slot: 0 }), pokemon(5, { nome: 'Pidgey' }), pokemon(6, { nome: 'Pidgey' })]));
-  let pending = actions.sellPokemon(5, SELL);
+  const pending = actions.sellPokemon(5, SELL);
   feed({ t: 'batalha', ev: [{ k: 'venda', nome: 'Pidgey', ganho: 10 }] }); // could be either one
-  scheduler.advance(10_000);
-  assert.equal((await pending).status, 'unconfirmed');
-  scheduler.advance(30_000);
-  pending = actions.sellPokemon(6, SELL);
-  feed({ t: 'estado', estado: { pkFora: [6] } });
   const result = await pending;
-  assert.equal(result.status === 'confirmed' && result.confirmedBy, 'state');
+  assert.deepEqual([result.status === 'confirmed' && result.confirmedBy, result.status === 'confirmed' && result.confidence, result.status === 'confirmed' && result.gained], ['event', 'probable', 10]);
+});
+
+test('a sale confirmed first by the list waits a moment for the `venda` event, to bring the gold', async () => {
+  const { actions, feed, scheduler } = setupSell({ confirmGraceMs: 1000 });
+  const pending = actions.sellPokemon(5, SELL);
+  feed({ t: 'estado', estado: { pkFora: [5] } }); // the list comes first
+  scheduler.advance(300);
+  feed({ t: 'batalha', ev: [{ k: 'venda', nome: 'Mon5', ganho: 250 }] }); // then the event, inside the window
+  const result = await pending;
+  assert.deepEqual(result, { status: 'confirmed', request: { pokemonId: 5, name: 'Mon5', level: 10, shiny: false }, confirmedBy: 'event', confidence: 'certain', gained: 250 });
+});
+
+test('if the `venda` event never comes, the window ends and the list alone confirms, without the gold', async () => {
+  const { actions, feed, scheduler, client } = setupSell({ confirmGraceMs: 1000 });
+  const leaked = watchSubscriptions(client);
+  const pending = actions.sellPokemon(5, SELL);
+  feed({ t: 'estado', estado: { pkFora: [5] } });
+  scheduler.advance(999);
+  let done = false;
+  void pending.then(() => { done = true; });
+  await tick();
+  assert.equal(done, false); // still waiting inside the window
+  scheduler.advance(1);
+  const result = await pending;
+  assert.deepEqual([result.status === 'confirmed' && result.confirmedBy, result.status === 'confirmed' && result.gained], ['state', null]);
+  assert.equal(leaked(), 0);
+});
+
+test('the grace window is not a way around the timeout, and a bad value is refused', async () => {
+  assert.throws(() => new PokeIdleClient({ transport: new FakeTransport(), actions: { confirmGraceMs: Number.NaN } }), RangeError);
+  const { actions, scheduler } = setupSell({ confirmGraceMs: 1000 });
+  const pending = actions.sellPokemon(5, SELL);
+  scheduler.advance(10_000); // nothing arrives at all
+  assert.equal((await pending).status, 'unconfirmed');
 });
 
 test('`checks: false` turns off the sale protections too, `checks: { sellable: false }` only them', async () => {
@@ -655,4 +686,25 @@ test('`checks: false` turns off the sale protections too, `checks: { sellable: f
   await pending;
   const onlyGold = setupSell({ checks: { gold: false, notForSale: false } });
   assert.equal((await onlyGold.actions.sellPokemon(1, SELL)).status, 'not-sellable'); // `sellable` stays on
+});
+
+test('no timer is left behind after a sale: not after the event, not after repeated state changes inside the window', async () => {
+  const { actions, feed, scheduler } = setupSell({ confirmGraceMs: 1000 });
+  let pending = actions.sellPokemon(5, SELL);
+  assert.equal(scheduler.pending, 1); // the timeout
+  feed({ t: 'estado', estado: { pkFora: [5] } });
+  assert.equal(scheduler.pending, 2); // + the grace window
+  feed({ t: 'estado', estado: { gold: 5 } }); // an unrelated change inside the window
+  feed({ t: 'estado', estado: { gold: 6 } });
+  assert.equal(scheduler.pending, 2); // the window was not started again
+  feed({ t: 'batalha', ev: [{ k: 'venda', nome: 'Mon5', ganho: 1 }] });
+  await pending;
+  assert.equal(scheduler.pending, 0);
+  feed(sellWelcome([pokemon(1, { slot: 0 }), pokemon(6)]));
+  scheduler.advance(3000);
+  pending = actions.sellPokemon(6, SELL);
+  feed({ t: 'estado', estado: { pkFora: [6] } });
+  scheduler.advance(1000);
+  await pending;
+  assert.equal(scheduler.pending, 0);
 });

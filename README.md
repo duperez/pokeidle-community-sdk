@@ -70,8 +70,10 @@ reload starts them over):
 it needs the explicit confirmation (not for a dry run). It refuses, with the reason, what the game's own client refuses to
 sell: your active pokémon, your team, the Collection (locked) and one holding the Exp. Share. Selling is irreversible, so
 it fails closed: if the state is partial and a protection cannot be read, it refuses. It is confirmed by the game's
-`venda` event (with the gold it reports; ignored when two pokémon share the name, because the event carries only a name) or
-by the pokémon leaving your list (strong evidence, not proof: a partial list or a market listing also removes it). It shares the one-at-a-time rule, the rate
+`venda` event (verified in real traffic; it carries the gold, but only the pokémon's name, so it is `certain` when you own
+one pokémon of that name and `probable` when you own several) or by the pokémon leaving your list (strong evidence, not
+proof: a partial list or a market listing also removes it). When the list comes first, the SDK waits `confirmGraceMs`
+(default 1 s) for the event, so the gold is not lost to the order in which the packets arrive. It shares the one-at-a-time rule, the rate
 limit and the waiting period with the purchases. There is no "sell all" yet: it follows your collection rule, whose effect
 the SDK cannot predict from the client.
 

@@ -29,6 +29,11 @@ export interface ActionsOptions {
   /** How long to wait for the game to confirm. Default 10000. */
   confirmTimeoutMs?: number;
   /**
+   * A sale is confirmed as soon as the pokémon leaves your list, but the game's `venda` event (which carries the gold)
+   * can arrive a moment later: this is how long to wait for it before answering. Default 1000; 0 answers at once.
+   */
+  confirmGraceMs?: number;
+  /**
    * After an action that was not confirmed, or that the game answered with an error, how long before the next one is
    * allowed. The game's error packets carry no request id, so an error can be unrelated to the order and the order can
    * still have gone through: waiting is what keeps a retry from paying twice. Default 30000.
@@ -122,7 +127,7 @@ export type SellResult =
 const MAX_PER_ORDER = 9999; // the game's own client never asks for more
 const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
-const DEFAULTS = { minIntervalMs: 3000, maxPerMinute: 10, confirmTimeoutMs: 10_000, unconfirmedCooldownMs: 30_000 } as const;
+const DEFAULTS = { minIntervalMs: 3000, maxPerMinute: 10, confirmTimeoutMs: 10_000, unconfirmedCooldownMs: 30_000, confirmGraceMs: 1000 } as const;
 const realScheduler: Scheduler = { now: () => Date.now(), setTimeout: (cb, ms) => setTimeout(cb, ms), clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) };
 
 /** Created for you as `client.actions`. The limits live in memory and are per instance: a page reload starts them over. */
@@ -287,16 +292,19 @@ export class Actions {
     const timeoutMs = this.options.confirmTimeoutMs ?? DEFAULTS.confirmTimeoutMs;
     const startedAt = this.scheduler.now();
     const state = this.client.state;
-    // The `venda` event carries only a name. With two pokémon of the same name it cannot tell which one was sold, so
-    // then only the pokémon leaving the list confirms.
+    // The `venda` event carries only a name. When you own several pokémon of that name it cannot say WHICH one was sold,
+    // so it still counts (the game does emit it) but only as `probable`.
     const sameName = request.name === null ? 0 : (state.player?.pokemons ?? []).filter((p) => typeof p.nome === 'string' && p.nome.toLowerCase() === request.name?.toLowerCase()).length;
-    const name = sameName === 1 ? (request.name?.toLowerCase() ?? null) : null;
+    const name = request.name?.toLowerCase() ?? null;
+    const graceMs = this.options.confirmGraceMs ?? DEFAULTS.confirmGraceMs;
+    let graceTimer: unknown;
     let finish: (result: SellResult) => void = () => {};
     const offs: Array<() => void> = [];
     let timer: unknown;
     const cleanup = (): void => {
       for (const off of offs) off();
       if (timer !== undefined) this.scheduler.clearTimeout(timer);
+      if (graceTimer !== undefined) this.scheduler.clearTimeout(graceTimer);
     };
     const result = new Promise<SellResult>((resolve) => {
       finish = (value) => {
@@ -308,10 +316,14 @@ export class Actions {
       this.client.onBattleEvent('venda', (event) => {
         const eventName = typeof event['nome'] === 'string' ? event['nome'].toLowerCase() : null;
         if (name === null || eventName !== name) return;
-        finish({ status: 'confirmed', request, confirmedBy: 'event', confidence: 'certain', gained: typeof event['ganho'] === 'number' ? event['ganho'] : null });
+        finish({ status: 'confirmed', request, confirmedBy: 'event', confidence: sameName === 1 ? 'certain' : 'probable', gained: typeof event['ganho'] === 'number' ? event['ganho'] : null });
       }),
       state.onChange(() => {
-        if (state.findPokemon(request.pokemonId) === undefined) finish({ status: 'confirmed', request, confirmedBy: 'state', confidence: 'probable', gained: null });
+        if (state.findPokemon(request.pokemonId) !== undefined || graceTimer !== undefined) return;
+        const byState: SellResult = { status: 'confirmed', request, confirmedBy: 'state', confidence: 'probable', gained: null };
+        if (graceMs <= 0) return finish(byState);
+        // the pokémon is gone; give the `venda` event a moment to arrive with the gold (it keeps listening until then)
+        graceTimer = this.scheduler.setTimeout(() => finish(byState), graceMs);
       }),
       this.client.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })),
     );
@@ -407,7 +419,7 @@ function resolveChecks(checks: ActionsOptions['checks']): { notForSale: boolean;
 /** A bad number would silently turn a protection off (`x < NaN` is always false): refuse it. */
 function validateOptions(options: ActionsOptions): void {
   const numbers: Array<[string, number | undefined]> = [
-    ['maxGoldPerHour', options.maxGoldPerHour], ['confirmTimeoutMs', options.confirmTimeoutMs], ['unconfirmedCooldownMs', options.unconfirmedCooldownMs],
+    ['maxGoldPerHour', options.maxGoldPerHour], ['confirmTimeoutMs', options.confirmTimeoutMs], ['confirmGraceMs', options.confirmGraceMs], ['unconfirmedCooldownMs', options.unconfirmedCooldownMs],
     ['rateLimit.minIntervalMs', options.rateLimit ? options.rateLimit.minIntervalMs : undefined], ['rateLimit.maxPerMinute', options.rateLimit ? options.rateLimit.maxPerMinute : undefined],
   ];
   for (const [name, value] of numbers) {

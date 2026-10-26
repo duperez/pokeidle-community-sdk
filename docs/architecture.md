@@ -68,7 +68,10 @@ one waits (default 30 s), the same rule the Companion app uses after more than 5
 Selling (`sellPokemon`) goes through the same `dispatch` (one in flight, rate limit, waiting after an unconfirmed or
 rejected order). Before sending it applies the game's own rules for the Depot, read from the client: not the active pokémon
 (`activeId`), not in the team (`slot` is set), not in the Collection (`automation.pokemonTravado`), not holding the Exp.
-Share (`xpShareHeld.itemId`). It fails closed: when the active pokémon, the Collection list or the Exp. Share item cannot
+Share (`xpShareHeld.itemId`). The sale is confirmed by the `venda` event or by the pokémon leaving the list. The event
+(verified in real traffic) carries only the pokémon's NAME, so with several pokémon of that name it counts as `probable`;
+when the list arrives first the SDK waits a short grace window (`confirmGraceMs`) so the gold is not lost to packet order.
+It fails closed: when the active pokémon, the Collection list or the Exp. Share item cannot
 be read (a partial state, ids that arrive as text are understood), the answer is "not sellable". The sale price comes from a function the client shares with the server and is not readable
 from the page script, so a dry run does not estimate it: the gold comes back in the `venda` event.
 
