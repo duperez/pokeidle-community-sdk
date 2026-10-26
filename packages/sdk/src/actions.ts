@@ -123,16 +123,11 @@ export class Actions {
     const state = this.host.state;
     if (!state.complete) return { status: 'no-state' };
 
-    const pokemon = state.findPokemon(pokemonId);
+    const pokemon = state.pokemon(pokemonId);
     if (!pokemon) return { status: 'not-found', pokemonId };
-    const request: SellRequest = {
-      pokemonId,
-      name: typeof pokemon.nome === 'string' ? pokemon.nome : null,
-      level: typeof pokemon.level === 'number' ? pokemon.level : null,
-      shiny: typeof pokemon.shiny === 'boolean' ? pokemon.shiny : null,
-    };
+    const request: SellRequest = { pokemonId, name: pokemon.name, level: pokemon.level, shiny: pokemon.shiny };
     if (resolveChecks(this.options.checks).sellable) {
-      const reason = whyNotSellable(state, pokemon);
+      const reason = whyNotSellable(state, pokemonId);
       if (reason) return { status: 'not-sellable', request, reason };
     }
 

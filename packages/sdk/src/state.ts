@@ -1,6 +1,8 @@
 import { ballInfo, itemInfo } from './catalog/index.js';
 import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
+import { asId, asNumber, asText, isObject } from './coerce.js';
 import type { Packet } from './packets.js';
+import { normalizePokemon, type Pokemon } from './pokemon.js';
 import type { PlayerStateWire, PokemonWire, ShopItemWire, BallCatalogEntryWire, ExtraItemWire } from './protocol/wire.js';
 
 /** The player's state after applying the welcome packet and every update since. Field names are the game's own. */
@@ -31,9 +33,6 @@ export interface ShopEntry {
   price: number | null;
 }
 
-/** An id that may arrive as a number or as numeric text (the game is not consistent about it). */
-const asId = (v: unknown): number | null => (typeof v === 'string' && /^\d{1,15}$/.test(v) ? Number(v) : asNumber(v));
-
 const MAX_LIST = 2000;
 /** Keys that must never be copied from server data into our objects (they would change an object's prototype). */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -50,9 +49,6 @@ const ownMaps = (fields: Record<string, unknown>): Record<string, unknown> => {
   for (const key of ['items', 'balls']) if (isObject(fields[key])) fields[key] = safeCopy(fields[key]);
   return fields;
 };
-const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
-const asNumber = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-const asText = (v: unknown, max = 60): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
 const rowsWithId = (v: unknown): PokemonWire[] =>
   Array.isArray(v) ? v.filter((k): k is PokemonWire => isObject(k) && k['id'] !== undefined && k['id'] !== null) : [];
 
@@ -67,6 +63,7 @@ export class GameState {
   private fields: Record<string, unknown> | null = null;
   /** Keyed by the id as text, so `11` and `"11"` are the same pokémon. */
   private pokemonById = new Map<string, PokemonWire>();
+  private pokemonCache: readonly Pokemon[] | null = null;
   private balls: BallEntry[] = [];
   private shop: ShopEntry[] = [];
   private extra: ExtraItemEntry[] = [];
@@ -93,25 +90,52 @@ export class GameState {
     return this.xpShareId;
   }
 
-  /** Is the list of pokémon locked in the Collection present and readable? Without it `isInCollection` knows nothing. */
-  get collectionKnown(): boolean {
-    return Array.isArray((this.fields?.['automation'] as { pokemonTravado?: unknown } | undefined)?.pokemonTravado);
-  }
-
   /** The id of the pokémon that is out in the hunt right now, or `null`. */
   get activePokemonId(): number | null {
     return asId(this.fields?.['activeId']);
   }
 
-  /** One of the player's pokémon by id (the id may come as a number or as text), or `undefined`. */
+  /** One of the player's pokémon by id (the id may come as a number or as text) in the game's own field names, or `undefined`. Prefer `pokemon`. */
   findPokemon(id: number): PokemonWire | undefined {
     return this.pokemonById.get(String(id));
   }
 
-  /** Is this pokémon in the Collection? The game calls it locked: it is kept out of the Depot's sales. */
-  isInCollection(id: number): boolean {
+  /** One of the player's pokémon by id, normalized, or `undefined`. */
+  pokemon(id: number): Pokemon | undefined {
+    const wire = this.pokemonById.get(String(id));
+    return wire === undefined ? undefined : (normalizePokemon(wire) ?? undefined);
+  }
+
+  /** All the player's pokémon, normalized (rows without a usable id are left out). The same array until something changes. */
+  get pokemons(): readonly Pokemon[] {
+    this.pokemonCache ??= [...this.pokemonById.values()].flatMap((wire) => normalizePokemon(wire) ?? []);
+    return this.pokemonCache;
+  }
+
+  // The questions below are three-valued on purpose: `null` means "I do not know" (a partial state, a pokémon that is not
+  // in the list), and a caller that is about to do something irreversible must treat it as "no", never as "false".
+
+  /** Is this pokémon the one out in the hunt? `null` when the active pokémon is not known. */
+  isActive(id: number): boolean | null {
+    const active = this.activePokemonId;
+    return active === null ? null : active === id;
+  }
+
+  /** Is this pokémon in your team? `null` when it is not in your list. */
+  isInTeam(id: number): boolean | null {
+    return this.pokemon(id)?.inTeam ?? null;
+  }
+
+  /** Is this pokémon in the Collection (the game calls it locked: it is kept out of the Depot's sales)? `null` when the Collection is not known. */
+  isInCollection(id: number): boolean | null {
     const locked = (this.fields?.['automation'] as { pokemonTravado?: unknown } | undefined)?.pokemonTravado;
-    return Array.isArray(locked) && locked.some((x) => Number(x) === id);
+    return Array.isArray(locked) ? locked.some((x) => Number(x) === id) : null;
+  }
+
+  /** Does this pokémon hold the Exp. Share? `null` when the pokémon or the Exp. Share item is not known. */
+  holdsExpShare(id: number): boolean | null {
+    const pokemon = this.pokemon(id);
+    return pokemon === undefined || this.xpShareId === null ? null : pokemon.heldItemId === this.xpShareId;
   }
 
   /** The game's own items (not in the public items catalog), from the last welcome packet. */
@@ -244,6 +268,7 @@ export class GameState {
    */
   private merge(partial: unknown, full: boolean): void {
     if (!isObject(partial)) return;
+    this.pokemonCache = null;
     const { cheio, pokemons, pkMud, pkFora, dexMud, dexFora, ...rest } = safeCopy(partial);
     const known = (list: unknown): Array<[string, PokemonWire]> => rowsWithId(list).map((k) => [idKey(k.id), k]);
     if (full || cheio === true || !this.fields) {

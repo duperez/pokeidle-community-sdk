@@ -38,23 +38,25 @@ test('errorOf keeps only well-typed fields', () => {
 
 const stateOf = (over: Partial<Record<keyof ActionsState, unknown>>): ActionsState =>
   ({
-    activePokemonId: 1,
-    collectionKnown: true,
+    isActive: () => false,
+    isInTeam: () => false,
     isInCollection: () => false,
-    xpShareItemId: 99,
+    holdsExpShare: () => false,
     ...over,
   }) as unknown as ActionsState;
 
-test('whyNotSellable: sellable, and each protection (fail closed on unknowns)', () => {
-  const p = { id: 5 };
-  assert.equal(whyNotSellable(stateOf({}), p), null);
-  assert.match(whyNotSellable(stateOf({}), {}) ?? '', /no id/);
-  assert.match(whyNotSellable(stateOf({ activePokemonId: null }), p) ?? '', /active pokémon is not known/);
-  assert.match(whyNotSellable(stateOf({}), { id: 1 }) ?? '', /active pokémon/);
-  assert.match(whyNotSellable(stateOf({}), { id: 5, slot: 0 }) ?? '', /team/);
-  assert.equal(whyNotSellable(stateOf({}), { id: 5, slot: null }), null);
-  assert.match(whyNotSellable(stateOf({ collectionKnown: false }), p) ?? '', /Collection is not known/);
-  assert.match(whyNotSellable(stateOf({ isInCollection: () => true }), p) ?? '', /Collection \(locked\)/);
-  assert.match(whyNotSellable(stateOf({ xpShareItemId: null }), p) ?? '', /Exp\. Share item is not known/);
-  assert.match(whyNotSellable(stateOf({}), { id: 5, heldItemId: 99 }) ?? '', /holds the Exp\. Share/);
+test('whyNotSellable: sellable, and each protection', () => {
+  assert.equal(whyNotSellable(stateOf({}), 5), null);
+  assert.match(whyNotSellable(stateOf({ isActive: () => true }), 5) ?? '', /active pokémon/);
+  assert.match(whyNotSellable(stateOf({ isInTeam: () => true }), 5) ?? '', /team/);
+  assert.match(whyNotSellable(stateOf({ isInCollection: () => true }), 5) ?? '', /Collection \(locked\)/);
+  assert.match(whyNotSellable(stateOf({ holdsExpShare: () => true }), 5) ?? '', /holds the Exp\. Share/);
+});
+
+test('whyNotSellable fails closed: every unknown refuses, and says what is missing', () => {
+  const unknown = () => null;
+  assert.match(whyNotSellable(stateOf({ isActive: unknown }), 5) ?? '', /active pokémon is not known/);
+  assert.match(whyNotSellable(stateOf({ isInTeam: unknown }), 5) ?? '', /not in your list/);
+  assert.match(whyNotSellable(stateOf({ isInCollection: unknown }), 5) ?? '', /Collection is not known/);
+  assert.match(whyNotSellable(stateOf({ holdsExpShare: unknown }), 5) ?? '', /Exp\. Share item is not known/);
 });

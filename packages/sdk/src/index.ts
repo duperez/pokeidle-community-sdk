@@ -39,6 +39,7 @@ export {
   type ItemId,
   type ItemInfo,
 } from './catalog/index.js';
+export { normalizePokemon, type Pokemon } from './pokemon.js';
 export { GameState, type BallEntry, type ExtraItemEntry, type PlayerState, type ShopEntry } from './state.js';
 export * from './protocol/wire.js';
 export * from './protocol/events.js';

@@ -70,8 +70,8 @@ export function waitForSale({ host, scheduler, options }: Deps, request: SellReq
   const sameKind =
     wanted === null
       ? 0
-      : (state.player?.pokemons ?? []).filter(
-          (p) => typeof p.nome === 'string' && normalizeName(p.nome) === wanted && (request.level === null || p.level === request.level),
+      : state.pokemons.filter(
+          (p) => p.name !== null && normalizeName(p.name) === wanted && (request.level === null || p.level === request.level),
         ).length;
   const graceMs = options.confirmGraceMs ?? DEFAULTS.confirmGraceMs;
   return waitForFirst<SellResult>(
@@ -98,7 +98,7 @@ export function waitForSale({ host, scheduler, options }: Deps, request: SellReq
       );
       onCleanup(
         state.onChange(() => {
-          if (state.findPokemon(request.pokemonId) !== undefined || graceTimer !== undefined) return;
+          if (state.pokemon(request.pokemonId) !== undefined || graceTimer !== undefined) return;
           const byState: SellResult = { status: 'confirmed', request, confirmedBy: 'state', confidence: 'probable', gained: null };
           if (graceMs <= 0) return finish(byState);
           // the pokémon is gone; give the `venda` event a moment to arrive with the gold (it keeps listening until then)

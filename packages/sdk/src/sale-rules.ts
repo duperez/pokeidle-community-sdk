@@ -2,24 +2,22 @@ import type { ActionsState } from './actions-host.js';
 
 /**
  * The rules of the game's own client for what the Depot sells. `null` when the pokémon can be sold.
- * Fails CLOSED: selling cannot be undone, so when a protection depends on data that is missing or unreadable (a partial
+ * Fails CLOSED: selling cannot be undone, so when a protection depends on something the state does not know (a partial
  * state) the answer is "no", never "nothing protects it".
  */
-export function whyNotSellable(
-  state: ActionsState,
-  pokemon: { id?: number; slot?: number | null; heldItemId?: number | null },
-): string | null {
-  const id = Number(pokemon.id);
-  if (!Number.isFinite(id)) return 'the pokémon has no id';
-  const active = state.activePokemonId;
+export function whyNotSellable(state: ActionsState, id: number): string | null {
+  const active = state.isActive(id);
   if (active === null) return 'your active pokémon is not known (the state is partial): reload the game page';
-  if (id === active) return 'it is your active pokémon';
-  if (pokemon.slot !== undefined && pokemon.slot !== null) return 'it is in your team (only the Depot is sold)';
-  if (!state.collectionKnown) return 'your Collection is not known (the state is partial): reload the game page';
-  if (state.isInCollection(id)) return 'it is in your Collection (locked)';
-  const xpShare = state.xpShareItemId;
-  if (xpShare === null) return 'the Exp. Share item is not known (the state is partial): reload the game page';
-  if (Number(pokemon.heldItemId) === xpShare) return 'it holds the Exp. Share';
+  if (active) return 'it is your active pokémon';
+  const inTeam = state.isInTeam(id);
+  if (inTeam === null) return 'it is not in your list';
+  if (inTeam) return 'it is in your team (only the Depot is sold)';
+  const inCollection = state.isInCollection(id);
+  if (inCollection === null) return 'your Collection is not known (the state is partial): reload the game page';
+  if (inCollection) return 'it is in your Collection (locked)';
+  const holdsExpShare = state.holdsExpShare(id);
+  if (holdsExpShare === null) return 'the Exp. Share item is not known (the state is partial): reload the game page';
+  if (holdsExpShare) return 'it holds the Exp. Share';
   return null;
 }
 

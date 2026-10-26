@@ -15,12 +15,12 @@ export type ActionsState = Pick<
   | 'ballName'
   | 'itemName'
   | 'onChange'
-  | 'player'
-  | 'findPokemon'
-  | 'activePokemonId'
-  | 'collectionKnown'
+  | 'pokemon'
+  | 'pokemons'
+  | 'isActive'
+  | 'isInTeam'
   | 'isInCollection'
-  | 'xpShareItemId'
+  | 'holdsExpShare'
 >;
 
 /**
