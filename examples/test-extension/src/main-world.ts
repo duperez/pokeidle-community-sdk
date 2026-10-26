@@ -1,5 +1,5 @@
 // Runs in the page's own world, before the game opens its socket (see manifest.json). READ-ONLY: it never sends anything.
-import { Inspector, PageTransport, PokeIdleClient } from 'pokeidle-community-sdk';
+import { Ball, Inspector, Item, PageTransport, PokeIdleClient } from 'pokeidle-community-sdk';
 
 const inspector = new Inspector();
 const client = new PokeIdleClient({ transport: new PageTransport(), inspector });
@@ -18,16 +18,31 @@ function mountOverlay(): void {
   copy.textContent = 'Copy redacted dump';
   copy.style.cssText = 'margin-top:6px;cursor:pointer';
   copy.addEventListener('click', () => void navigator.clipboard.writeText(JSON.stringify(inspector.dump(), null, 2)));
-  box.append(title, list, copy);
+  // The game's catalogs (ball and shop lists) are game data, not account data: nothing about the player is in this copy.
+  const copyCatalogs = document.createElement('button');
+  copyCatalogs.textContent = 'Copy game catalogs';
+  copyCatalogs.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
+  copyCatalogs.addEventListener('click', () => void navigator.clipboard.writeText(JSON.stringify({ balls: client.state.ballCatalog, shopItems: client.state.shopItems }, null, 2)));
+  box.append(title, list, copy, copyCatalogs);
   document.documentElement.append(box);
 
   const render = (): void => {
     const { received, unknownTypes } = inspector.dump();
     title.textContent = `SDK test · ${client.connected ? 'connected' : 'waiting for the socket'}`;
-    const rows = Object.entries(received).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([type, n]) => `${type}: ${n}`);
+    const { state } = client;
+    const rows: string[] = [];
+    if (state.player) {
+      // Just a look at what the SDK reads; this stays on your screen.
+      rows.push(`level ${state.level} · gold ${state.gold} · diamonds ${state.diamonds}`);
+      rows.push(`balls: ${state.ballCatalog.map((b) => `${b.name} ${state.ballCount(b.id)}`).join(', ') || '(no catalog yet)'}`);
+      rows.push(`revives: ${state.itemCount(Item.Revive)} · max revives: ${state.itemCount(Item.MaxRevive)} · small potions: ${state.itemCount(Item.SmallPotion)}`);
+      rows.push(`poke balls: ${state.ballCount(Ball.PokeBall)} · pokémon: ${state.player.pokemons.length}`);
+      rows.push('');
+    }
+    rows.push(...Object.entries(received).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([type, n]) => `${type}: ${n}`));
+    if (unknownTypes.length) rows.push(`unknown: ${unknownTypes.join(', ')}`);
     list.textContent = rows.join('\n');
-    list.style.whiteSpace = 'pre';
-    if (unknownTypes.length) list.textContent += `\nunknown: ${unknownTypes.join(', ')}`;
+    list.style.whiteSpace = 'pre-wrap';
   };
   setInterval(render, 1000);
   render();

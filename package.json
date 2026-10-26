@@ -3,13 +3,18 @@
   "private": true,
   "license": "MIT",
   "description": "Unofficial community SDK for building PokeIdle extensions. Not affiliated with or endorsed by PokeIdle.",
-  "workspaces": ["packages/*", "examples/*"],
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
   "scripts": {
     "build": "npm run build -w pokeidle-community-sdk && npm run build -w pokeidle-test-extension",
     "typecheck": "npm run typecheck -w pokeidle-community-sdk && npm run typecheck -w pokeidle-test-extension",
     "test": "npm run test:sdk && npm run test:repo",
     "test:sdk": "npm run test -w pokeidle-community-sdk",
-    "test:repo": "node --test test/"
+    "test:repo": "node --test test/",
+    "catalog": "node scripts/generate-catalog.mjs",
+    "catalog:check": "node scripts/generate-catalog.mjs --check"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",
@@ -18,5 +23,7 @@
     "tsx": "^4.19.0",
     "typescript": "^5.5.0"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

@@ -28,6 +28,22 @@ Every frame is a JSON object with a string `t`. `parsePacket` is defensive: anyt
 ignored, and oversized frames are dropped. TypeScript types describe what a payload should look like but cannot enforce
 it at run time, so typed payloads are added per packet type only after they were verified against real traffic.
 
+## Typed packets and game state
+
+Only packet types verified against real traffic get a typed shape (`welcome`, `estado`; see `protocol/wire.ts`). The raw
+types keep the game's own field names and make every field optional, because the server can omit or change anything. For
+everyday use read `client.state` (`GameState`) instead: it applies the full state from `welcome` and every `estado` update
+(including pokémon and pokédex deltas, as the game sends them), exposes English getters (`gold`, `level`,
+`itemCount(id)`, `ballCount(id)`) and ignores malformed data instead of throwing. The state is updated *before* your packet
+listeners run.
+
+## Catalogs and enums
+
+`Item` and `Ball` map names to ids. Items come from the game's public items catalog; balls are not in that file (the server
+sends them in `welcome`), so they come from a small snapshot in `packages/sdk/data/balls.json`, which the test extension can
+copy for you. `npm run catalog` regenerates `src/catalog/*.generated.ts`; `npm run catalog:check` reports drift. When two
+items share a name the lowest id keeps the clean key and the others get `_<id>`.
+
 ## Redaction
 
 Packets contain session tokens, e-mails and player names. Everything the SDK records (`Inspector`) is redacted when it is

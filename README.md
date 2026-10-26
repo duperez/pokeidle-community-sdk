@@ -8,7 +8,8 @@ what the game sends (and, in later versions, **sending** actions); the SDK handl
 names and logs.
 
 **Status: early and experimental (v0.0.x).** The API will change. Today it can attach to the game's WebSocket from a
-page, deliver parsed packets to your listeners and record redacted samples of what goes by.
+page, deliver parsed (and, for the verified types, typed) packets to your listeners, keep the player's state up to date,
+name items and balls with enums, and record redacted samples of what goes by.
 
 ## Why
 
@@ -21,15 +22,27 @@ It is a helper, not a gatekeeper: it does not try to limit what you can build.
 ## Quick look
 
 ```ts
-import { Inspector, PageTransport, PokeIdleClient } from 'pokeidle-community-sdk';
+import { Ball, Item, PageTransport, PokeIdleClient } from 'pokeidle-community-sdk';
 
-const client = new PokeIdleClient({ transport: new PageTransport(), inspector: new Inspector() });
+const client = new PokeIdleClient({ transport: new PageTransport() });
 client.start();
 
-client.on('welcome', (packet) => console.log('logged in', packet.t));
-client.onPacket((packet) => { /* every packet */ });
+// The state is kept up to date from the game's packets: just read it.
+client.on('welcome', () => {
+  console.log(client.state.level, client.state.gold);
+  console.log('revives:', client.state.itemCount(Item.Revive));
+  console.log('great balls:', client.state.ballCount(Ball.GreatBall));
+});
+client.state.onChange(() => { /* gold, items, pokémon... changed */ });
+
+client.on('welcome', (packet) => packet.estado?.gold); // typed raw packets for the verified types
+client.onPacket((packet) => { /* every packet, typed as a plain Packet */ });
 console.log(client.inspector?.dump()); // counts and redacted samples, safe to share
 ```
+
+Items and balls are named by enums generated from the game's own catalogs: `Item.SmallPotion`, `Item.MaxRevive`,
+`Ball.GreatBall`... `itemInfo(id)` gives name, category and price; `itemsInCategory('heal')` lists a category.
+`npm run catalog` regenerates them from the game's public data, and `npm run catalog:check` tells if they are stale.
 
 It has to run in the page's own world, before the game opens its socket. In a Chrome extension (Manifest V3):
 

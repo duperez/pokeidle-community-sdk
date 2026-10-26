@@ -105,3 +105,17 @@ test('the inspector can be turned off', () => {
   const client = new PokeIdleClient({ transport: new FakeTransport(), inspector: false });
   assert.equal(client.inspector, null);
 });
+
+test('on() gives a typed packet for known types, and client.state is updated before the listener runs', () => {
+  const { transport, client } = setup();
+  const seen: Array<number | undefined> = [];
+  client.on('welcome', (packet) => {
+    const gold: number | undefined = packet.estado?.gold; // typed: a wrong field type would not compile
+    seen.push(gold, client.state.gold ?? undefined);
+  });
+  transport.handlers?.onMessage('{"t":"welcome","estado":{"cheio":true,"gold":42}}');
+  assert.deepEqual(seen, [42, 42]);
+  client.on('some.other.type', (packet) => seen.push(Object.keys(packet).length));
+  transport.handlers?.onMessage('{"t":"some.other.type","a":1}');
+  assert.equal(seen.at(-1), 2);
+});

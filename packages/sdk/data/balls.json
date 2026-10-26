@@ -1,0 +1,5 @@
+[
+  { "id": 1, "name": "Poke Ball", "catchRate": 1, "priceGold": 5, "buyable": true },
+  { "id": 2, "name": "Great Ball", "catchRate": 2, "priceGold": 20, "buyable": true },
+  { "id": 3, "name": "Super Ball", "catchRate": 3, "priceGold": 50, "buyable": true }
+]

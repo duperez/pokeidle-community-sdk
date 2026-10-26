@@ -1,5 +1,7 @@
 import { Inspector } from './inspector.js';
 import { DEFAULT_MAX_PACKET_BYTES, parsePacket, type Packet } from './packets.js';
+import type { PacketMap } from './protocol/wire.js';
+import { GameState } from './state.js';
 import type { Transport } from './transport.js';
 
 export type Unsubscribe = () => void;
@@ -22,6 +24,8 @@ type PacketListener = (packet: Packet) => void;
  */
 export class PokeIdleClient {
   readonly inspector: Inspector | null;
+  /** The player's state, kept up to date from the game's packets. */
+  readonly state = new GameState();
   private readonly transport: Transport;
   private readonly maxBytes: number;
   private readonly onError: (error: unknown) => void;
@@ -61,12 +65,18 @@ export class PokeIdleClient {
     return this.transport.readyState === 1;
   }
 
-  /** Every incoming packet of one type, e.g. `client.on('welcome', ...)`. */
-  on(type: string, listener: PacketListener): Unsubscribe {
+  /**
+   * Every incoming packet of one type, e.g. `client.on('welcome', (packet) => ...)`. Types with a verified shape
+   * (`welcome`, `estado`) give you a typed packet; any other type string gives a plain `Packet`.
+   * `client.state` is already updated when your listener runs.
+   */
+  on<K extends keyof PacketMap>(type: K, listener: (packet: PacketMap[K]) => void): Unsubscribe;
+  on(type: string, listener: PacketListener): Unsubscribe;
+  on(type: string, listener: (packet: never) => void): Unsubscribe {
     const set = this.byType.get(type) ?? new Set();
-    set.add(listener);
+    set.add(listener as PacketListener);
     this.byType.set(type, set);
-    return () => void set.delete(listener);
+    return () => void set.delete(listener as PacketListener);
   }
 
   /** Every incoming packet, whatever its type. */
@@ -98,6 +108,7 @@ export class PokeIdleClient {
     const packet = parsePacket(text, this.maxBytes);
     if (!packet) return;
     this.inspector?.recordReceived(packet);
+    this.safely(() => this.state.applyPacket(packet)); // before the listeners, so they see the new state
     this.call(this.byType.get(packet.t), packet);
     this.call(this.anyPacket, packet);
   }
@@ -116,6 +127,14 @@ export class PokeIdleClient {
       } catch (error) {
         this.onError(error);
       }
+    }
+  }
+
+  private safely(fn: () => void): void {
+    try {
+      fn();
+    } catch (error) {
+      this.onError(error);
     }
   }
 
