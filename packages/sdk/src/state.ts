@@ -1,9 +1,9 @@
 import { ballInfo, itemInfo } from './catalog/index.js';
 import type { Packet } from './packets.js';
-import type { PlayerStateWire, ShopItemWire, BallCatalogEntryWire, ExtraItemWire } from './protocol/wire.js';
+import type { PlayerStateWire, PokemonWire, ShopItemWire, BallCatalogEntryWire, ExtraItemWire } from './protocol/wire.js';
 
 /** The player's state after applying the welcome packet and every update since. Field names are the game's own. */
-export type PlayerState = PlayerStateWire & { pokemons: Array<{ id?: number | string; [key: string]: unknown }> };
+export type PlayerState = PlayerStateWire & { pokemons: PokemonWire[] };
 
 /** A ball as the server describes it in the welcome packet. */
 export interface BallEntry {

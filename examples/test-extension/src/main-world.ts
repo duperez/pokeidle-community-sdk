@@ -27,7 +27,7 @@ function mountOverlay(): void {
   document.documentElement.append(box);
 
   const render = (): void => {
-    const { received, unknownTypes, ignored } = inspector.dump();
+    const { received, unknownTypes, unknownBattleEvents, unknownSentTypes, ignored } = inspector.dump();
     title.textContent = `SDK test · ${client.connected ? 'connected' : 'waiting for the socket'}`;
     const { state } = client;
     const rows: string[] = [];
@@ -41,7 +41,10 @@ function mountOverlay(): void {
       rows.push('');
     }
     rows.push(...Object.entries(received).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([type, n]) => `${type}: ${n}`));
-    if (unknownTypes.length) rows.push(`unknown: ${unknownTypes.join(', ')}`);
+    // What the game sends that the SDK does not know yet: a protocol change shows up here.
+    if (unknownTypes.length) rows.push(`unknown packets: ${unknownTypes.join(', ')}`);
+    if (unknownBattleEvents.length) rows.push(`unknown battle events: ${unknownBattleEvents.join(', ')}`);
+    if (unknownSentTypes.length) rows.push(`unknown commands: ${unknownSentTypes.join(', ')}`);
     if (Object.keys(ignored).length) rows.push(`ignored frames: ${JSON.stringify(ignored)}`);
     list.textContent = rows.join('\n');
     list.style.whiteSpace = 'pre-wrap';

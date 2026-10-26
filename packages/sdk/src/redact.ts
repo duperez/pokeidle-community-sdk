@@ -6,7 +6,7 @@
 
 /** Keys whose value is always replaced. Includes the game's own (Portuguese) wire names. */
 const SENSITIVE_KEY =
-  /token|senha|pass(word|wd)?\b|e-?mail|cookie|secret|sess(ion|[aã]o)|auth|jwt|bearer|api.?key|\bsid\b|credencial|nick(name)?\b|user(name)?\b|login|owner|account/i;
+  /token|senha|pass(word|wd)?\b|e-?mail|cookie|secret|sess(ion|[aã]o)|auth|jwt|bearer|api.?key|\bsid\b|credencial|nick(name)?\b|user(name)?\b|login|owner|account|device|dispositivo/i;
 const EMAIL = /[\w.+-]+@[\w-]+(\.[\w-]+)+/g;
 /** Long runs of letters, digits, `_` and `-` look like tokens, hashes or keys, not game text. */
 const LONG_SEQUENCE = /[A-Za-z0-9_-]{24,}/g;

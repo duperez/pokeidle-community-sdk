@@ -40,6 +40,36 @@ client.onPacket((packet) => { /* every packet, typed as a plain Packet */ });
 console.log(client.inspector?.dump()); // counts and redacted samples, safe to share
 ```
 
+### Sending commands
+
+`client.sendCommand({ t: 'shop.buy', kind: 'ball', id: Ball.UltraBall, qty: 10 })` sends a command the game's client knows,
+checked by the compiler for the typed ones. It sends exactly what you pass, right away, and guards against accidents (not
+against someone who wants to bypass them: `sendRaw` exists):
+
+- **Forbidden** (`FORBIDDEN_COMMANDS`): `orbs.sacar`, which withdraws orbs as real cryptocurrency. It does not compile and
+  is refused at run time.
+- **Irreversible** (`IRREVERSIBLE_COMMANDS`): commands that spend, sell or destroy something valuable (market purchases and
+  listings, selling pokémon, discarding items, refining, evolving, guild leadership...). They need
+  `{ confirmIrreversible: true }`.
+- Numbers must be finite and `qty`/`qtd` positive integers (`JSON.stringify(NaN)` would send `null`).
+
+### What is typed
+
+The SDK knows every packet the game's client handles (51 types), every kind of event inside a battle packet (133) and every
+command the client sends (216): the registry is extracted from the client itself (`npm run protocol`, and
+`npm run protocol:check` tells if the game changed). How well each one is known is explicit:
+
+| Level | Meaning | Packets | Battle events | Commands |
+|---|---|---|---|---|
+| `traffic` | fields verified in real traffic | 20 | 5 | 6 |
+| `client-code` | field names read from the game's client, values `unknown` until seen | 31 | 128 | typed shapes for the buy/sell/market commands |
+| `name-only` | known by name | none | none | the rest |
+
+`client.on('market', (p) => p.medias)` is typed for all 51 packet types (a typo does not compile; `onType` is for types the SDK does not know yet), `client.onBattleEvent('morte', (e) => e.ouro)`
+delivers battle events one by one, and `client.inspector.dump()` lists what the game sent that the SDK does not know
+(`unknownTypes`, `unknownBattleEvents`, `unknownSentTypes`), which is how a protocol change shows up. A new type added by
+the game fails the build until someone classifies it.
+
 Items and balls are named by enums generated from the game's own catalogs (682 items and 5 balls today):
 `Item.SmallPotion`, `Item.MaxRevive`, `Item.BronzeBossToken`, `Item.ShinyVenusaurite`, `Ball.UltraBall`, `Ball.BeastBall`... `itemInfo(id)` gives name, category and price; `itemsInCategory('heal')` lists a category.
 `npm run catalog` regenerates them from the game's public data, and `npm run catalog:check` tells if they are stale.

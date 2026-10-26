@@ -39,6 +39,28 @@ listeners run. The full state arrives only once, in `welcome` right after login:
 example an extension reloaded with the game already open) only sees updates, and `state.complete` is `false` until the
 page reloads.
 
+## The protocol registry
+
+`protocol/registry.generated.ts` lists every packet type the game's client handles, every battle event kind and every
+command it sends, plus the field names it reads from each received packet. `scripts/generate-protocol.mjs` extracts it from
+the client's own source (names only, never code): the branches of the client's `onmessage`, the `case`s of its battle
+event handler and the `{ t: '...' }` literals it sends. Comments are stripped first, and the generator fails loudly if the
+client changes shape. `npm run protocol:check` reports drift.
+
+Each entry has a coverage level (`PACKET_COVERAGE`, `battleEventCoverage`, `commandCoverage`): `traffic` when the fields
+were verified in real traffic, `client-code` when only the client's field names are known, `name-only` for commands
+without a typed shape. A few commands are deliberately left name-only so the SDK does not make them easy to send by
+accident (for example the one that withdraws orbs as real cryptocurrency). `PACKET_COVERAGE` is exhaustive at compile
+time, so a packet type the game adds cannot go unclassified.
+
+## Sending commands
+
+`sendCommand` is the low-level sender. Its guards (`protocol/send-guard.ts`) are about accidents: a forbidden command is
+refused, an irreversible one needs an explicit confirmation, and malformed numbers are rejected before they reach the
+socket. They work on the run-time value, so they also protect callers that bypass the types. They are not a security
+boundary: nothing stops code that uses `sendRaw`. Both lists are checked against the registry by a test, so a typo or a
+renamed command cannot silently protect nothing.
+
 ## Catalogs and enums
 
 `Item` and `Ball` map names to ids. Items come from the game's public items catalog; balls are not in that file (the server

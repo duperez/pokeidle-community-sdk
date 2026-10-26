@@ -6,4 +6,10 @@ export { REDACTED, TEXT_MASK, cleanText, redact, type RedactOptions } from './re
 export type { Transport, TransportHandlers } from './transport.js';
 export { Ball, BALL_CATALOG, Item, ITEM_CATALOG, ballInfo, itemInfo, itemsInCategory, type BallId, type BallInfo, type ItemCategory, type ItemId, type ItemInfo } from './catalog/index.js';
 export { GameState, type BallEntry, type ExtraItemEntry, type PlayerState, type ShopEntry } from './state.js';
-export type { AutomationWire, BallCatalogEntryWire, ExtraItemWire, HuntWire, PacketMap, PlayerStateWire, ShopItemWire, StatePacket, WelcomePacket } from './protocol/wire.js';
+export * from './protocol/wire.js';
+export * from './protocol/events.js';
+export * from './protocol/mini-games.js';
+export * from './protocol/commands.js';
+export { CommandRefusedError } from './protocol/send-guard.js';
+export { PACKET_COVERAGE, type ClientCodePacket, type Coverage, type PacketMap, type ServerPacket, type ServerPacketType, type TrafficPackets } from './protocol/packet-map.js';
+export { BATTLE_EVENT_KINDS, BATTLE_EVENT_READS, CLIENT_COMMAND_TYPES, SERVER_PACKET_READS, SERVER_PACKET_TYPES } from './protocol/registry.generated.js';

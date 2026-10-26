@@ -1,3 +1,5 @@
+import { SERVER_PACKET_TYPES } from './protocol/registry.generated.js';
+
 /**
  * A message of the game's WebSocket. The game sends JSON text frames; every packet has a string `t` (its type).
  * Everything else depends on the type. Typed payloads are added per packet type as they are verified against real traffic.
@@ -8,15 +10,11 @@ export interface Packet {
 }
 
 /**
- * Packet types observed in the game's traffic. The names are the game's own wire names, kept as they are.
- * A type that is not in this list is still delivered; the inspector just flags it as unknown so it can be investigated.
+ * Packet types the game's client handles, extracted from the client itself (see `protocol/registry.generated.ts`). The
+ * names are the game's own wire names. A type that is not in this list is still delivered; the inspector flags it as
+ * unknown so it can be investigated, which is how a protocol change shows up.
  */
-export const KNOWN_PACKET_TYPES = [
-  'welcome', 'estado', 'batalha', 'campo', 'campo.init', 'chat', 'chat.del', 'chat.fixada', 'chat.fixadas', 'chat.historico',
-  'chat.interrompido', 'chat.mute', 'chat.aviso', 'market', 'guild', 'pvp', 'ranking', 'ranking.ficha', 'shiny.captura',
-  'lendario.captura', 'bloqueios', 'showdown', 'topCatch', 'amigos', 'raidFichas', 'sessao.renovada', 'pong', 'erro', 'perfil', 'economia',
-  'passe', 'ginasio', 'treino', 'csv', 'campeonato', 'convite', 'oferenda', 'comercio', 'orbs', 'estatisticas',
-] as const;
+export const KNOWN_PACKET_TYPES = SERVER_PACKET_TYPES;
 
 export type KnownPacketType = (typeof KNOWN_PACKET_TYPES)[number];
 

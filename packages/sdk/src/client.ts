@@ -1,6 +1,8 @@
 import { Inspector } from './inspector.js';
 import { DEFAULT_MAX_PACKET_BYTES, readFrame, type Packet } from './packets.js';
-import type { PacketMap } from './protocol/wire.js';
+import type { BattleEvent, BattleEventKind, BattleEventMap } from './protocol/events.js';
+import { assertSendable, type SendableCommand } from './protocol/send-guard.js';
+import type { PacketMap } from './protocol/packet-map.js';
 import { GameState } from './state.js';
 import type { Transport } from './transport.js';
 
@@ -32,6 +34,8 @@ export class PokeIdleClient {
   private readonly byType = new Map<string, Set<PacketListener>>();
   private readonly anyPacket = new Set<PacketListener>();
   private readonly outgoing = new Set<PacketListener>();
+  private readonly battleByKind = new Map<string, Set<(event: never) => void>>();
+  private readonly anyBattle = new Set<(event: BattleEvent) => void>();
   private readonly connection = new Set<(connected: boolean) => void>();
   private started = false;
 
@@ -66,17 +70,38 @@ export class PokeIdleClient {
   }
 
   /**
-   * Every incoming packet of one type, e.g. `client.on('welcome', (packet) => ...)`. Types with a verified shape
-   * (`welcome`, `estado`) give you a typed packet; any other type string gives a plain `Packet`.
-   * `client.state` is already updated when your listener runs.
+   * Every incoming packet of one type, e.g. `client.on('welcome', (packet) => ...)`. Only the packet types the game's
+   * client handles are accepted (a typo does not compile); each gives you its typed packet. `client.state` is already
+   * updated when your listener runs. For a type the game adds later, use `onType`.
    */
-  on<K extends keyof PacketMap>(type: K, listener: (packet: PacketMap[K]) => void): Unsubscribe;
-  on(type: string, listener: PacketListener): Unsubscribe;
-  on(type: string, listener: (packet: never) => void): Unsubscribe {
+  on<K extends keyof PacketMap>(type: K, listener: (packet: PacketMap[K]) => void): Unsubscribe {
+    return this.onType(type, listener as PacketListener);
+  }
+
+  /** Every incoming packet of any type name, as a plain `Packet`: for types the SDK does not know yet. */
+  onType(type: string, listener: PacketListener): Unsubscribe {
     const set = this.byType.get(type) ?? new Set();
-    set.add(listener as PacketListener);
+    set.add(listener);
     this.byType.set(type, set);
-    return () => void set.delete(listener as PacketListener);
+    return () => void set.delete(listener);
+  }
+
+  /**
+   * One kind of battle event, e.g. `client.onBattleEvent('morte', (e) => e.ouro)`. The game sends several events per
+   * `batalha` packet; this delivers them one by one. Five kinds have typed fields; the others are known by name and
+   * by the field names the game's client reads.
+   */
+  onBattleEvent<K extends BattleEventKind>(kind: K, listener: (event: BattleEventMap[K]) => void): Unsubscribe {
+    const set = this.battleByKind.get(kind) ?? new Set();
+    set.add(listener as (event: never) => void);
+    this.battleByKind.set(kind, set);
+    return () => void set.delete(listener as (event: never) => void);
+  }
+
+  /** Every battle event, whatever its kind: switch on `event.k`. */
+  onBattle(listener: (event: BattleEvent) => void): Unsubscribe {
+    this.anyBattle.add(listener);
+    return () => void this.anyBattle.delete(listener);
   }
 
   /** Every incoming packet, whatever its type. */
@@ -104,6 +129,21 @@ export class PokeIdleClient {
     return this.transport.send(text);
   }
 
+  /**
+   * Low level: sends a command the game's client knows, as JSON, right away. Commands with a typed shape are checked by
+   * the compiler. Guards against accidents, not against someone who wants to bypass them (`sendRaw` exists):
+   * - the forbidden commands (`FORBIDDEN_COMMANDS`, money leaving the game as cryptocurrency) are refused;
+   * - the irreversible ones (`IRREVERSIBLE_COMMANDS`: they spend, sell or destroy something valuable) need
+   *   `{ confirmIrreversible: true }`;
+   * - numbers must be finite (`JSON.stringify(NaN)` is `null`) and `qty`/`qtd` positive integers.
+   * It validates nothing else and asks nothing: it sends exactly what you pass. Throws `CommandRefusedError` when a
+   * guard stops it; returns `false` if the socket is not open.
+   */
+  sendCommand(command: SendableCommand, options: { confirmIrreversible?: boolean } = {}): boolean {
+    assertSendable(command, options.confirmIrreversible === true);
+    return this.transport.send(JSON.stringify(command));
+  }
+
   private handleIncoming(text: string): void {
     const frame = readFrame(text, this.maxBytes);
     if ('ignored' in frame) {
@@ -115,6 +155,19 @@ export class PokeIdleClient {
     this.safely(() => this.state.applyPacket(packet)); // before the listeners, so they see the new state
     this.call(this.byType.get(packet.t), packet);
     this.call(this.anyPacket, packet);
+    if (packet.t === 'batalha') this.dispatchBattle(packet);
+  }
+
+  private dispatchBattle(packet: Packet): void {
+    const events = packet['ev'];
+    if (!Array.isArray(events)) return;
+    for (const event of events) {
+      if (event === null || typeof event !== 'object' || typeof (event as { k?: unknown }).k !== 'string') continue;
+      const typed = event as BattleEvent;
+      this.inspector?.recordBattleEvent(typed.k);
+      for (const listener of [...(this.battleByKind.get(typed.k) ?? [])]) this.safely(() => (listener as (e: BattleEvent) => void)(typed));
+      for (const listener of [...this.anyBattle]) this.safely(() => listener(typed));
+    }
   }
 
   private handleOutgoing(text: string): void {

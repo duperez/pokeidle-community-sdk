@@ -1,4 +1,5 @@
 import { isKnownPacketType, type IgnoredReason, type Packet } from './packets.js';
+import { BATTLE_EVENT_KINDS, CLIENT_COMMAND_TYPES } from './protocol/registry.generated.js';
 import { REDACTED, redact, type RedactOptions } from './redact.js';
 
 export interface InspectorOptions {
@@ -25,11 +26,21 @@ export interface InspectorDump {
   unknownTypes: string[];
   /** A few redacted examples per type, oldest first. Safe to share. */
   samples: Record<string, unknown[]>;
+  /** Types the game's own client sent that the SDK does not know (commands added by the game). */
+  unknownSentTypes: string[];
+  /** How many battle events of each kind arrived (inside `batalha` packets). */
+  battleEvents: Record<string, number>;
+  /** Battle event kinds that are not in `BATTLE_EVENT_KINDS`: the game added an event. */
+  unknownBattleEvents: string[];
   /** Frames that were not turned into packets, by reason. A non-zero `oversized` means the size limit is dropping packets. */
   ignored: Record<string, number>;
 }
 
 const OTHER = '(other)';
+/** Commands of the game's modules that are not in the main client script (the Mini Games). */
+const MODULE_COMMANDS = ['mg.entrar', 'mg.sair', 'mg.palpite'];
+const KNOWN_COMMANDS = new Set<string>([...CLIENT_COMMAND_TYPES, ...MODULE_COMMANDS]);
+const KNOWN_EVENTS = new Set<string>(BATTLE_EVENT_KINDS);
 const DEFAULT_MASKED_PATHS = ['estado.id'] as const;
 const DEFAULT_SOCIAL_PREFIXES = ['chat', 'amigos', 'ranking', 'guild', 'perfil', 'convite', 'comercio', 'oferenda', 'pvp', 'campeonato', 'topCatch', 'market', 'showdown', 'kick', 'twitch'] as const;
 
@@ -42,6 +53,7 @@ export class Inspector {
   private readonly sent = new Map<string, number>();
   private readonly samples = new Map<string, unknown[]>();
   private readonly ignored = new Map<IgnoredReason, number>();
+  private readonly battleEvents = new Map<string, number>();
   private readonly maxTypes: number;
   private readonly maxSamples: number;
   private readonly redactOptions: RedactOptions;
@@ -62,6 +74,13 @@ export class Inspector {
 
   recordSent(packet: Packet): void {
     this.record(this.sent, packet, false);
+  }
+
+  /** One battle event (`ev[].k` of a `batalha` packet). */
+  recordBattleEvent(rawKind: string): void {
+    const kind = rawKind.slice(0, 60); // the name comes from the server: keep it short
+    const key = this.battleEvents.has(kind) || this.battleEvents.size < this.maxTypes ? kind : OTHER;
+    this.battleEvents.set(key, (this.battleEvents.get(key) ?? 0) + 1);
   }
 
   recordIgnored(reason: IgnoredReason): void {
@@ -89,6 +108,9 @@ export class Inspector {
       received,
       sent: Object.fromEntries(this.sent),
       unknownTypes: Object.keys(received).filter((t) => t !== OTHER && !isKnownPacketType(t)).sort(),
+      unknownSentTypes: Object.keys(this.sentCounts()).filter((t) => t !== OTHER && !KNOWN_COMMANDS.has(t)).sort(),
+      battleEvents: Object.fromEntries(this.battleEvents),
+      unknownBattleEvents: [...this.battleEvents.keys()].filter((k) => k !== OTHER && !KNOWN_EVENTS.has(k)).sort(),
       samples: Object.fromEntries(this.samples),
       ignored: Object.fromEntries(this.ignored),
     };
@@ -99,6 +121,11 @@ export class Inspector {
     this.sent.clear();
     this.samples.clear();
     this.ignored.clear();
+    this.battleEvents.clear();
+  }
+
+  private sentCounts(): Record<string, number> {
+    return Object.fromEntries(this.sent);
   }
 }
 

@@ -14,7 +14,9 @@
     "test:sdk": "npm run test -w pokeidle-community-sdk",
     "test:repo": "node --test test/",
     "catalog": "node scripts/generate-catalog.mjs",
-    "catalog:check": "node scripts/generate-catalog.mjs --check"
+    "catalog:check": "node scripts/generate-catalog.mjs --check",
+    "protocol": "node scripts/generate-protocol.mjs",
+    "protocol:check": "node scripts/generate-protocol.mjs --check"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",

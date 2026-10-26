@@ -115,7 +115,7 @@ test('on() gives a typed packet for known types, and client.state is updated bef
   });
   transport.handlers?.onMessage('{"t":"welcome","estado":{"cheio":true,"gold":42}}');
   assert.deepEqual(seen, [42, 42]);
-  client.on('some.other.type', (packet) => seen.push(Object.keys(packet).length));
+  client.onType('some.other.type', (packet) => seen.push(Object.keys(packet).length)); // a type the SDK does not know
   transport.handlers?.onMessage('{"t":"some.other.type","a":1}');
   assert.equal(seen.at(-1), 2);
 });
