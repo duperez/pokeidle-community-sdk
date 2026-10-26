@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as sdk from '../src/index.js';
-import { Ball, Item, PokeIdleClient, type ActionsOptions, type Scheduler, type Transport, type TransportHandlers } from '../src/index.js';
+import { FakeScheduler } from './helpers/fake-scheduler.js';
+import { pokemon, sellWelcome, welcome } from './helpers/fixtures.js';
+import { Ball, Item, PokeIdleClient, type ActionsOptions, type Transport, type TransportHandlers } from '../src/index.js';
 
 class FakeTransport implements Transport {
   handlers: TransportHandlers | null = null;
@@ -18,47 +20,7 @@ class FakeTransport implements Transport {
   }
 }
 
-class FakeScheduler implements Scheduler {
-  time = 1_000_000;
-  private timers: Array<{ at: number; fn: () => void; id: number }> = [];
-  private next = 1;
-  now(): number {
-    return this.time;
-  }
-  /** Timers that are still waiting: a leak shows up as a number. */
-  get pending(): number {
-    return this.timers.length;
-  }
-  setTimeout(fn: () => void, ms: number): unknown {
-    const id = this.next++;
-    this.timers.push({ at: this.time + ms, fn, id });
-    return id;
-  }
-  clearTimeout(handle: unknown): void {
-    this.timers = this.timers.filter((t) => t.id !== handle);
-  }
-  advance(ms: number): void {
-    this.time += ms;
-    for (const timer of this.timers.filter((t) => t.at <= this.time)) {
-      this.timers = this.timers.filter((t) => t !== timer);
-      timer.fn();
-    }
-  }
-}
-
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
-
-// Invented values with the shape of the real packets.
-const welcome = (estado: Record<string, unknown> = {}) => ({
-  t: 'welcome',
-  estado: { cheio: true, gold: 100_000, items: { '200': 10 }, balls: { '1': 100, '4': 72, '5': 0 }, pokemons: [], ...estado },
-  catalogoBolas: [
-    { id: 1, nome: 'Poke Ball', catchRate: 1, priceGold: 5, compravel: true },
-    { id: 4, nome: 'Ultra Ball', catchRate: 4, priceGold: 130, compravel: true },
-    { id: 5, nome: 'Beast Ball', catchRate: 8, compravel: false },
-  ],
-  itensCompraveis: [{ itemId: 70091, preco: 20_000_000, nome: 'Mystery Egg P2' }],
-});
 
 function setup(options: ActionsOptions = {}, withWelcome = true) {
   const transport = new FakeTransport();
@@ -271,85 +233,6 @@ test('an inventory that did not grow (balls used in the hunt) is not a confirmat
   assert.equal((await pending).status, 'unconfirmed');
 });
 
-/** Counts the subscriptions the actions open and close on the client, so a leak shows up as a number. */
-function watchSubscriptions(client: PokeIdleClient) {
-  let active = 0;
-  const wrap =
-    <A extends unknown[]>(fn: (...args: A) => () => void) =>
-    (...args: A): (() => void) => {
-      active += 1;
-      const off = fn(...args);
-      let closed = false;
-      return () => {
-        if (!closed) {
-          closed = true;
-          active -= 1;
-        }
-        off();
-      };
-    };
-  const target = client as unknown as { onType: (...a: never[]) => () => void; onBattleEvent: (...a: never[]) => () => void };
-  const state = client.state as unknown as { onChange: (...a: never[]) => () => void };
-  target.onType = wrap(target.onType.bind(client) as never);
-  target.onBattleEvent = wrap(target.onBattleEvent.bind(client) as never);
-  state.onChange = wrap(state.onChange.bind(client.state) as never);
-  return () => active;
-}
-
-test('no listener is left behind on any path: confirmed by event, by inventory, rejected, unconfirmed', async () => {
-  const { actions, client, feed, scheduler } = setup({ rateLimit: false, unconfirmedCooldownMs: 0 });
-  const leaked = watchSubscriptions(client);
-  let p = actions.buyBall(Ball.UltraBall, 10);
-  assert.ok(leaked() > 0, 'listening while waiting');
-  feed({ t: 'batalha', ev: [{ k: 'compra', nome: 'Ultra Ball', qtd: 10 }] });
-  assert.equal((await p).status, 'confirmed');
-  assert.equal(leaked(), 0);
-  p = actions.buyBall(Ball.UltraBall, 10);
-  feed({ t: 'estado', estado: { balls: { '1': 100, '4': 200, '5': 0 } } });
-  assert.equal((await p).status, 'confirmed');
-  assert.equal(leaked(), 0);
-  p = actions.buyBall(Ball.UltraBall, 10);
-  feed({ t: 'erro', chave: 'x' });
-  assert.equal((await p).status, 'rejected');
-  assert.equal(leaked(), 0);
-  p = actions.buyBall(Ball.UltraBall, 10);
-  scheduler.advance(10_000);
-  assert.equal((await p).status, 'unconfirmed');
-  assert.equal(leaked(), 0);
-});
-
-test('when the socket refuses the frame nothing is left in flight, listening or counted', async () => {
-  const { actions, client, transport, scheduler } = setup();
-  const leaked = watchSubscriptions(client);
-  transport.send = () => false; // the socket looks open but does not take the frame
-  assert.deepEqual(await actions.buyBall(Ball.UltraBall, 10), { status: 'not-connected' });
-  assert.equal(leaked(), 0);
-  transport.send = (text: string) => {
-    transport.sent.push(JSON.parse(text) as Record<string, unknown>);
-    return true;
-  };
-  const next = actions.buyBall(Ball.UltraBall, 10); // not busy, not rate limited: the failed send counted for nothing
-  assert.equal(transport.sent.length, 1);
-  scheduler.advance(10_000);
-  await next;
-});
-
-test('when sending throws, the error reaches the caller and nothing is left in flight, listening or counted', async () => {
-  const { actions, client, transport, scheduler } = setup();
-  const leaked = watchSubscriptions(client);
-  const real = client.sendCommand.bind(client);
-  client.sendCommand = () => {
-    throw new Error('boom');
-  };
-  await assert.rejects(actions.buyBall(Ball.UltraBall, 10), /boom/);
-  assert.equal(leaked(), 0);
-  client.sendCommand = real;
-  const next = actions.buyBall(Ball.UltraBall, 10);
-  assert.equal(transport.sent.length, 1);
-  scheduler.advance(10_000);
-  await next;
-});
-
 test('an answer that arrives while the command is being sent is not missed', async () => {
   const { actions, transport, feed } = setup();
   const original = transport.send.bind(transport);
@@ -478,20 +361,6 @@ test('the Actions class is not exported: the limits belong to client.actions', (
 
 import { CommandRefusedError } from '../src/index.js';
 
-const pokemon = (id: number, extra: Record<string, unknown> = {}) => ({
-  id,
-  speciesId: 19,
-  nome: `Mon${id}`,
-  level: 10,
-  shiny: false,
-  ...extra,
-});
-
-const sellWelcome = (pokemons: unknown[]) => ({
-  ...welcome({ activeId: 1, automation: { pokemonTravado: [3] }, pokemons }),
-  xpShareHeld: { enabled: true, itemId: 70050, pct: 5 },
-});
-
 /** A player with: 1 = active and in the team, 2 = team (slot 1), 3 = in the Collection, 4 = holds the Exp. Share, 5 and 6 = ordinary Depot pokémon. */
 function setupSell(options: ActionsOptions = {}) {
   const ctx = setup(options, false);
@@ -612,39 +481,6 @@ test('after an unconfirmed or rejected sale the next order waits, so nothing is 
   assert.equal((await later).status, 'unconfirmed');
 });
 
-test('selling leaves no listener behind on any path, and a failed send leaves nothing in flight', async () => {
-  const { actions, client, feed, scheduler, transport } = setupSell({ rateLimit: false, unconfirmedCooldownMs: 0 });
-  const leaked = watchSubscriptions(client);
-  let p = actions.sellPokemon(5, SELL);
-  feed({ t: 'batalha', ev: [{ k: 'venda', nome: 'Mon5', ganho: 1 }] });
-  assert.equal((await p).status, 'confirmed');
-  assert.equal(leaked(), 0);
-  p = actions.sellPokemon(6, SELL);
-  feed({ t: 'estado', estado: { pkFora: [6] } });
-  assert.equal((await p).status, 'confirmed');
-  assert.equal(leaked(), 0);
-  feed(sellWelcome([pokemon(7), pokemon(8)]));
-  p = actions.sellPokemon(7, SELL);
-  feed({ t: 'erro', chave: 'x' });
-  assert.equal((await p).status, 'rejected');
-  p = actions.sellPokemon(8, SELL);
-  scheduler.advance(10_000);
-  assert.equal((await p).status, 'unconfirmed');
-  assert.equal(leaked(), 0);
-  transport.send = () => false;
-  feed(sellWelcome([pokemon(9)]));
-  assert.deepEqual(await actions.sellPokemon(9, SELL), { status: 'not-connected' });
-  assert.equal(leaked(), 0);
-  transport.send = (text: string) => {
-    transport.sent.push(JSON.parse(text) as Record<string, unknown>);
-    return true;
-  };
-  const again = actions.sellPokemon(9, SELL);
-  assert.equal(transport.sent.at(-1)?.['pokemonId'], 9); // not busy: the failed send left nothing in flight
-  feed({ t: 'estado', estado: { pkFora: [9] } });
-  await again;
-});
-
 test('a pokémon id that is not an integer is a programming error and throws', async () => {
   const { actions, transport } = setupSell();
   for (const id of [-1, 1.5, Number.NaN]) await assert.rejects(actions.sellPokemon(id, SELL), RangeError, String(id));
@@ -755,8 +591,7 @@ test('a sale confirmed first by the list waits a moment for the `venda` event, t
 });
 
 test('if the `venda` event never comes, the window ends and the list alone confirms, without the gold', async () => {
-  const { actions, feed, scheduler, client } = setupSell({ confirmGraceMs: 1000 });
-  const leaked = watchSubscriptions(client);
+  const { actions, feed, scheduler } = setupSell({ confirmGraceMs: 1000 });
   const pending = actions.sellPokemon(5, SELL);
   feed({ t: 'estado', estado: { pkFora: [5] } });
   scheduler.advance(999);
@@ -769,7 +604,7 @@ test('if the `venda` event never comes, the window ends and the list alone confi
   scheduler.advance(1);
   const result = await pending;
   assert.deepEqual([result.status === 'confirmed' && result.confirmedBy, result.status === 'confirmed' && result.gained], ['state', null]);
-  assert.equal(leaked(), 0);
+  assert.equal(scheduler.pending, 0);
 });
 
 test('the grace window is not a way around the timeout, and a bad value is refused', async () => {

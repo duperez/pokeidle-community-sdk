@@ -1,13 +1,14 @@
 import { Actions, type ActionsOptions } from './actions.js';
+import type { PacketListener, Unsubscribe } from './listeners.js';
 import { Inspector } from './inspector.js';
 import { DEFAULT_MAX_PACKET_BYTES, readFrame, type Packet } from './packets.js';
 import type { BattleEvent, BattleEventKind, BattleEventMap } from './protocol/events.js';
 import { assertSendable, type SendableCommand } from './protocol/send-guard.js';
 import type { PacketMap } from './protocol/packet-map.js';
 import { GameState } from './state.js';
-import type { Transport } from './transport.js';
 
-export type Unsubscribe = () => void;
+export type { Unsubscribe } from './listeners.js';
+import type { Transport } from './transport.js';
 
 export interface ClientOptions {
   transport: Transport;
@@ -20,8 +21,6 @@ export interface ClientOptions {
   /** Called when one of your listeners throws (it never breaks the other listeners). Default: `console.error`. */
   onError?: (error: unknown) => void;
 }
-
-type PacketListener = (packet: Packet) => void;
 
 /**
  * The entry point: turns the game's frames into packets and delivers them to your listeners. You only care about

@@ -1,5 +1,5 @@
 import { itemInfo } from './catalog/index.js';
-import type { PokeIdleClient } from './client.js';
+import type { ActionsHost } from './actions-host.js';
 import { isIrreversibleCommand, type SendableCommand } from './protocol/commands.js';
 import { CommandRefusedError } from './protocol/send-guard.js';
 
@@ -158,7 +158,7 @@ const realScheduler: Scheduler = {
   clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
 };
 
-/** Created for you as `client.actions`. The limits live in memory and are per instance: a page reload starts them over. */
+/** Created for you as `client.actions`; it depends only on `ActionsHost`, not on the client class. The limits live in memory and are per instance: a page reload starts them over. */
 export class Actions {
   private readonly options: ActionsOptions;
   private readonly scheduler: Scheduler;
@@ -169,7 +169,7 @@ export class Actions {
   private spending: Array<{ at: number; gold: number }> = [];
 
   constructor(
-    private readonly client: PokeIdleClient,
+    private readonly host: ActionsHost,
     options: ActionsOptions = {},
   ) {
     validateOptions(options);
@@ -199,8 +199,8 @@ export class Actions {
       throw new RangeError(`the quantity must be an integer from 1 to ${MAX_PER_ORDER}, got ${String(quantity)}`);
 
     if (this.inFlight) return { status: 'busy' };
-    if (!this.client.connected) return { status: 'not-connected' };
-    const state = this.client.state;
+    if (!this.host.connected) return { status: 'not-connected' };
+    const state = this.host.state;
     if (!state.complete) return { status: 'no-state' };
 
     const price = this.priceOf(kind, id);
@@ -259,7 +259,7 @@ export class Actions {
       const confirmation = spec.wait();
       let sent = false;
       try {
-        sent = this.client.sendCommand(spec.command, { confirmIrreversible: spec.confirmIrreversible });
+        sent = this.host.sendCommand(spec.command, { confirmIrreversible: spec.confirmIrreversible });
       } catch (error) {
         confirmation.cancel(); // a guard refused it (CommandRefusedError): nothing was sent
         throw error;
@@ -297,8 +297,8 @@ export class Actions {
       );
     }
     if (this.inFlight) return { status: 'busy' };
-    if (!this.client.connected) return { status: 'not-connected' };
-    const state = this.client.state;
+    if (!this.host.connected) return { status: 'not-connected' };
+    const state = this.host.state;
     if (!state.complete) return { status: 'no-state' };
 
     const pokemon = state.findPokemon(pokemonId);
@@ -335,7 +335,7 @@ export class Actions {
    * state) the answer is "no", never "nothing protects it".
    */
   private whyNotSellable(pokemon: { id?: number; slot?: number | null; heldItemId?: number | null }): string | null {
-    const state = this.client.state;
+    const state = this.host.state;
     const id = Number(pokemon.id);
     if (!Number.isFinite(id)) return 'the pokémon has no id';
     const active = state.activePokemonId;
@@ -354,7 +354,7 @@ export class Actions {
   private waitForSale(request: SellRequest): { result: Promise<SellResult>; cancel: () => void } {
     const timeoutMs = this.options.confirmTimeoutMs ?? DEFAULTS.confirmTimeoutMs;
     const startedAt = this.scheduler.now();
-    const state = this.client.state;
+    const state = this.host.state;
     // The `venda` event names the pokémon WITH its level ("Charmander Nv 20"), nothing else. So it is matched on name and
     // level, and it is `certain` only when no other pokémon of yours has that same name AND level; otherwise `probable`.
     const wanted = request.name === null ? null : normalizeName(request.name);
@@ -381,7 +381,7 @@ export class Actions {
       };
     });
     offs.push(
-      this.client.onBattleEvent('venda', (event) => {
+      this.host.onBattleEvent('venda', (event) => {
         const sold = typeof event['nome'] === 'string' ? parseSaleName(event['nome']) : null;
         if (wanted === null || sold === null || sold.name !== wanted) return;
         if (sold.level !== null && request.level !== null && sold.level !== request.level) return; // another level: another pokémon
@@ -400,7 +400,7 @@ export class Actions {
         // the pokémon is gone; give the `venda` event a moment to arrive with the gold (it keeps listening until then)
         graceTimer = this.scheduler.setTimeout(() => finish(byState), graceMs);
       }),
-      this.client.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })),
+      this.host.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })),
     );
     timer = this.scheduler.setTimeout(
       () => finish({ status: 'unconfirmed', request, waitedMs: this.scheduler.now() - startedAt }),
@@ -410,7 +410,7 @@ export class Actions {
   }
 
   private priceOf(kind: 'ball' | 'item', id: number): { unit: number | null; reason?: string } {
-    const state = this.client.state;
+    const state = this.host.state;
     if (kind === 'ball') {
       const ball = state.ballCatalog.find((b) => b.id === id);
       if (!ball) return { unit: null, reason: `the server's ball catalog has no ball ${id}` };
@@ -448,7 +448,7 @@ export class Actions {
   private waitForConfirmation(request: BuyRequest, before: number): { result: Promise<BuyResult>; cancel: () => void } {
     const timeoutMs = this.options.confirmTimeoutMs ?? DEFAULTS.confirmTimeoutMs;
     const startedAt = this.scheduler.now();
-    const state = this.client.state;
+    const state = this.host.state;
     const count = (): number => (request.kind === 'ball' ? state.ballCount(request.id) : state.itemCount(request.id));
     const name = (request.kind === 'ball' ? state.ballName(request.id) : state.itemName(request.id))?.toLowerCase() ?? null;
     let finish: (result: BuyResult) => void = () => {};
@@ -466,7 +466,7 @@ export class Actions {
     });
     offs.push(
       // the game's own confirmation: `compra` with the quantity (and the name, when we know it)
-      this.client.onBattleEvent('compra', (event) => {
+      this.host.onBattleEvent('compra', (event) => {
         const eventName = typeof event['nome'] === 'string' ? event['nome'].toLowerCase() : null;
         if (event['qtd'] !== request.quantity || eventName === null || (name !== null && eventName !== name)) return;
         const spent = typeof event['gasto'] === 'number' ? event['gasto'] : null;
@@ -487,7 +487,7 @@ export class Actions {
             spent: request.totalPrice,
           });
       }),
-      this.client.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })),
+      this.host.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })),
     );
     timer = this.scheduler.setTimeout(
       () => finish({ status: 'unconfirmed', request, waitedMs: this.scheduler.now() - startedAt }),
