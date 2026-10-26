@@ -9,5 +9,7 @@
     "build": "esbuild src/main-world.ts --bundle --format=iife --target=chrome111 --outfile=dist/main-world.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": { "pokeidle-community-sdk": "0.0.1" }
+  "dependencies": {
+    "pokeidle-community-sdk": "0.0.1"
+  }
 }

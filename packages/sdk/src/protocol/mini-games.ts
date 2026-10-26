@@ -81,4 +81,5 @@ export interface MiniGameOtherPacket extends Packet {
   readonly k?: number;
 }
 
-export type MiniGamePacket = MiniGameRoundPacket | MiniGameStagePacket | MiniGameRevealPacket | MiniGameSnapshotPacket | MiniGameOtherPacket;
+export type MiniGamePacket =
+  MiniGameRoundPacket | MiniGameStagePacket | MiniGameRevealPacket | MiniGameSnapshotPacket | MiniGameOtherPacket;

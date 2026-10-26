@@ -21,12 +21,35 @@ export const FORBIDDEN_COMMANDS = ['orbs.sacar'] as const satisfies readonly Cli
  * `{ confirmIrreversible: true }` before sending one. Routine commands (`shop.buy`, `item.use`) are not here.
  */
 export const IRREVERSIBLE_COMMANDS = [
-  'market.comprar', 'market.comprarLote', 'market.criar', 'loja.comprar', 'passe.comprarVip',
-  'shop.sellPokemon', 'shop.sellAllPokemons', 'shop.autoColecao', 'bolsa.descartar',
-  'pokemon.reduzirNivel', 'pokemon.refinar', 'pokemon.evoluir', 'pokemon.mega', 'pokemon.megaRetroceder',
-  'sacrificio.sacrificar', 'sacrificio.resgatar', 'tm.aplicar', 'tm.trocar',
-  'mega.fabricar', 'shinyStone.fabricar', 'ovoShiny.fabricar', 'afiliado.recolher', 'amigo.coins',
-  'guild.criar', 'guild.apagar', 'guild.sair', 'guild.expulsar', 'guild.transferirLider', 'guild.doar',
+  'market.comprar',
+  'market.comprarLote',
+  'market.criar',
+  'loja.comprar',
+  'passe.comprarVip',
+  'shop.sellPokemon',
+  'shop.sellAllPokemons',
+  'shop.autoColecao',
+  'bolsa.descartar',
+  'pokemon.reduzirNivel',
+  'pokemon.refinar',
+  'pokemon.evoluir',
+  'pokemon.mega',
+  'pokemon.megaRetroceder',
+  'sacrificio.sacrificar',
+  'sacrificio.resgatar',
+  'tm.aplicar',
+  'tm.trocar',
+  'mega.fabricar',
+  'shinyStone.fabricar',
+  'ovoShiny.fabricar',
+  'afiliado.recolher',
+  'amigo.coins',
+  'guild.criar',
+  'guild.apagar',
+  'guild.sair',
+  'guild.expulsar',
+  'guild.transferirLider',
+  'guild.doar',
 ] as const satisfies readonly ClientCommandType[];
 
 const FORBIDDEN = new Set<string>(FORBIDDEN_COMMANDS);
@@ -52,10 +75,21 @@ export interface TypedCommands {
   'shop.sellAllPokemons': { readonly t: 'shop.sellAllPokemons'; readonly ateId: number };
 
   // premium shop: products are text ids such as `beast500`
-  'loja.comprar': { readonly t: 'loja.comprar'; readonly id: string; /** The price you saw: the server refuses the purchase if it changed. Always sent by the game's own client. */ readonly precoVisto: number };
+  'loja.comprar': {
+    readonly t: 'loja.comprar';
+    readonly id: string;
+    /** The price you saw: the server refuses the purchase if it changed. Always sent by the game's own client. */ readonly precoVisto: number;
+  };
 
   // player market
-  'market.comprar': { readonly t: 'market.comprar'; readonly id: number; readonly qtd: number; readonly preco: number; readonly moeda: Currency; readonly sorteioUi?: 1 };
+  'market.comprar': {
+    readonly t: 'market.comprar';
+    readonly id: number;
+    readonly qtd: number;
+    readonly preco: number;
+    readonly moeda: Currency;
+    readonly sorteioUi?: 1;
+  };
   'market.criar': {
     readonly t: 'market.criar';
     readonly tipo: 'item' | 'pokemon';
@@ -106,7 +140,14 @@ export type ClientCommand = CommandMap[keyof CommandMap];
 /** The commands `sendCommand` accepts: everything except the forbidden ones. */
 export type SendableCommand = Exclude<ClientCommand, GenericCommand<(typeof FORBIDDEN_COMMANDS)[number]>>;
 
-const TRAFFIC_COMMANDS = ['hello', 'ping', 'cliente.economia', 'bloqueio.lista', 'chat.historico', 'shop.buy'] as const satisfies ReadonlyArray<keyof TypedCommands>;
+const TRAFFIC_COMMANDS = [
+  'hello',
+  'ping',
+  'cliente.economia',
+  'bloqueio.lista',
+  'chat.historico',
+  'shop.buy',
+] as const satisfies ReadonlyArray<keyof TypedCommands>;
 const TRAFFIC = new Set<string>(TRAFFIC_COMMANDS);
 
 /** How well a command is known: `traffic` (seen being sent by the real client), `client-code` (read from its call sites) or `name-only`. */
@@ -119,10 +160,31 @@ export function commandCoverage(type: ClientCommandType | ModuleCommandType): Co
 
 // Names of the commands that have a typed shape (kept next to the types, checked at compile time to be exhaustive).
 const TYPED_NAMES: { readonly [K in keyof TypedCommands | ModuleCommandType]: true } = {
-  hello: true, ping: true, 'cliente.economia': true, 'bloqueio.lista': true, 'chat.historico': true,
-  'shop.buy': true, 'shop.sellPokemon': true, 'shop.sellAllPokemons': true, 'loja.comprar': true,
-  'market.comprar': true, 'market.criar': true, 'market.cancelar': true, 'market.editar': true, 'market.estender': true,
-  'market.favoritar': true, 'market.anuncio': true, 'market.anunciarChat': true, 'market.itens': true, 'market.item': true,
-  'market.meus': true, 'market.medias': true, 'item.use': true, 'bolsa.descartar': true, 'orbs.painel': true,
-  'mg.entrar': true, 'mg.sair': true, 'mg.palpite': true,
+  hello: true,
+  ping: true,
+  'cliente.economia': true,
+  'bloqueio.lista': true,
+  'chat.historico': true,
+  'shop.buy': true,
+  'shop.sellPokemon': true,
+  'shop.sellAllPokemons': true,
+  'loja.comprar': true,
+  'market.comprar': true,
+  'market.criar': true,
+  'market.cancelar': true,
+  'market.editar': true,
+  'market.estender': true,
+  'market.favoritar': true,
+  'market.anuncio': true,
+  'market.anunciarChat': true,
+  'market.itens': true,
+  'market.item': true,
+  'market.meus': true,
+  'market.medias': true,
+  'item.use': true,
+  'bolsa.descartar': true,
+  'orbs.painel': true,
+  'mg.entrar': true,
+  'mg.sair': true,
+  'mg.palpite': true,
 };

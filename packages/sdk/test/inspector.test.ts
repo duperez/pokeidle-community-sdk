@@ -42,7 +42,15 @@ test('reset clears everything', () => {
 
 test('samples of social packets (chat, friends, guilds...) keep the structure and drop every text', () => {
   const inspector = new Inspector();
-  inspector.recordReceived({ t: 'chat', canal: 'world', de: 'SomePlayer', texto: 'hello there, buy my stuff', ts: 123, nivel: 900, anuncioChat: { nome: 'Rattata', preco: 5 } });
+  inspector.recordReceived({
+    t: 'chat',
+    canal: 'world',
+    de: 'SomePlayer',
+    texto: 'hello there, buy my stuff',
+    ts: 123,
+    nivel: 900,
+    anuncioChat: { nome: 'Rattata', preco: 5 },
+  });
   inspector.recordReceived({ t: 'amigos', lista: [{ nick: 'Friend', nivel: 5 }] });
   inspector.recordReceived({ t: 'batalha', ev: [{ k: 'ataque', por: 'jogador', golpe: 'Tackle' }] });
   const { samples } = inspector.dump();
@@ -76,6 +84,9 @@ test('battle events are sampled: game-only kinds keep their text, kinds that can
   for (let i = 0; i < 4; i++) inspector.recordBattleEvent('venda', { k: 'venda', nome: 'Charmander', ganho: 100 + i });
   inspector.recordBattleEvent('amigoPedidoRecebido', { k: 'amigoPedidoRecebido', de: 'SomePlayer', nick: 'x', n: 3 });
   const { battleEventSamples } = inspector.dump();
-  assert.deepEqual(battleEventSamples.venda, [{ k: 'venda', nome: 'Charmander', ganho: 100 }, { k: 'venda', nome: 'Charmander', ganho: 101 }]);
+  assert.deepEqual(battleEventSamples.venda, [
+    { k: 'venda', nome: 'Charmander', ganho: 100 },
+    { k: 'venda', nome: 'Charmander', ganho: 101 },
+  ]);
   assert.deepEqual(battleEventSamples.amigoPedidoRecebido, [{ k: '[text]', de: '[text]', nick: '[redacted]', n: 3 }]);
 });

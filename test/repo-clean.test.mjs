@@ -40,7 +40,8 @@ test('only code and documentation file types, and no big files', options, () => 
     assert.ok(ALLOWED_EXTENSIONS.has(path.extname(file)), `${file}: file type not allowed (images, binaries and data do not belong here)`);
     const size = fs.statSync(path.join(ROOT, file)).size;
     assert.ok(size <= MAX_FILE_BYTES, `${file}: ${size} bytes, too big`);
-    if (file.endsWith('.json') && !LOCK_FILES.has(path.basename(file))) assert.ok(size <= MAX_JSON_BYTES, `${file}: JSON too big (looks like a data dump)`);
+    if (file.endsWith('.json') && !LOCK_FILES.has(path.basename(file)))
+      assert.ok(size <= MAX_JSON_BYTES, `${file}: JSON too big (looks like a data dump)`);
   }
 });
 

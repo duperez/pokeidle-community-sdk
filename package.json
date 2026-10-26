@@ -16,12 +16,15 @@
     "catalog": "node scripts/generate-catalog.mjs",
     "catalog:check": "node scripts/generate-catalog.mjs --check",
     "protocol": "node scripts/generate-protocol.mjs",
-    "protocol:check": "node scripts/generate-protocol.mjs --check"
+    "protocol:check": "node scripts/generate-protocol.mjs --check",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",
     "@types/node": "^20.14.0",
     "esbuild": "^0.23.0",
+    "prettier": "^3.9.10",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0"
   },

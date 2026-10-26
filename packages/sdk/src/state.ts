@@ -52,7 +52,8 @@ const ownMaps = (fields: Record<string, unknown>): Record<string, unknown> => {
 const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const asNumber = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const asText = (v: unknown, max = 60): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
-const rowsWithId = (v: unknown): PokemonWire[] => (Array.isArray(v) ? v.filter((k): k is PokemonWire => isObject(k) && k['id'] != null) : []);
+const rowsWithId = (v: unknown): PokemonWire[] =>
+  Array.isArray(v) ? v.filter((k): k is PokemonWire => isObject(k) && k['id'] != null) : [];
 
 /**
  * Keeps the player's state up to date. The game sends the whole state once (`welcome`, marked `cheio`) and then small
@@ -128,13 +129,27 @@ export class GameState {
     return this.fields ? ({ ...this.fields, pokemons: [...this.pokemonById.values()] } as PlayerState) : null;
   }
 
-  get nick(): string | null { return asText(this.fields?.['nick']); }
-  get level(): number | null { return asNumber(this.fields?.['level']); }
-  get xp(): number | null { return asNumber(this.fields?.['xp']); }
-  get gold(): number | null { return asNumber(this.fields?.['gold']); }
-  get diamonds(): number | null { return asNumber(this.fields?.['diamonds']); }
-  get orbs(): number | null { return asNumber(this.fields?.['orbs']); }
-  get huntSlug(): string | null { return asText(this.fields?.['huntSlug']); }
+  get nick(): string | null {
+    return asText(this.fields?.['nick']);
+  }
+  get level(): number | null {
+    return asNumber(this.fields?.['level']);
+  }
+  get xp(): number | null {
+    return asNumber(this.fields?.['xp']);
+  }
+  get gold(): number | null {
+    return asNumber(this.fields?.['gold']);
+  }
+  get diamonds(): number | null {
+    return asNumber(this.fields?.['diamonds']);
+  }
+  get orbs(): number | null {
+    return asNumber(this.fields?.['orbs']);
+  }
+  get huntSlug(): string | null {
+    return asText(this.fields?.['huntSlug']);
+  }
 
   /** How many of an item the player has (0 if none or unknown). Use the `Item` enum for the id. */
   itemCount(id: number): number {
@@ -174,27 +189,48 @@ export class GameState {
   private readCatalogs(packet: Packet): void {
     const balls = packet['catalogoBolas'];
     if (Array.isArray(balls)) {
-      this.balls = balls.slice(0, MAX_LIST).filter(isObject).flatMap((b: BallCatalogEntryWire) => {
-        const id = asNumber(b.id);
-        return id === null ? [] : [{ id, name: asText(b.nome, 40) ?? `Ball ${id}`, catchRate: asNumber(b.catchRate), priceGold: asNumber(b.priceGold), buyable: b.compravel === true }];
-      });
+      this.balls = balls
+        .slice(0, MAX_LIST)
+        .filter(isObject)
+        .flatMap((b: BallCatalogEntryWire) => {
+          const id = asNumber(b.id);
+          return id === null
+            ? []
+            : [
+                {
+                  id,
+                  name: asText(b.nome, 40) ?? `Ball ${id}`,
+                  catchRate: asNumber(b.catchRate),
+                  priceGold: asNumber(b.priceGold),
+                  buyable: b.compravel === true,
+                },
+              ];
+        });
     }
     const xpShare = packet['xpShareHeld'];
     if (isObject(xpShare)) this.xpShareId = asId(xpShare['itemId']);
     const extra = packet['itensNossos'];
     if (Array.isArray(extra)) {
-      this.extra = extra.slice(0, MAX_LIST).filter(isObject).flatMap((e: ExtraItemWire) => {
-        const id = asNumber(e.id);
-        const name = asText(e.name, 60);
-        return id === null || name === null ? [] : [{ id, name, category: asText(e.category, 30) ?? 'unknown', rare: e.rare === true, npcPrice: asNumber(e.npcPrice) }];
-      });
+      this.extra = extra
+        .slice(0, MAX_LIST)
+        .filter(isObject)
+        .flatMap((e: ExtraItemWire) => {
+          const id = asNumber(e.id);
+          const name = asText(e.name, 60);
+          return id === null || name === null
+            ? []
+            : [{ id, name, category: asText(e.category, 30) ?? 'unknown', rare: e.rare === true, npcPrice: asNumber(e.npcPrice) }];
+        });
     }
     const shop = packet['itensCompraveis'];
     if (Array.isArray(shop)) {
-      this.shop = shop.slice(0, MAX_LIST).filter(isObject).flatMap((s: ShopItemWire) => {
-        const itemId = asNumber(s.itemId);
-        return itemId === null ? [] : [{ itemId, name: asText(s.nome, 60) ?? `Item ${itemId}`, price: asNumber(s.preco) }];
-      });
+      this.shop = shop
+        .slice(0, MAX_LIST)
+        .filter(isObject)
+        .flatMap((s: ShopItemWire) => {
+          const itemId = asNumber(s.itemId);
+          return itemId === null ? [] : [{ itemId, name: asText(s.nome, 60) ?? `Item ${itemId}`, price: asNumber(s.preco) }];
+        });
     }
   }
 
@@ -219,7 +255,10 @@ export class GameState {
     for (const [key, row] of known(pkMud)) this.pokemonById.set(key, row);
     if (Array.isArray(pkFora)) for (const id of pkFora) this.pokemonById.delete(idKey(id));
     if (dexMud !== undefined || dexFora !== undefined) {
-      const dex: Record<string, unknown> = { ...safeCopy(isObject(this.fields['pokedex']) ? this.fields['pokedex'] : {}), ...safeCopy(isObject(dexMud) ? dexMud : {}) };
+      const dex: Record<string, unknown> = {
+        ...safeCopy(isObject(this.fields['pokedex']) ? this.fields['pokedex'] : {}),
+        ...safeCopy(isObject(dexMud) ? dexMud : {}),
+      };
       if (Array.isArray(dexFora)) for (const key of dexFora) delete dex[String(key)];
       this.fields['pokedex'] = dex;
     }

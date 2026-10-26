@@ -27,7 +27,12 @@ const check = args.has('--check');
 /** "Air Tank" -> "AirTank". Letters and digits only; a leading digit gets an underscore so the key is a valid identifier. */
 export function identifierFor(name) {
   // Accents are removed first ('Poké Ball' -> 'Poke Ball'), then anything that is not a letter or digit separates words.
-  const words = String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['’`]/g, '').match(/[A-Za-z0-9]+/g) ?? [];
+  const words =
+    String(name)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/['’`]/g, '')
+      .match(/[A-Za-z0-9]+/g) ?? [];
   const key = words.map((w) => w[0].toUpperCase() + w.slice(1)).join('');
   return /^[0-9]/.test(key) ? `_${key}` : key;
 }
@@ -44,7 +49,8 @@ export function uniqueIdentifiers(entries) {
     (byBase.get(base) ?? byBase.set(base, []).get(base)).push(entry);
   }
   const out = [];
-  for (const [base, group] of byBase) group.forEach((entry, index) => out.push({ ...entry, key: index === 0 ? base : `${base}_${entry.id}` }));
+  for (const [base, group] of byBase)
+    group.forEach((entry, index) => out.push({ ...entry, key: index === 0 ? base : `${base}_${entry.id}` }));
   return out.sort((a, b) => a.id - b.id);
 }
 
@@ -56,7 +62,8 @@ function validateItems(raw) {
   if (!list || list.length === 0) throw new Error('items catalog: expected { items: [...] }');
   const seen = new Set();
   return list.map((i) => {
-    if (!isInt(i?.id) || typeof i.name !== 'string' || typeof i.category !== 'string') throw new Error(`items catalog: bad entry ${JSON.stringify(i)}`);
+    if (!isInt(i?.id) || typeof i.name !== 'string' || typeof i.category !== 'string')
+      throw new Error(`items catalog: bad entry ${JSON.stringify(i)}`);
     if (seen.has(i.id)) throw new Error(`items catalog: duplicated id ${i.id}`);
     seen.add(i.id);
     return { id: i.id, name: i.name, category: i.category, rare: i.rare === true, npcPrice: isInt(i.npcPrice) ? i.npcPrice : null };
@@ -70,7 +77,13 @@ function validateBalls(raw) {
     if (!isInt(b?.id) || typeof b.name !== 'string') throw new Error(`balls snapshot: bad entry ${JSON.stringify(b)}`);
     if (seen.has(b.id)) throw new Error(`balls snapshot: duplicated id ${b.id}`);
     seen.add(b.id);
-    return { id: b.id, name: b.name, catchRate: isInt(b.catchRate) ? b.catchRate : null, priceGold: isInt(b.priceGold) ? b.priceGold : null, buyable: b.buyable === true };
+    return {
+      id: b.id,
+      name: b.name,
+      catchRate: isInt(b.catchRate) ? b.catchRate : null,
+      priceGold: isInt(b.priceGold) ? b.priceGold : null,
+      buyable: b.buyable === true,
+    };
   });
 }
 
@@ -83,21 +96,47 @@ function renderItems(items) {
   for (const i of keyed) lines.push(`  ${i.key}: ${i.id},`);
   lines.push('} as const;', '', 'export type ItemId = (typeof Item)[keyof typeof Item];', '');
   lines.push(`export type ItemCategory = ${categories.map(str).join(' | ')};`, '');
-  lines.push('export interface ItemInfo {', '  readonly id: number;', '  readonly name: string;', '  readonly category: ItemCategory;', '  readonly rare: boolean;', '  /** What an NPC pays for it, if the catalog says. */', '  readonly npcPrice: number | null;', '}', '');
+  lines.push(
+    'export interface ItemInfo {',
+    '  readonly id: number;',
+    '  readonly name: string;',
+    '  readonly category: ItemCategory;',
+    '  readonly rare: boolean;',
+    '  /** What an NPC pays for it, if the catalog says. */',
+    '  readonly npcPrice: number | null;',
+    '}',
+    '',
+  );
   lines.push('export const ITEM_CATALOG: readonly ItemInfo[] = [');
-  for (const i of keyed) lines.push(`  { id: ${i.id}, name: ${str(i.name)}, category: ${str(i.category)}, rare: ${i.rare}, npcPrice: ${i.npcPrice} },`);
+  for (const i of keyed)
+    lines.push(`  { id: ${i.id}, name: ${str(i.name)}, category: ${str(i.category)}, rare: ${i.rare}, npcPrice: ${i.npcPrice} },`);
   lines.push('];', '');
   return lines.join('\n');
 }
 
 function renderBalls(balls) {
   const keyed = uniqueIdentifiers(balls);
-  const lines = [HEADER('the ball catalog the server sends in the welcome packet (packages/sdk/data/balls.json)'), '/** Ball ids by name, e.g. `Ball.GreatBall`. */', 'export const Ball = {'];
+  const lines = [
+    HEADER('the ball catalog the server sends in the welcome packet (packages/sdk/data/balls.json)'),
+    '/** Ball ids by name, e.g. `Ball.GreatBall`. */',
+    'export const Ball = {',
+  ];
   for (const b of keyed) lines.push(`  ${b.key}: ${b.id},`);
   lines.push('} as const;', '', 'export type BallId = (typeof Ball)[keyof typeof Ball];', '');
-  lines.push('export interface BallInfo {', '  readonly id: number;', '  readonly name: string;', '  readonly catchRate: number | null;', '  /** Gold price in the shop, if it is sold. */', '  readonly priceGold: number | null;', '  readonly buyable: boolean;', '}', '');
+  lines.push(
+    'export interface BallInfo {',
+    '  readonly id: number;',
+    '  readonly name: string;',
+    '  readonly catchRate: number | null;',
+    '  /** Gold price in the shop, if it is sold. */',
+    '  readonly priceGold: number | null;',
+    '  readonly buyable: boolean;',
+    '}',
+    '',
+  );
   lines.push('export const BALL_CATALOG: readonly BallInfo[] = [');
-  for (const b of keyed) lines.push(`  { id: ${b.id}, name: ${str(b.name)}, catchRate: ${b.catchRate}, priceGold: ${b.priceGold}, buyable: ${b.buyable} },`);
+  for (const b of keyed)
+    lines.push(`  { id: ${b.id}, name: ${str(b.name)}, catchRate: ${b.catchRate}, priceGold: ${b.priceGold}, buyable: ${b.buyable} },`);
   lines.push('];', '');
   return lines.join('\n');
 }
@@ -115,13 +154,23 @@ async function loadItems() {
 }
 
 const main = async () => {
-  const extra = fs.existsSync(EXTRA_ITEMS_SNAPSHOT) ? validateItems({ items: JSON.parse(fs.readFileSync(EXTRA_ITEMS_SNAPSHOT, 'utf8')) }) : [];
+  const extra = fs.existsSync(EXTRA_ITEMS_SNAPSHOT)
+    ? validateItems({ items: JSON.parse(fs.readFileSync(EXTRA_ITEMS_SNAPSHOT, 'utf8')) })
+    : [];
   const items = mergeItems(await loadItems(), extra);
   const balls = validateBalls(JSON.parse(fs.readFileSync(BALLS_SNAPSHOT, 'utf8')));
-  const outputs = [[OUT_ITEMS, renderItems(items)], [OUT_BALLS, renderBalls(balls)]];
+  const outputs = [
+    [OUT_ITEMS, renderItems(items)],
+    [OUT_BALLS, renderBalls(balls)],
+  ];
   if (check) {
-    const stale = outputs.filter(([file, text]) => !fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== text).map(([file]) => path.relative(ROOT, file));
-    if (stale.length) { console.error(`out of date with the game: ${stale.join(', ')}\nrun: npm run catalog`); process.exit(1); }
+    const stale = outputs
+      .filter(([file, text]) => !fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== text)
+      .map(([file]) => path.relative(ROOT, file));
+    if (stale.length) {
+      console.error(`out of date with the game: ${stale.join(', ')}\nrun: npm run catalog`);
+      process.exit(1);
+    }
     console.log('catalogs are up to date');
     return;
   }

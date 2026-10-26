@@ -78,7 +78,15 @@ export type BuyResult =
    * only the inventory grew by at least the quantity. `after` is the inventory when the confirmation arrived: when the
    * `compra` event comes first, the `estado` update with the new count may still be on its way.
    */
-  | { status: 'confirmed'; request: BuyRequest; confirmedBy: 'event' | 'inventory'; confidence: 'certain' | 'probable'; before: number; after: number; spent: number | null }
+  | {
+      status: 'confirmed';
+      request: BuyRequest;
+      confirmedBy: 'event' | 'inventory';
+      confidence: 'certain' | 'probable';
+      before: number;
+      after: number;
+      spent: number | null;
+    }
   | { status: 'dry-run'; request: BuyRequest; command: { t: 'shop.buy'; kind: 'ball' | 'item'; id: number; qty: number } }
   /** Sent, but the game did not confirm in time. It may still have happened: do not assume it failed. */
   | { status: 'unconfirmed'; request: BuyRequest; waitedMs: number }
@@ -86,7 +94,12 @@ export type BuyResult =
    * The game answered with an error while we waited: the first one that arrived. Errors carry no request id, so it is
    * only `probable` that it was about this order (it could even be that the order went through): the next action waits.
    */
-  | { status: 'rejected'; request: BuyRequest; confidence: 'probable'; error: { chave?: string; msg?: string; params?: Record<string, unknown> } }
+  | {
+      status: 'rejected';
+      request: BuyRequest;
+      confidence: 'probable';
+      error: { chave?: string; msg?: string; params?: Record<string, unknown> };
+    }
   | { status: 'not-connected' }
   /** The full state (the `welcome` packet) has not arrived: see `GameState.complete`. */
   | { status: 'no-state' }
@@ -114,7 +127,12 @@ export type SellResult =
   /** Sent, but the game did not confirm in time. It may still have been sold: do not assume it was not. */
   | { status: 'unconfirmed'; request: SellRequest; waitedMs: number }
   /** The game answered with an error while we waited (see `BuyResult`): only `probable` that it was about this sale. */
-  | { status: 'rejected'; request: SellRequest; confidence: 'probable'; error: { chave?: string; msg?: string; params?: Record<string, unknown> } }
+  | {
+      status: 'rejected';
+      request: SellRequest;
+      confidence: 'probable';
+      error: { chave?: string; msg?: string; params?: Record<string, unknown> };
+    }
   | { status: 'not-connected' }
   | { status: 'no-state' }
   /** The pokémon is not in your list (the state may be partial, or it was already sold). */
@@ -127,8 +145,18 @@ export type SellResult =
 const MAX_PER_ORDER = 9999; // the game's own client never asks for more
 const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
-const DEFAULTS = { minIntervalMs: 3000, maxPerMinute: 10, confirmTimeoutMs: 10_000, unconfirmedCooldownMs: 30_000, confirmGraceMs: 1000 } as const;
-const realScheduler: Scheduler = { now: () => Date.now(), setTimeout: (cb, ms) => setTimeout(cb, ms), clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) };
+const DEFAULTS = {
+  minIntervalMs: 3000,
+  maxPerMinute: 10,
+  confirmTimeoutMs: 10_000,
+  unconfirmedCooldownMs: 30_000,
+  confirmGraceMs: 1000,
+} as const;
+const realScheduler: Scheduler = {
+  now: () => Date.now(),
+  setTimeout: (cb, ms) => setTimeout(cb, ms),
+  clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+};
 
 /** Created for you as `client.actions`. The limits live in memory and are per instance: a page reload starts them over. */
 export class Actions {
@@ -140,7 +168,10 @@ export class Actions {
   private sends: number[] = [];
   private spending: Array<{ at: number; gold: number }> = [];
 
-  constructor(private readonly client: PokeIdleClient, options: ActionsOptions = {}) {
+  constructor(
+    private readonly client: PokeIdleClient,
+    options: ActionsOptions = {},
+  ) {
     validateOptions(options);
     this.options = options;
     this.scheduler = options.scheduler ?? realScheduler;
@@ -164,7 +195,8 @@ export class Actions {
 
   private async buy(kind: 'ball' | 'item', id: number, quantity: number, options: { dryRun?: boolean }): Promise<BuyResult> {
     if (!Number.isInteger(id) || id < 0) throw new RangeError(`the ${kind} id must be a non-negative integer, got ${String(id)}`);
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_PER_ORDER) throw new RangeError(`the quantity must be an integer from 1 to ${MAX_PER_ORDER}, got ${String(quantity)}`);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_PER_ORDER)
+      throw new RangeError(`the quantity must be an integer from 1 to ${MAX_PER_ORDER}, got ${String(quantity)}`);
 
     if (this.inFlight) return { status: 'busy' };
     if (!this.client.connected) return { status: 'not-connected' };
@@ -172,14 +204,21 @@ export class Actions {
     if (!state.complete) return { status: 'no-state' };
 
     const price = this.priceOf(kind, id);
-    const request: BuyRequest = { kind, id, quantity, unitPrice: price.unit, totalPrice: price.unit === null ? null : price.unit * quantity };
+    const request: BuyRequest = {
+      kind,
+      id,
+      quantity,
+      unitPrice: price.unit,
+      totalPrice: price.unit === null ? null : price.unit * quantity,
+    };
     const command = { t: 'shop.buy', kind, id, qty: quantity } as const;
     const dryRun = options.dryRun ?? this.options.dryRun ?? false;
 
     const checks = resolveChecks(this.options.checks);
     if (checks.notForSale && price.reason) return { status: 'not-for-sale', request, reason: price.reason };
     const gold = state.gold;
-    if (checks.gold && request.totalPrice !== null && gold !== null && gold < request.totalPrice) return { status: 'insufficient-gold', request, needed: request.totalPrice, have: gold };
+    if (checks.gold && request.totalPrice !== null && gold !== null && gold < request.totalPrice)
+      return { status: 'insufficient-gold', request, needed: request.totalPrice, have: gold };
 
     // A dry run predicts the real outcome: it goes through the same limits, but does not record anything.
     const now = this.scheduler.now();
@@ -189,12 +228,19 @@ export class Actions {
     if (cap !== undefined) {
       const spent = this.spentLastHour;
       // Fail closed: with a cap set, an order whose price is unknown cannot be counted, so it is not allowed.
-      if (request.totalPrice === null || spent + request.totalPrice > cap) return { status: 'spend-cap', request, spentLastHour: spent, cap };
+      if (request.totalPrice === null || spent + request.totalPrice > cap)
+        return { status: 'spend-cap', request, spentLastHour: spent, cap };
     }
     if (dryRun) return { status: 'dry-run', request, command: { ...command } };
 
     const before = kind === 'ball' ? state.ballCount(id) : state.itemCount(id);
-    return this.dispatch({ command: { ...command }, confirmIrreversible: false, now, spendGold: request.totalPrice, wait: () => this.waitForConfirmation(request, before) });
+    return this.dispatch({
+      command: { ...command },
+      confirmIrreversible: false,
+      now,
+      spendGold: request.totalPrice,
+      wait: () => this.waitForConfirmation(request, before),
+    });
   }
 
   /**
@@ -224,9 +270,11 @@ export class Actions {
       }
       this.lastSentAt = spec.now;
       this.sends = [...this.sends.filter((t) => spec.now - t < MINUTE_MS), spec.now];
-      if (spec.spendGold !== null) this.spending = [...this.spending.filter((e) => spec.now - e.at < HOUR_MS), { at: spec.now, gold: spec.spendGold }];
+      if (spec.spendGold !== null)
+        this.spending = [...this.spending.filter((e) => spec.now - e.at < HOUR_MS), { at: spec.now, gold: spec.spendGold }];
       const result = await confirmation.result;
-      if (result.status === 'unconfirmed' || result.status === 'rejected') this.blockedUntil = this.scheduler.now() + (this.options.unconfirmedCooldownMs ?? DEFAULTS.unconfirmedCooldownMs);
+      if (result.status === 'unconfirmed' || result.status === 'rejected')
+        this.blockedUntil = this.scheduler.now() + (this.options.unconfirmedCooldownMs ?? DEFAULTS.unconfirmedCooldownMs);
       return result;
     } finally {
       this.inFlight = false;
@@ -239,10 +287,14 @@ export class Actions {
    * the Exp. Share) and waits for the game's `venda` event or for the pokémon to leave your list.
    */
   async sellPokemon(pokemonId: number, options: { dryRun?: boolean; confirmIrreversible?: boolean } = {}): Promise<SellResult> {
-    if (!Number.isInteger(pokemonId) || pokemonId < 0) throw new RangeError(`the pokémon id must be a non-negative integer, got ${String(pokemonId)}`);
+    if (!Number.isInteger(pokemonId) || pokemonId < 0)
+      throw new RangeError(`the pokémon id must be a non-negative integer, got ${String(pokemonId)}`);
     const dryRun = options.dryRun ?? this.options.dryRun ?? false;
     if (!dryRun && options.confirmIrreversible !== true && isIrreversibleCommand('shop.sellPokemon')) {
-      throw new CommandRefusedError('shop.sellPokemon', 'selling a pokémon cannot be undone: pass { confirmIrreversible: true } if you mean it');
+      throw new CommandRefusedError(
+        'shop.sellPokemon',
+        'selling a pokémon cannot be undone: pass { confirmIrreversible: true } if you mean it',
+      );
     }
     if (this.inFlight) return { status: 'busy' };
     if (!this.client.connected) return { status: 'not-connected' };
@@ -251,7 +303,12 @@ export class Actions {
 
     const pokemon = state.findPokemon(pokemonId);
     if (!pokemon) return { status: 'not-found', pokemonId };
-    const request: SellRequest = { pokemonId, name: typeof pokemon.nome === 'string' ? pokemon.nome : null, level: typeof pokemon.level === 'number' ? pokemon.level : null, shiny: typeof pokemon.shiny === 'boolean' ? pokemon.shiny : null };
+    const request: SellRequest = {
+      pokemonId,
+      name: typeof pokemon.nome === 'string' ? pokemon.nome : null,
+      level: typeof pokemon.level === 'number' ? pokemon.level : null,
+      shiny: typeof pokemon.shiny === 'boolean' ? pokemon.shiny : null,
+    };
     if (resolveChecks(this.options.checks).sellable) {
       const reason = this.whyNotSellable(pokemon);
       if (reason) return { status: 'not-sellable', request, reason };
@@ -263,7 +320,13 @@ export class Actions {
     const command = { t: 'shop.sellPokemon', pokemonId } as const;
     if (dryRun) return { status: 'dry-run', request, command: { ...command } };
 
-    return this.dispatch({ command: { ...command }, confirmIrreversible: true, now, spendGold: null, wait: () => this.waitForSale(request) });
+    return this.dispatch({
+      command: { ...command },
+      confirmIrreversible: true,
+      now,
+      spendGold: null,
+      wait: () => this.waitForSale(request),
+    });
   }
 
   /**
@@ -295,7 +358,12 @@ export class Actions {
     // The `venda` event names the pokémon WITH its level ("Charmander Nv 20"), nothing else. So it is matched on name and
     // level, and it is `certain` only when no other pokémon of yours has that same name AND level; otherwise `probable`.
     const wanted = request.name === null ? null : normalizeName(request.name);
-    const sameKind = wanted === null ? 0 : (state.player?.pokemons ?? []).filter((p) => typeof p.nome === 'string' && normalizeName(p.nome) === wanted && (request.level === null || p.level === request.level)).length;
+    const sameKind =
+      wanted === null
+        ? 0
+        : (state.player?.pokemons ?? []).filter(
+            (p) => typeof p.nome === 'string' && normalizeName(p.nome) === wanted && (request.level === null || p.level === request.level),
+          ).length;
     const graceMs = this.options.confirmGraceMs ?? DEFAULTS.confirmGraceMs;
     let graceTimer: unknown;
     let finish: (result: SellResult) => void = () => {};
@@ -317,7 +385,13 @@ export class Actions {
         const sold = typeof event['nome'] === 'string' ? parseSaleName(event['nome']) : null;
         if (wanted === null || sold === null || sold.name !== wanted) return;
         if (sold.level !== null && request.level !== null && sold.level !== request.level) return; // another level: another pokémon
-        finish({ status: 'confirmed', request, confirmedBy: 'event', confidence: sameKind === 1 ? 'certain' : 'probable', gained: typeof event['ganho'] === 'number' ? event['ganho'] : null });
+        finish({
+          status: 'confirmed',
+          request,
+          confirmedBy: 'event',
+          confidence: sameKind === 1 ? 'certain' : 'probable',
+          gained: typeof event['ganho'] === 'number' ? event['ganho'] : null,
+        });
       }),
       state.onChange(() => {
         if (state.findPokemon(request.pokemonId) !== undefined || graceTimer !== undefined) return;
@@ -328,7 +402,10 @@ export class Actions {
       }),
       this.client.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })),
     );
-    timer = this.scheduler.setTimeout(() => finish({ status: 'unconfirmed', request, waitedMs: this.scheduler.now() - startedAt }), timeoutMs);
+    timer = this.scheduler.setTimeout(
+      () => finish({ status: 'unconfirmed', request, waitedMs: this.scheduler.now() - startedAt }),
+      timeoutMs,
+    );
     return { result, cancel: cleanup };
   }
 
@@ -337,14 +414,19 @@ export class Actions {
     if (kind === 'ball') {
       const ball = state.ballCatalog.find((b) => b.id === id);
       if (!ball) return { unit: null, reason: `the server's ball catalog has no ball ${id}` };
-      if (!ball.buyable || ball.priceGold === null || ball.priceGold <= 0) return { unit: null, reason: `${ball.name} is not sold in the shop` };
+      if (!ball.buyable || ball.priceGold === null || ball.priceGold <= 0)
+        return { unit: null, reason: `${ball.name} is not sold in the shop` };
       return { unit: ball.priceGold };
     }
     const offered = state.shopItems.find((s) => s.itemId === id);
-    if (offered) return offered.price === null || offered.price <= 0 ? { unit: null, reason: `${offered.name} has no price` } : { unit: offered.price };
+    if (offered)
+      return offered.price === null || offered.price <= 0
+        ? { unit: null, reason: `${offered.name} has no price` }
+        : { unit: offered.price };
     // Potions and revives: the NPC shop sells them at the catalog's `npcPrice` (checked against real purchases).
     const info = itemInfo(id);
-    if (info && (info.category === 'heal' || info.category === 'revive') && !info.rare && info.npcPrice !== null && info.npcPrice > 0) return { unit: info.npcPrice };
+    if (info && (info.category === 'heal' || info.category === 'revive') && !info.rare && info.npcPrice !== null && info.npcPrice > 0)
+      return { unit: info.npcPrice };
     return { unit: null, reason: info ? `${info.name} is not an item the NPC shop is known to sell` : `item ${id} is not in the catalog` };
   }
 
@@ -354,9 +436,11 @@ export class Actions {
     if (limit === false) return null;
     const minInterval = limit?.minIntervalMs ?? DEFAULTS.minIntervalMs;
     const perMinute = limit?.maxPerMinute ?? DEFAULTS.maxPerMinute;
-    if (now - this.lastSentAt < minInterval) return { status: 'rate-limited', reason: 'interval', retryInMs: minInterval - (now - this.lastSentAt) };
+    if (now - this.lastSentAt < minInterval)
+      return { status: 'rate-limited', reason: 'interval', retryInMs: minInterval - (now - this.lastSentAt) };
     const recent = this.sends.filter((t) => now - t < MINUTE_MS);
-    if (recent.length >= perMinute) return { status: 'rate-limited', reason: 'per-minute', retryInMs: MINUTE_MS - (now - (recent[0] ?? now)) };
+    if (recent.length >= perMinute)
+      return { status: 'rate-limited', reason: 'per-minute', retryInMs: MINUTE_MS - (now - (recent[0] ?? now)) };
     return null;
   }
 
@@ -392,17 +476,34 @@ export class Actions {
       state.onChange(() => {
         const after = count();
         // At least the quantity ordered: a drop or a purchase made elsewhere that adds a little must not confirm this order.
-        if (after - before >= request.quantity) finish({ status: 'confirmed', request, confirmedBy: 'inventory', confidence: 'probable', before, after, spent: request.totalPrice });
+        if (after - before >= request.quantity)
+          finish({
+            status: 'confirmed',
+            request,
+            confirmedBy: 'inventory',
+            confidence: 'probable',
+            before,
+            after,
+            spent: request.totalPrice,
+          });
       }),
       this.client.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })),
     );
-    timer = this.scheduler.setTimeout(() => finish({ status: 'unconfirmed', request, waitedMs: this.scheduler.now() - startedAt }), timeoutMs);
+    timer = this.scheduler.setTimeout(
+      () => finish({ status: 'unconfirmed', request, waitedMs: this.scheduler.now() - startedAt }),
+      timeoutMs,
+    );
     return { result, cancel: cleanup };
   }
 }
 
 /** Lower case, without leading symbols (a shiny mark) or a `Shiny ` prefix, so "✨ Charmander" and "Charmander" compare equal. */
-const normalizeName = (name: string): string => name.toLowerCase().replace(/^[^\p{L}\p{N}]+/u, '').replace(/^shiny\s+/, '').trim();
+const normalizeName = (name: string): string =>
+  name
+    .toLowerCase()
+    .replace(/^[^\p{L}\p{N}]+/u, '')
+    .replace(/^shiny\s+/, '')
+    .trim();
 
 /** `Charmander Nv 20` -> name `charmander`, level 20. Without a level suffix the level is `null`. */
 function parseSaleName(text: string): { name: string; level: number | null } {
@@ -429,10 +530,15 @@ function resolveChecks(checks: ActionsOptions['checks']): { notForSale: boolean;
 /** A bad number would silently turn a protection off (`x < NaN` is always false): refuse it. */
 function validateOptions(options: ActionsOptions): void {
   const numbers: Array<[string, number | undefined]> = [
-    ['maxGoldPerHour', options.maxGoldPerHour], ['confirmTimeoutMs', options.confirmTimeoutMs], ['confirmGraceMs', options.confirmGraceMs], ['unconfirmedCooldownMs', options.unconfirmedCooldownMs],
-    ['rateLimit.minIntervalMs', options.rateLimit ? options.rateLimit.minIntervalMs : undefined], ['rateLimit.maxPerMinute', options.rateLimit ? options.rateLimit.maxPerMinute : undefined],
+    ['maxGoldPerHour', options.maxGoldPerHour],
+    ['confirmTimeoutMs', options.confirmTimeoutMs],
+    ['confirmGraceMs', options.confirmGraceMs],
+    ['unconfirmedCooldownMs', options.unconfirmedCooldownMs],
+    ['rateLimit.minIntervalMs', options.rateLimit ? options.rateLimit.minIntervalMs : undefined],
+    ['rateLimit.maxPerMinute', options.rateLimit ? options.rateLimit.maxPerMinute : undefined],
   ];
   for (const [name, value] of numbers) {
-    if (value !== undefined && !(Number.isFinite(value) && value >= 0)) throw new RangeError(`${name} must be a finite number of at least 0, got ${String(value)}`);
+    if (value !== undefined && !(Number.isFinite(value) && value >= 0))
+      throw new RangeError(`${name} must be a finite number of at least 0, got ${String(value)}`);
   }
 }

@@ -33,10 +33,14 @@ client.on('welcome', () => {
   console.log('revives:', client.state.itemCount(Item.Revive));
   console.log('ultra balls:', client.state.ballCount(Ball.UltraBall));
 });
-client.state.onChange(() => { /* gold, items, pokémon... changed */ });
+client.state.onChange(() => {
+  /* gold, items, pokémon... changed */
+});
 
 client.on('welcome', (packet) => packet.estado?.gold); // typed raw packets for the verified types
-client.onPacket((packet) => { /* every packet, typed as a plain Packet */ });
+client.onPacket((packet) => {
+  /* every packet, typed as a plain Packet */
+});
 console.log(client.inspector?.dump()); // counts and redacted samples, safe to share
 ```
 
@@ -51,8 +55,8 @@ if (result.status === 'confirmed') console.log(result.confirmedBy, result.before
 // 'dry-run' | 'unconfirmed' | 'rejected' | 'not-for-sale' | 'insufficient-gold' | 'rate-limited' | 'spend-cap' | 'busy' | ...
 ```
 
-`buyBall`, `buyItem` (potions, revives) and `sellPokemon` exist today. The result says what happened, and `unconfirmed` means *sent but
-not confirmed in time*: it may still have happened, so the SDK waits 30 s before allowing another purchase instead of
+`buyBall`, `buyItem` (potions, revives) and `sellPokemon` exist today. The result says what happened, and `unconfirmed` means _sent but
+not confirmed in time_: it may still have happened, so the SDK waits 30 s before allowing another purchase instead of
 risking paying twice (the same wait follows a `rejected`: the game's errors carry no request id, so an error can be about
 something else). A purchase is confirmed by the game's own `compra` event (verified in real traffic: `nome`, `qtd` and `gasto`; same quantity and name: `confidence: 'certain'`; it arrives before the inventory update, so `after` can still equal `before`)
 or by the inventory growing by at least the quantity (`'probable'`), whichever comes first. Safety nets, all configurable
@@ -96,11 +100,11 @@ The SDK knows every packet the game's client handles (51 types), every kind of e
 command the client sends (216): the registry is extracted from the client itself (`npm run protocol`, and
 `npm run protocol:check` tells if the game changed). How well each one is known is explicit:
 
-| Level | Meaning | Packets | Battle events | Commands |
-|---|---|---|---|---|
-| `traffic` | fields verified in real traffic | 20 | 7 | 6 |
-| `client-code` | field names read from the game's client, values `unknown` until seen | 31 | 126 | typed shapes for the buy/sell/market commands |
-| `name-only` | known by name | none | none | the rest |
+| Level         | Meaning                                                              | Packets | Battle events | Commands                                      |
+| ------------- | -------------------------------------------------------------------- | ------- | ------------- | --------------------------------------------- |
+| `traffic`     | fields verified in real traffic                                      | 20      | 7             | 6                                             |
+| `client-code` | field names read from the game's client, values `unknown` until seen | 31      | 126           | typed shapes for the buy/sell/market commands |
+| `name-only`   | known by name                                                        | none    | none          | the rest                                      |
 
 `client.on('market', (p) => p.medias)` is typed for all 51 packet types (a typo does not compile; `onType` is for types the SDK does not know yet), `client.onBattleEvent('morte', (e) => e.ouro)`
 delivers battle events one by one, and `client.inspector.dump()` lists what the game sent that the SDK does not know
@@ -119,12 +123,12 @@ It has to run in the page's own world, before the game opens its socket. In a Ch
 
 ## Repository layout
 
-| Path | What it is |
-|---|---|
-| `packages/sdk` | the library (`pokeidle-community-sdk`) |
+| Path                      | What it is                                                                             |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| `packages/sdk`            | the library (`pokeidle-community-sdk`)                                                 |
 | `examples/test-extension` | a Chrome extension that uses the library as a package, to try it against the real game |
-| `docs` | architecture notes |
-| `test` | repository-level checks (nothing personal or sensitive is tracked) |
+| `docs`                    | architecture notes                                                                     |
+| `test`                    | repository-level checks (nothing personal or sensitive is tracked)                     |
 
 ## Try it
 

@@ -209,11 +209,45 @@ export interface WelcomePacket extends Packet {
     maxAnunciosPokemon?: number;
     [key: string]: unknown;
   };
-  readonly lojaProdutos?: Array<{ id?: string; cat?: string; grupo?: string; nome?: string; preco?: number; descricao?: string; [key: string]: unknown }>;
-  readonly captura?: { base?: number; piso?: number; teto?: number; raridadeDiv?: number; precoSemPreco?: number; porDegrau?: Record<string, number> };
-  readonly mega?: { fragmentoId?: number; custo?: number; pedras?: Array<{ dex?: number; nome?: string; pedra?: string; megaPokeId?: number; itemId?: number; itemShinyId?: number }>; [key: string]: unknown };
-  readonly bossesCatalogo?: Array<{ key?: string; name?: string; pokeId?: number; level?: number; type1?: string; type2?: string | null; [key: string]: unknown }>;
-  readonly bossesJogaveis?: Array<{ key?: string; nome?: string; level?: number; entrada?: { itemId?: number; nome?: string; qtd?: number }; [key: string]: unknown }>;
+  readonly lojaProdutos?: Array<{
+    id?: string;
+    cat?: string;
+    grupo?: string;
+    nome?: string;
+    preco?: number;
+    descricao?: string;
+    [key: string]: unknown;
+  }>;
+  readonly captura?: {
+    base?: number;
+    piso?: number;
+    teto?: number;
+    raridadeDiv?: number;
+    precoSemPreco?: number;
+    porDegrau?: Record<string, number>;
+  };
+  readonly mega?: {
+    fragmentoId?: number;
+    custo?: number;
+    pedras?: Array<{ dex?: number; nome?: string; pedra?: string; megaPokeId?: number; itemId?: number; itemShinyId?: number }>;
+    [key: string]: unknown;
+  };
+  readonly bossesCatalogo?: Array<{
+    key?: string;
+    name?: string;
+    pokeId?: number;
+    level?: number;
+    type1?: string;
+    type2?: string | null;
+    [key: string]: unknown;
+  }>;
+  readonly bossesJogaveis?: Array<{
+    key?: string;
+    nome?: string;
+    level?: number;
+    entrada?: { itemId?: number; nome?: string; qtd?: number };
+    [key: string]: unknown;
+  }>;
 }
 
 export interface StatePacket extends Packet {
@@ -398,7 +432,18 @@ export interface ShinyCapturePacket extends Packet {
 export interface RaidPacket extends Packet {
   readonly t: 'raid';
   readonly agora?: number;
-  readonly edicao?: { id?: string; numero?: number; dia?: string; inscricoesDe?: number; inscricoesAte?: number; equipeAte?: number; batalhaEm?: number; transmissaoEm?: number; fimEm?: number; fase?: string };
+  readonly edicao?: {
+    id?: string;
+    numero?: number;
+    dia?: string;
+    inscricoesDe?: number;
+    inscricoesAte?: number;
+    equipeAte?: number;
+    batalhaEm?: number;
+    transmissaoEm?: number;
+    fimEm?: number;
+    fase?: string;
+  };
   readonly gigantamax?: { dex?: number; slug?: string; nome?: string; tipos?: string[]; hpMax?: number; [key: string]: unknown };
   readonly maxEquipe?: number;
   readonly inscritos?: number;
@@ -409,5 +454,11 @@ export interface RaidPacket extends Packet {
 
 export interface GuildPacket extends Packet {
   readonly t: 'guild';
-  readonly bancoAoVivo?: { guildId?: number; banco?: number; ciclo?: number; doacao?: { id?: number; nick?: string; qtd?: number; em?: number; ciclo?: number }; eu?: boolean };
+  readonly bancoAoVivo?: {
+    guildId?: number;
+    banco?: number;
+    ciclo?: number;
+    doacao?: { id?: number; nick?: string; qtd?: number; em?: number; ciclo?: number };
+    eu?: boolean;
+  };
 }

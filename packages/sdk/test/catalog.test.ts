@@ -13,7 +13,13 @@ test('well-known ids are reachable by name', () => {
 });
 
 test('itemInfo and ballInfo describe known ids and return undefined for unknown ones', () => {
-  assert.deepEqual(itemInfo(Item.SmallPotion), { id: 200, name: 'Small Potion', category: 'heal', rare: false, npcPrice: itemInfo(200)?.npcPrice ?? null });
+  assert.deepEqual(itemInfo(Item.SmallPotion), {
+    id: 200,
+    name: 'Small Potion',
+    category: 'heal',
+    rare: false,
+    npcPrice: itemInfo(200)?.npcPrice ?? null,
+  });
   assert.equal(itemInfo(999_999_999), undefined);
   assert.equal(ballInfo(Ball.GreatBall)?.name, 'Great Ball');
   assert.deepEqual(ballInfo(Ball.BeastBall), { id: 5, name: 'Beast Ball', catchRate: 8, priceGold: null, buyable: false }); // not sold in the market
@@ -22,7 +28,10 @@ test('itemInfo and ballInfo describe known ids and return undefined for unknown 
 
 test('itemsInCategory returns the items of one category', () => {
   const revives = itemsInCategory('revive');
-  assert.deepEqual(revives.map((i) => i.id), [Item.Revive, Item.MaxRevive]);
+  assert.deepEqual(
+    revives.map((i) => i.id),
+    [Item.Revive, Item.MaxRevive],
+  );
   assert.ok(itemsInCategory('heal').every((i) => i.category === 'heal'));
 });
 
@@ -42,7 +51,7 @@ test('items that share a name keep the clean key on the lowest id and the others
   assert.equal(Item._10000CaratEmerald, 27304);
 });
 
-test('the game\'s own items (not in the public catalog) are part of Item, with their categories', () => {
+test("the game's own items (not in the public catalog) are part of Item, with their categories", () => {
   assert.equal(Item.BronzeBossToken, 70000); // from the public catalog
   assert.equal(Item.EscapeRope, 70010); // from the game's own list
   assert.equal(Item.MysteryEggP2, 70091);

@@ -10,7 +10,8 @@ client.start();
 
 function mountOverlay(): void {
   const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:2147483647;max-width:280px;max-height:40vh;overflow:auto;background:#1b1320;color:#eee;font:12px/1.4 system-ui,sans-serif;border:1px solid #555;border-radius:6px;padding:8px;opacity:.92';
+  box.style.cssText =
+    'position:fixed;right:8px;bottom:8px;z-index:2147483647;max-width:280px;max-height:40vh;overflow:auto;background:#1b1320;color:#eee;font:12px/1.4 system-ui,sans-serif;border:1px solid #555;border-radius:6px;padding:8px;opacity:.92';
   const title = document.createElement('div');
   title.style.fontWeight = '600';
   const list = document.createElement('div');
@@ -22,11 +23,23 @@ function mountOverlay(): void {
   const copyCatalogs = document.createElement('button');
   copyCatalogs.textContent = 'Copy game catalogs';
   copyCatalogs.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
-  copyCatalogs.addEventListener('click', () => void navigator.clipboard.writeText(JSON.stringify({ balls: client.state.ballCatalog, shopItems: client.state.shopItems, extraItems: client.state.extraItems }, null, 2)));
+  copyCatalogs.addEventListener(
+    'click',
+    () =>
+      void navigator.clipboard.writeText(
+        JSON.stringify(
+          { balls: client.state.ballCatalog, shopItems: client.state.shopItems, extraItems: client.state.extraItems },
+          null,
+          2,
+        ),
+      ),
+  );
   // Actions: the first is a dry run (sends nothing); the second REALLY buys one Poke Ball (5 gold) to see the game confirm it.
   const lastAction = document.createElement('div');
   lastAction.style.cssText = 'margin-top:6px;white-space:pre-wrap;word-break:break-word;font-size:11px';
-  const show = (label: string, result: unknown): void => { lastAction.textContent = `${label}: ${JSON.stringify(result)}`; };
+  const show = (label: string, result: unknown): void => {
+    lastAction.textContent = `${label}: ${JSON.stringify(result)}`;
+  };
   const dryRun = document.createElement('button');
   dryRun.textContent = 'Dry run: buy 1 Poke Ball';
   dryRun.style.cssText = 'margin-top:6px;cursor:pointer';
@@ -42,15 +55,38 @@ function mountOverlay(): void {
   const sellDry = document.createElement('button');
   sellDry.textContent = 'Dry run: sell';
   sellDry.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
-  sellDry.addEventListener('click', () => void client.actions.sellPokemon(Number(sellId.value), { dryRun: true }).then((r) => show('sell dry run', r), (e: unknown) => show('sell error', String(e))));
+  sellDry.addEventListener(
+    'click',
+    () =>
+      void client.actions.sellPokemon(Number(sellId.value), { dryRun: true }).then(
+        (r) => show('sell dry run', r),
+        (e: unknown) => show('sell error', String(e)),
+      ),
+  );
   const sellReal = document.createElement('button');
   sellReal.textContent = 'SELL (irreversible)';
   sellReal.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
   sellReal.addEventListener('click', () => {
     if (!window.confirm(`Sell pokémon ${sellId.value}? This cannot be undone.`)) return;
-    void client.actions.sellPokemon(Number(sellId.value), { confirmIrreversible: true }).then((r) => show('sell', r), (e: unknown) => show('sell error', String(e)));
+    void client.actions.sellPokemon(Number(sellId.value), { confirmIrreversible: true }).then(
+      (r) => show('sell', r),
+      (e: unknown) => show('sell error', String(e)),
+    );
   });
-  box.append(title, list, copy, copyCatalogs, document.createElement('br'), dryRun, realBuy, document.createElement('br'), sellId, sellDry, sellReal, lastAction);
+  box.append(
+    title,
+    list,
+    copy,
+    copyCatalogs,
+    document.createElement('br'),
+    dryRun,
+    realBuy,
+    document.createElement('br'),
+    sellId,
+    sellDry,
+    sellReal,
+    lastAction,
+  );
   document.documentElement.append(box);
 
   const render = (): void => {
@@ -58,16 +94,24 @@ function mountOverlay(): void {
     title.textContent = `SDK test · ${client.connected ? 'connected' : 'waiting for the socket'}`;
     const { state } = client;
     const rows: string[] = [];
-    if (state.player && !state.complete) rows.push('PARTIAL STATE: the welcome packet was missed.\nReload the game page (F5) to receive it.', '');
+    if (state.player && !state.complete)
+      rows.push('PARTIAL STATE: the welcome packet was missed.\nReload the game page (F5) to receive it.', '');
     if (state.player) {
       // Just a look at what the SDK reads; this stays on your screen.
       rows.push(`level ${state.level} · gold ${state.gold} · diamonds ${state.diamonds}`);
       rows.push(`balls: ${state.ballCatalog.map((b) => `${b.name} ${state.ballCount(b.id)}`).join(', ') || '(no catalog yet)'}`);
-      rows.push(`revives: ${state.itemCount(Item.Revive)} · max revives: ${state.itemCount(Item.MaxRevive)} · small potions: ${state.itemCount(Item.SmallPotion)}`);
+      rows.push(
+        `revives: ${state.itemCount(Item.Revive)} · max revives: ${state.itemCount(Item.MaxRevive)} · small potions: ${state.itemCount(Item.SmallPotion)}`,
+      );
       rows.push(`poke balls: ${state.ballCount(Ball.PokeBall)} · pokémon: ${state.player.pokemons.length}`);
       rows.push('');
     }
-    rows.push(...Object.entries(received).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([type, n]) => `${type}: ${n}`));
+    rows.push(
+      ...Object.entries(received)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([type, n]) => `${type}: ${n}`),
+    );
     // What the game sends that the SDK does not know yet: a protocol change shows up here.
     if (unknownTypes.length) rows.push(`unknown packets: ${unknownTypes.join(', ')}`);
     if (unknownBattleEvents.length) rows.push(`unknown battle events: ${unknownBattleEvents.join(', ')}`);

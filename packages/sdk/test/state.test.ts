@@ -5,8 +5,29 @@ import { Ball, GameState, Item, type Packet } from '../src/index.js';
 // Packets here are invented: they only copy the SHAPE of the real ones (names, nesting, types), never real values.
 const welcome = (extra: Record<string, unknown> = {}): Packet => ({
   t: 'welcome',
-  estado: { cheio: true, id: 1, nick: 'TestPlayer', level: 10, xp: 500, gold: 1000, diamonds: 3, orbs: 2, huntSlug: 'some-hunt', items: { '200': 5, '205': 1 }, balls: { '1': 100, '2': 20 }, pokemons: [{ id: 11, nome: 'a' }, { id: 12, nome: 'b' }], pokedex: { '1': { seen: true } } },
-  catalogoBolas: [{ id: 1, nome: 'Poke Ball', catchRate: 1, priceGold: 5, compravel: true }, { id: 2, nome: 'Great Ball', catchRate: 2, priceGold: 20, compravel: true }, { id: 9, nome: 'Not Sold Ball', catchRate: 4, priceGold: 0, compravel: false }],
+  estado: {
+    cheio: true,
+    id: 1,
+    nick: 'TestPlayer',
+    level: 10,
+    xp: 500,
+    gold: 1000,
+    diamonds: 3,
+    orbs: 2,
+    huntSlug: 'some-hunt',
+    items: { '200': 5, '205': 1 },
+    balls: { '1': 100, '2': 20 },
+    pokemons: [
+      { id: 11, nome: 'a' },
+      { id: 12, nome: 'b' },
+    ],
+    pokedex: { '1': { seen: true } },
+  },
+  catalogoBolas: [
+    { id: 1, nome: 'Poke Ball', catchRate: 1, priceGold: 5, compravel: true },
+    { id: 2, nome: 'Great Ball', catchRate: 2, priceGold: 20, compravel: true },
+    { id: 9, nome: 'Not Sold Ball', catchRate: 4, priceGold: 0, compravel: false },
+  ],
   itensCompraveis: [{ itemId: 70091, preco: 20_000_000, nome: 'Mystery Egg P2' }],
   ...extra,
 });
@@ -28,7 +49,14 @@ test('welcome fills the player, the counts and the catalogs', () => {
   assert.equal(state.itemCount(Item.Revive), 1);
   assert.equal(state.itemCount(Item.MaxRevive), 0);
   assert.equal(state.ballCount(Ball.GreatBall), 20);
-  assert.deepEqual(state.ballCatalog.map((b) => [b.id, b.name, b.buyable]), [[1, 'Poke Ball', true], [2, 'Great Ball', true], [9, 'Not Sold Ball', false]]);
+  assert.deepEqual(
+    state.ballCatalog.map((b) => [b.id, b.name, b.buyable]),
+    [
+      [1, 'Poke Ball', true],
+      [2, 'Great Ball', true],
+      [9, 'Not Sold Ball', false],
+    ],
+  );
   assert.deepEqual(state.shopItems, [{ itemId: 70091, name: 'Mystery Egg P2', price: 20_000_000 }]);
   assert.equal(state.player?.pokemons.length, 2);
 });
@@ -45,7 +73,16 @@ test('updates change only what they carry', () => {
 test('pokémon and pokédex deltas add, change and remove entries', () => {
   const state = new GameState();
   state.applyPacket(welcome());
-  state.applyPacket(delta({ pkMud: [{ id: 12, nome: 'b2' }, { id: 13, nome: 'c' }], pkFora: [11], dexMud: { '2': { seen: true } } }));
+  state.applyPacket(
+    delta({
+      pkMud: [
+        { id: 12, nome: 'b2' },
+        { id: 13, nome: 'c' },
+      ],
+      pkFora: [11],
+      dexMud: { '2': { seen: true } },
+    }),
+  );
   const ids = state.player?.pokemons.map((k) => k.id);
   assert.deepEqual(ids, [12, 13]);
   assert.equal(state.player?.pokemons[0]?.['nome'], 'b2');
@@ -58,7 +95,10 @@ test('a second welcome starts over, and a complete list outside a full state rep
   const state = new GameState();
   state.applyPacket(welcome());
   state.applyPacket(delta({ pokemons: [{ id: 99 }] }));
-  assert.deepEqual(state.player?.pokemons.map((k) => k.id), [99]);
+  assert.deepEqual(
+    state.player?.pokemons.map((k) => k.id),
+    [99],
+  );
   state.applyPacket(welcome({ estado: { cheio: true, gold: 7 } }));
   assert.equal(state.gold, 7);
   assert.equal(state.level, null); // the old state is gone
@@ -77,11 +117,19 @@ test('malformed data is ignored instead of throwing', () => {
   assert.doesNotThrow(() => {
     state.applyPacket({ t: 'welcome', estado: 'nope', catalogoBolas: 'x', itensCompraveis: [null, 5, { itemId: 'a' }] });
     state.applyPacket({ t: 'estado', estado: [1, 2] });
-    state.applyPacket(welcome({ catalogoBolas: [null, { id: 'x' }, { id: 4 }], estado: { cheio: true, gold: 'rich', items: { '200': 'many' }, pokemons: [null, 7, { id: 1 }] } }));
+    state.applyPacket(
+      welcome({
+        catalogoBolas: [null, { id: 'x' }, { id: 4 }],
+        estado: { cheio: true, gold: 'rich', items: { '200': 'many' }, pokemons: [null, 7, { id: 1 }] },
+      }),
+    );
   });
   assert.equal(state.gold, null); // not a number
   assert.equal(state.itemCount(Item.SmallPotion), 0);
-  assert.deepEqual(state.ballCatalog.map((b) => [b.id, b.name]), [[4, 'Ball 4']]);
+  assert.deepEqual(
+    state.ballCatalog.map((b) => [b.id, b.name]),
+    [[4, 'Ball 4']],
+  );
   assert.equal(state.player?.pokemons.length, 1);
 });
 
@@ -115,10 +163,12 @@ test('onChange fires after each applied state and a throwing listener does not b
   assert.equal(calls, 2);
 });
 
-test('keys that would change an object\'s prototype are never copied from server data', () => {
+test("keys that would change an object's prototype are never copied from server data", () => {
   const state = new GameState();
   state.applyPacket(JSON.parse('{"t":"welcome","estado":{"cheio":true,"gold":1,"__proto__":{"gold":999,"items":{"200":999}}}}') as Packet);
-  state.applyPacket(JSON.parse('{"t":"estado","estado":{"level":3,"__proto__":{"orbs":999},"dexMud":{"__proto__":{"x":1},"7":{"seen":true}}}}') as Packet);
+  state.applyPacket(
+    JSON.parse('{"t":"estado","estado":{"level":3,"__proto__":{"orbs":999},"dexMud":{"__proto__":{"x":1},"7":{"seen":true}}}}') as Packet,
+  );
   assert.equal(state.gold, 1);
   assert.equal(state.orbs, null);
   assert.equal(state.itemCount(Item.SmallPotion), 0);
@@ -131,7 +181,10 @@ test('pokémon ids match whether they come as numbers or as text', () => {
   const state = new GameState();
   state.applyPacket(welcome());
   state.applyPacket(delta({ pkFora: ['11'], pkMud: [{ id: '12', nome: 'b3' }] }));
-  assert.deepEqual(state.player?.pokemons.map((k) => [k.id, k['nome']]), [['12', 'b3']]); // 11 removed, 12 replaced (not duplicated)
+  assert.deepEqual(
+    state.player?.pokemons.map((k) => [k.id, k['nome']]),
+    [['12', 'b3']],
+  ); // 11 removed, 12 replaced (not duplicated)
 });
 
 test('changing the packet or the returned snapshot afterwards does not change the state', () => {
@@ -153,9 +206,17 @@ test('complete is false until a full state arrives, so late listeners can tell t
   assert.equal(state.complete, true);
 });
 
-test('the game\'s own items (not in the public catalog) are read from the welcome packet and named', () => {
+test("the game's own items (not in the public catalog) are read from the welcome packet and named", () => {
   const state = new GameState();
-  state.applyPacket(welcome({ itensNossos: [{ id: 70000, name: 'Bronze Boss Token', icon: '/x.png', category: 'key-item', rare: false, npcPrice: 0 }, { id: 'x' }, null] }));
+  state.applyPacket(
+    welcome({
+      itensNossos: [
+        { id: 70000, name: 'Bronze Boss Token', icon: '/x.png', category: 'key-item', rare: false, npcPrice: 0 },
+        { id: 'x' },
+        null,
+      ],
+    }),
+  );
   assert.deepEqual(state.extraItems, [{ id: 70000, name: 'Bronze Boss Token', category: 'key-item', rare: false, npcPrice: 0 }]);
   assert.equal(state.itemName(70000), 'Bronze Boss Token');
 });

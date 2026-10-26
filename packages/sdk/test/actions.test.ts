@@ -7,7 +7,9 @@ class FakeTransport implements Transport {
   handlers: TransportHandlers | null = null;
   sent: Array<Record<string, unknown>> = [];
   readyState = 1;
-  start(handlers: TransportHandlers): void { this.handlers = handlers; }
+  start(handlers: TransportHandlers): void {
+    this.handlers = handlers;
+  }
   stop(): void {}
   send(text: string): boolean {
     if (this.readyState !== 1) return false;
@@ -20,15 +22,21 @@ class FakeScheduler implements Scheduler {
   time = 1_000_000;
   private timers: Array<{ at: number; fn: () => void; id: number }> = [];
   private next = 1;
-  now(): number { return this.time; }
+  now(): number {
+    return this.time;
+  }
   /** Timers that are still waiting: a leak shows up as a number. */
-  get pending(): number { return this.timers.length; }
+  get pending(): number {
+    return this.timers.length;
+  }
   setTimeout(fn: () => void, ms: number): unknown {
     const id = this.next++;
     this.timers.push({ at: this.time + ms, fn, id });
     return id;
   }
-  clearTimeout(handle: unknown): void { this.timers = this.timers.filter((t) => t.id !== handle); }
+  clearTimeout(handle: unknown): void {
+    this.timers = this.timers.filter((t) => t.id !== handle);
+  }
   advance(ms: number): void {
     this.time += ms;
     for (const timer of this.timers.filter((t) => t.at <= this.time)) {
@@ -65,14 +73,18 @@ function setup(options: ActionsOptions = {}, withWelcome = true) {
 test('dry run says what it would send and sends nothing', async () => {
   const { transport, actions } = setup();
   const result = await actions.buyBall(Ball.UltraBall, 10, { dryRun: true });
-  assert.deepEqual(result, { status: 'dry-run', request: { kind: 'ball', id: 4, quantity: 10, unitPrice: 130, totalPrice: 1300 }, command: { t: 'shop.buy', kind: 'ball', id: 4, qty: 10 } });
+  assert.deepEqual(result, {
+    status: 'dry-run',
+    request: { kind: 'ball', id: 4, quantity: 10, unitPrice: 130, totalPrice: 1300 },
+    command: { t: 'shop.buy', kind: 'ball', id: 4, qty: 10 },
+  });
   assert.deepEqual(transport.sent, []);
   const everything = setup({ dryRun: true });
   assert.equal((await everything.actions.buyItem(Item.SmallPotion, 5)).status, 'dry-run'); // the option on the client
   assert.deepEqual(everything.transport.sent, []);
 });
 
-test('a purchase is sent and confirmed by the game\'s own `compra` event', async () => {
+test("a purchase is sent and confirmed by the game's own `compra` event", async () => {
   const { transport, actions, feed } = setup();
   const pending = actions.buyBall(Ball.UltraBall, 10);
   assert.deepEqual(transport.sent, [{ t: 'shop.buy', kind: 'ball', id: 4, qty: 10 }]);
@@ -88,13 +100,20 @@ test('a purchase is also confirmed when the inventory grows, whichever signal co
   feed({ t: 'estado', estado: { balls: { '1': 100, '4': 82, '5': 0 } } });
   const result = await pending;
   assert.equal(result.status, 'confirmed');
-  if (result.status === 'confirmed') assert.deepEqual([result.confirmedBy, result.before, result.after, result.spent], ['inventory', 72, 82, 1300]);
+  if (result.status === 'confirmed')
+    assert.deepEqual([result.confirmedBy, result.before, result.after, result.spent], ['inventory', 72, 82, 1300]);
 });
 
 test('a `compra` event for another quantity or another item does not confirm', async () => {
   const { actions, feed, scheduler } = setup();
   const pending = actions.buyBall(Ball.UltraBall, 10);
-  feed({ t: 'batalha', ev: [{ k: 'compra', nome: 'Ultra Ball', qtd: 3 }, { k: 'compra', nome: 'Revive', qtd: 10 }] });
+  feed({
+    t: 'batalha',
+    ev: [
+      { k: 'compra', nome: 'Ultra Ball', qtd: 3 },
+      { k: 'compra', nome: 'Revive', qtd: 10 },
+    ],
+  });
   scheduler.advance(10_000);
   assert.equal((await pending).status, 'unconfirmed');
 });
@@ -255,15 +274,20 @@ test('an inventory that did not grow (balls used in the hunt) is not a confirmat
 /** Counts the subscriptions the actions open and close on the client, so a leak shows up as a number. */
 function watchSubscriptions(client: PokeIdleClient) {
   let active = 0;
-  const wrap = <A extends unknown[]>(fn: (...args: A) => () => void) => (...args: A): (() => void) => {
-    active += 1;
-    const off = fn(...args);
-    let closed = false;
-    return () => {
-      if (!closed) { closed = true; active -= 1; }
-      off();
+  const wrap =
+    <A extends unknown[]>(fn: (...args: A) => () => void) =>
+    (...args: A): (() => void) => {
+      active += 1;
+      const off = fn(...args);
+      let closed = false;
+      return () => {
+        if (!closed) {
+          closed = true;
+          active -= 1;
+        }
+        off();
+      };
     };
-  };
   const target = client as unknown as { onType: (...a: never[]) => () => void; onBattleEvent: (...a: never[]) => () => void };
   const state = client.state as unknown as { onChange: (...a: never[]) => () => void };
   target.onType = wrap(target.onType.bind(client) as never) as never;
@@ -300,7 +324,10 @@ test('when the socket refuses the frame nothing is left in flight, listening or 
   transport.send = () => false; // the socket looks open but does not take the frame
   assert.deepEqual(await actions.buyBall(Ball.UltraBall, 10), { status: 'not-connected' });
   assert.equal(leaked(), 0);
-  transport.send = (text: string) => { transport.sent.push(JSON.parse(text) as Record<string, unknown>); return true; };
+  transport.send = (text: string) => {
+    transport.sent.push(JSON.parse(text) as Record<string, unknown>);
+    return true;
+  };
   const next = actions.buyBall(Ball.UltraBall, 10); // not busy, not rate limited: the failed send counted for nothing
   assert.equal(transport.sent.length, 1);
   scheduler.advance(10_000);
@@ -311,7 +338,9 @@ test('when sending throws, the error reaches the caller and nothing is left in f
   const { actions, client, transport, scheduler } = setup();
   const leaked = watchSubscriptions(client);
   const real = client.sendCommand.bind(client);
-  client.sendCommand = () => { throw new Error('boom'); };
+  client.sendCommand = () => {
+    throw new Error('boom');
+  };
   await assert.rejects(actions.buyBall(Ball.UltraBall, 10), /boom/);
   assert.equal(leaked(), 0);
   client.sendCommand = real;
@@ -344,12 +373,18 @@ test('an inventory that grew by less than the quantity is not a confirmation (a 
 test('a `compra` event without a name, or with another name, does not confirm', async () => {
   const { actions, feed, scheduler } = setup();
   const pending = actions.buyBall(Ball.UltraBall, 10);
-  feed({ t: 'batalha', ev: [{ k: 'compra', qtd: 10 }, { k: 'compra', nome: 'Great Ball', qtd: 10 }] });
+  feed({
+    t: 'batalha',
+    ev: [
+      { k: 'compra', qtd: 10 },
+      { k: 'compra', nome: 'Great Ball', qtd: 10 },
+    ],
+  });
   scheduler.advance(10_000);
   assert.equal((await pending).status, 'unconfirmed');
 });
 
-test('confidence: certain for the game\'s own event, probable for the inventory and for an error', async () => {
+test("confidence: certain for the game's own event, probable for the inventory and for an error", async () => {
   const byEvent = setup();
   let p = byEvent.actions.buyBall(Ball.UltraBall, 10);
   byEvent.feed({ t: 'batalha', ev: [{ k: 'compra', nome: 'Ultra Ball', qtd: 10 }] });
@@ -420,7 +455,14 @@ test('a price of zero is not a price', async () => {
 
 test('options that would silently disable a protection are refused', () => {
   const transport = new FakeTransport();
-  for (const bad of [{ maxGoldPerHour: Number.NaN }, { maxGoldPerHour: -1 }, { confirmTimeoutMs: Number.POSITIVE_INFINITY }, { rateLimit: { minIntervalMs: Number.NaN } }, { rateLimit: { maxPerMinute: -5 } }, { unconfirmedCooldownMs: -1 }]) {
+  for (const bad of [
+    { maxGoldPerHour: Number.NaN },
+    { maxGoldPerHour: -1 },
+    { confirmTimeoutMs: Number.POSITIVE_INFINITY },
+    { rateLimit: { minIntervalMs: Number.NaN } },
+    { rateLimit: { maxPerMinute: -5 } },
+    { unconfirmedCooldownMs: -1 },
+  ]) {
     assert.throws(() => new PokeIdleClient({ transport, actions: bad }), RangeError, JSON.stringify(bad));
   }
 });
@@ -436,7 +478,14 @@ test('the Actions class is not exported: the limits belong to client.actions', (
 
 import { CommandRefusedError } from '../src/index.js';
 
-const pokemon = (id: number, extra: Record<string, unknown> = {}) => ({ id, speciesId: 19, nome: `Mon${id}`, level: 10, shiny: false, ...extra });
+const pokemon = (id: number, extra: Record<string, unknown> = {}) => ({
+  id,
+  speciesId: 19,
+  nome: `Mon${id}`,
+  level: 10,
+  shiny: false,
+  ...extra,
+});
 
 const sellWelcome = (pokemons: unknown[]) => ({
   ...welcome({ activeId: 1, automation: { pokemonTravado: [3] }, pokemons }),
@@ -446,7 +495,16 @@ const sellWelcome = (pokemons: unknown[]) => ({
 /** A player with: 1 = active and in the team, 2 = team (slot 1), 3 = in the Collection, 4 = holds the Exp. Share, 5 and 6 = ordinary Depot pokémon. */
 function setupSell(options: ActionsOptions = {}) {
   const ctx = setup(options, false);
-  ctx.feed(sellWelcome([pokemon(1, { slot: 0 }), pokemon(2, { slot: 1 }), pokemon(3), pokemon(4, { heldItemId: 70050 }), pokemon(5), pokemon(6, { shiny: true, level: 77 })]));
+  ctx.feed(
+    sellWelcome([
+      pokemon(1, { slot: 0 }),
+      pokemon(2, { slot: 1 }),
+      pokemon(3),
+      pokemon(4, { heldItemId: 70050 }),
+      pokemon(5),
+      pokemon(6, { shiny: true, level: 77 }),
+    ]),
+  );
   return ctx;
 }
 const SELL = { confirmIrreversible: true } as const;
@@ -456,16 +514,26 @@ test('selling cannot be done by accident: it needs confirmIrreversible, except i
   await assert.rejects(actions.sellPokemon(5), CommandRefusedError);
   assert.deepEqual(transport.sent, []);
   const dry = await actions.sellPokemon(5, { dryRun: true });
-  assert.deepEqual(dry, { status: 'dry-run', request: { pokemonId: 5, name: 'Mon5', level: 10, shiny: false }, command: { t: 'shop.sellPokemon', pokemonId: 5 } });
+  assert.deepEqual(dry, {
+    status: 'dry-run',
+    request: { pokemonId: 5, name: 'Mon5', level: 10, shiny: false },
+    command: { t: 'shop.sellPokemon', pokemonId: 5 },
+  });
   assert.deepEqual(transport.sent, []);
 });
 
-test('a sale is sent and confirmed by the game\'s `venda` event, with the gold it reports', async () => {
+test("a sale is sent and confirmed by the game's `venda` event, with the gold it reports", async () => {
   const { actions, transport, feed } = setupSell();
   const pending = actions.sellPokemon(6, SELL);
   assert.deepEqual(transport.sent, [{ t: 'shop.sellPokemon', pokemonId: 6 }]);
   feed({ t: 'batalha', ev: [{ k: 'venda', nome: 'Mon6', ganho: 4500 }] });
-  assert.deepEqual(await pending, { status: 'confirmed', request: { pokemonId: 6, name: 'Mon6', level: 77, shiny: true }, confirmedBy: 'event', confidence: 'certain', gained: 4500 });
+  assert.deepEqual(await pending, {
+    status: 'confirmed',
+    request: { pokemonId: 6, name: 'Mon6', level: 77, shiny: true },
+    confirmedBy: 'event',
+    confidence: 'certain',
+    gained: 4500,
+  });
 });
 
 test('a sale is also confirmed when the pokémon leaves the list', async () => {
@@ -481,12 +549,18 @@ test('another pokémon leaving the list, or a sale of another one, does not conf
   const { actions, feed, scheduler } = setupSell();
   const pending = actions.sellPokemon(5, SELL);
   feed({ t: 'estado', estado: { pkFora: [6] } });
-  feed({ t: 'batalha', ev: [{ k: 'venda', nome: 'Mon6', ganho: 1 }, { k: 'venda', ganho: 1 }] });
+  feed({
+    t: 'batalha',
+    ev: [
+      { k: 'venda', nome: 'Mon6', ganho: 1 },
+      { k: 'venda', ganho: 1 },
+    ],
+  });
   scheduler.advance(10_000);
   assert.equal((await pending).status, 'unconfirmed');
 });
 
-test('what the game\'s own client does not sell is refused before sending, with the reason', async () => {
+test("what the game's own client does not sell is refused before sending, with the reason", async () => {
   const { actions, transport } = setupSell();
   const reasons: Record<number, RegExp> = { 1: /active/, 2: /team/, 3: /Collection/, 4: /Exp\. Share/ };
   for (const [id, reason] of Object.entries(reasons)) {
@@ -561,7 +635,10 @@ test('selling leaves no listener behind on any path, and a failed send leaves no
   feed(sellWelcome([pokemon(9)]));
   assert.deepEqual(await actions.sellPokemon(9, SELL), { status: 'not-connected' });
   assert.equal(leaked(), 0);
-  transport.send = (text: string) => { transport.sent.push(JSON.parse(text) as Record<string, unknown>); return true; };
+  transport.send = (text: string) => {
+    transport.sent.push(JSON.parse(text) as Record<string, unknown>);
+    return true;
+  };
   const again = actions.sellPokemon(9, SELL);
   assert.equal(transport.sent.at(-1)?.['pokemonId'], 9); // not busy: the failed send left nothing in flight
   feed({ t: 'estado', estado: { pkFora: [9] } });
@@ -589,7 +666,10 @@ test('selling fails CLOSED when a protection cannot be read: an unknown active p
   assert.equal(r1.status === 'not-sellable' && /active pokémon is not known/.test(r1.reason), true);
 
   const noCollection = setup({}, false);
-  noCollection.feed({ ...welcome({ activeId: 1, automation: { autoRevive: true }, pokemons: [pokemon(5)] }), xpShareHeld: { itemId: 70050 } });
+  noCollection.feed({
+    ...welcome({ activeId: 1, automation: { autoRevive: true }, pokemons: [pokemon(5)] }),
+    xpShareHeld: { itemId: 70050 },
+  });
   const r2 = await noCollection.actions.sellPokemon(5, SELL);
   assert.equal(r2.status === 'not-sellable' && /Collection is not known/.test(r2.reason), true);
 
@@ -611,10 +691,17 @@ test('a delta that replaces `automation` and loses the Collection list makes sel
 
 test('ids as numeric text are understood: activeId, the Collection, the Exp. Share item and a text held item', async () => {
   const { actions, transport } = setup({}, false);
-  const as = (pokemons: unknown[]) => ({ ...welcome({ activeId: '1', automation: { pokemonTravado: ['3'] }, pokemons }), xpShareHeld: { itemId: '70050' } });
+  const as = (pokemons: unknown[]) => ({
+    ...welcome({ activeId: '1', automation: { pokemonTravado: ['3'] }, pokemons }),
+    xpShareHeld: { itemId: '70050' },
+  });
   const ctx = { feed: (p: object) => transport.handlers?.onMessage(JSON.stringify(p)) };
   ctx.feed(as([pokemon(1), pokemon(3), pokemon(4, { heldItemId: '70050' }), pokemon(5)]));
-  for (const [id, reason] of [[1, /active/], [3, /Collection/], [4, /Exp\. Share/]] as const) {
+  for (const [id, reason] of [
+    [1, /active/],
+    [3, /Collection/],
+    [4, /Exp\. Share/],
+  ] as const) {
     const r = await actions.sellPokemon(id, SELL);
     assert.equal(r.status === 'not-sellable' && reason.test(r.reason), true, String(id));
   }
@@ -641,7 +728,14 @@ test('two pokémon with the same name: the `venda` event still counts (the game 
   const pending = actions.sellPokemon(5, SELL);
   feed({ t: 'batalha', ev: [{ k: 'venda', nome: 'Pidgey', ganho: 10 }] }); // could be either one
   const result = await pending;
-  assert.deepEqual([result.status === 'confirmed' && result.confirmedBy, result.status === 'confirmed' && result.confidence, result.status === 'confirmed' && result.gained], ['event', 'probable', 10]);
+  assert.deepEqual(
+    [
+      result.status === 'confirmed' && result.confirmedBy,
+      result.status === 'confirmed' && result.confidence,
+      result.status === 'confirmed' && result.gained,
+    ],
+    ['event', 'probable', 10],
+  );
 });
 
 test('a sale confirmed first by the list waits a moment for the `venda` event, to bring the gold', async () => {
@@ -651,7 +745,13 @@ test('a sale confirmed first by the list waits a moment for the `venda` event, t
   scheduler.advance(300);
   feed({ t: 'batalha', ev: [{ k: 'venda', nome: 'Mon5', ganho: 250 }] }); // then the event, inside the window
   const result = await pending;
-  assert.deepEqual(result, { status: 'confirmed', request: { pokemonId: 5, name: 'Mon5', level: 10, shiny: false }, confirmedBy: 'event', confidence: 'certain', gained: 250 });
+  assert.deepEqual(result, {
+    status: 'confirmed',
+    request: { pokemonId: 5, name: 'Mon5', level: 10, shiny: false },
+    confirmedBy: 'event',
+    confidence: 'certain',
+    gained: 250,
+  });
 });
 
 test('if the `venda` event never comes, the window ends and the list alone confirms, without the gold', async () => {
@@ -661,7 +761,9 @@ test('if the `venda` event never comes, the window ends and the list alone confi
   feed({ t: 'estado', estado: { pkFora: [5] } });
   scheduler.advance(999);
   let done = false;
-  void pending.then(() => { done = true; });
+  void pending.then(() => {
+    done = true;
+  });
   await tick();
   assert.equal(done, false); // still waiting inside the window
   scheduler.advance(1);
@@ -718,7 +820,13 @@ test('the real `venda` event ("Charmander Nv 20") confirms the sale and brings t
   feed(sellWelcome([pokemon(1, { slot: 0 }), charmander(5, 20)]));
   const pending = actions.sellPokemon(5, SELL);
   feed(saleEvent('Charmander Nv 20'));
-  assert.deepEqual(await pending, { status: 'confirmed', request: { pokemonId: 5, name: 'Charmander', level: 20, shiny: false }, confirmedBy: 'event', confidence: 'certain', gained: 4573 });
+  assert.deepEqual(await pending, {
+    status: 'confirmed',
+    request: { pokemonId: 5, name: 'Charmander', level: 20, shiny: false },
+    confirmedBy: 'event',
+    confidence: 'certain',
+    gained: 4573,
+  });
 });
 
 test('pokémon of the same species at different levels are told apart by the level in the event: still certain', async () => {
@@ -736,7 +844,14 @@ test('two with the same name AND level cannot be told apart by the event: probab
   const pending = actions.sellPokemon(5, SELL);
   feed(saleEvent('Charmander Nv 20'));
   const result = await pending;
-  assert.deepEqual([result.status === 'confirmed' && result.confirmedBy, result.status === 'confirmed' && result.confidence, result.status === 'confirmed' && result.gained], ['event', 'probable', 4573]);
+  assert.deepEqual(
+    [
+      result.status === 'confirmed' && result.confirmedBy,
+      result.status === 'confirmed' && result.confidence,
+      result.status === 'confirmed' && result.gained,
+    ],
+    ['event', 'probable', 4573],
+  );
 });
 
 test('a `venda` event for another level or another species does not confirm', async () => {

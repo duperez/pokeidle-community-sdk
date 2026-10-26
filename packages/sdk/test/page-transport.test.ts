@@ -28,11 +28,22 @@ class FakeWebSocket extends EventTarget {
 const newPage = (): PageLike & { WebSocket: typeof FakeWebSocket } => {
   // each page gets its own class so prototype patches do not leak between tests
   const Socket = class extends FakeWebSocket {};
-  return { WebSocket: Socket as unknown as typeof WebSocket, location: { host: 'game.example', href: 'https://game.example/app' } } as never;
+  return {
+    WebSocket: Socket as unknown as typeof WebSocket,
+    location: { host: 'game.example', href: 'https://game.example/app' },
+  } as never;
 };
 const handlersLog = () => {
   const log: string[] = [];
-  return { log, handlers: { onMessage: (t: string) => log.push(`in:${t}`), onOutgoing: (t: string) => log.push(`out:${t}`), onOpen: () => log.push('open'), onClose: () => log.push('close') } };
+  return {
+    log,
+    handlers: {
+      onMessage: (t: string) => log.push(`in:${t}`),
+      onOutgoing: (t: string) => log.push(`out:${t}`),
+      onOpen: () => log.push('open'),
+      onClose: () => log.push('close'),
+    },
+  };
 };
 
 test('adopts the game socket (page host, path /) and reports its traffic', () => {
@@ -63,7 +74,7 @@ test('leaves other sockets alone', () => {
   assert.equal(transport.readyState, -1);
 });
 
-test('send() uses the game socket without reporting it as the game\'s own frame', () => {
+test("send() uses the game socket without reporting it as the game's own frame", () => {
   const page = newPage();
   const transport = new PageTransport(page);
   const { log, handlers } = handlersLog();
@@ -113,7 +124,11 @@ test('a throwing handler does not stop the others', () => {
   const quiet = console.error;
   console.error = () => {};
   try {
-    a.start({ onMessage() { throw new Error('boom'); } });
+    a.start({
+      onMessage() {
+        throw new Error('boom');
+      },
+    });
     const ok = handlersLog();
     b.start(ok.handlers);
     const ws = new page.WebSocket('wss://game.example/') as unknown as FakeWebSocket;

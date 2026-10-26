@@ -8,7 +8,9 @@ import { BATTLE_EVENT_READS, type BATTLE_EVENT_KINDS } from './registry.generate
 export type BattleEventKind = (typeof BATTLE_EVENT_KINDS)[number];
 
 /** An event typed only from the field names the game's client reads: the values are `unknown`. */
-export type ClientCodeEvent<K extends BattleEventKind> = { readonly k: K } & { readonly [F in (typeof BATTLE_EVENT_READS)[K][number]]?: unknown } & { readonly [field: string]: unknown };
+export type ClientCodeEvent<K extends BattleEventKind> = { readonly k: K } & {
+  readonly [F in (typeof BATTLE_EVENT_READS)[K][number]]?: unknown;
+} & { readonly [field: string]: unknown };
 
 export interface AttackEvent {
   readonly k: 'ataque';
@@ -122,7 +124,9 @@ export interface BattlePacket extends Packet {
   readonly ev?: BattleEvent[];
 }
 
-const TRAFFIC_EVENTS = ['ataque', 'morte', 'bola', 'fugiu', 'spawn', 'compra', 'venda'] as const satisfies ReadonlyArray<keyof TrafficBattleEvents>;
+const TRAFFIC_EVENTS = ['ataque', 'morte', 'bola', 'fugiu', 'spawn', 'compra', 'venda'] as const satisfies ReadonlyArray<
+  keyof TrafficBattleEvents
+>;
 const TRAFFIC_EVENT_SET = new Set<string>(TRAFFIC_EVENTS);
 
 // Compile-time proof that the list above is exactly the set of verified event types.
@@ -131,4 +135,5 @@ const trafficEventsMatchTypes: SameKeys<(typeof TRAFFIC_EVENTS)[number], keyof T
 void trafficEventsMatchTypes;
 
 /** `traffic` for the seven kinds verified in real traffic, `client-code` for all the others. */
-export const battleEventCoverage = (kind: BattleEventKind): 'traffic' | 'client-code' => (TRAFFIC_EVENT_SET.has(kind) ? 'traffic' : 'client-code');
+export const battleEventCoverage = (kind: BattleEventKind): 'traffic' | 'client-code' =>
+  TRAFFIC_EVENT_SET.has(kind) ? 'traffic' : 'client-code';

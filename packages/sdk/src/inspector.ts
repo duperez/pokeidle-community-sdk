@@ -42,7 +42,28 @@ export interface InspectorDump {
 }
 
 /** Battle events about the game itself (no other player's words): their samples keep the text. */
-const GAME_ONLY_EVENTS = new Set(['ataque', 'morte', 'bola', 'fugiu', 'spawn', 'compra', 'venda', 'descarte', 'lojaCompra', 'levelup', 'capturado', 'hunt', 'cura', 'curado', 'revive', 'evolucao', 'troca', 'xpPerdido', 'centro', 'diamantesCreditados']);
+const GAME_ONLY_EVENTS = new Set([
+  'ataque',
+  'morte',
+  'bola',
+  'fugiu',
+  'spawn',
+  'compra',
+  'venda',
+  'descarte',
+  'lojaCompra',
+  'levelup',
+  'capturado',
+  'hunt',
+  'cura',
+  'curado',
+  'revive',
+  'evolucao',
+  'troca',
+  'xpPerdido',
+  'centro',
+  'diamantesCreditados',
+]);
 
 const OTHER = '(other)';
 /** Commands of the game's modules that are not in the main client script (the Mini Games). */
@@ -50,7 +71,23 @@ const MODULE_COMMANDS = ['mg.entrar', 'mg.sair', 'mg.palpite'];
 const KNOWN_COMMANDS = new Set<string>([...CLIENT_COMMAND_TYPES, ...MODULE_COMMANDS]);
 const KNOWN_EVENTS = new Set<string>(BATTLE_EVENT_KINDS);
 const DEFAULT_MASKED_PATHS = ['estado.id'] as const;
-const DEFAULT_SOCIAL_PREFIXES = ['chat', 'amigos', 'ranking', 'guild', 'perfil', 'convite', 'comercio', 'oferenda', 'pvp', 'campeonato', 'topCatch', 'market', 'showdown', 'kick', 'twitch'] as const;
+const DEFAULT_SOCIAL_PREFIXES = [
+  'chat',
+  'amigos',
+  'ranking',
+  'guild',
+  'perfil',
+  'convite',
+  'comercio',
+  'oferenda',
+  'pvp',
+  'campeonato',
+  'topCatch',
+  'market',
+  'showdown',
+  'kick',
+  'twitch',
+] as const;
 
 /**
  * Keeps counts and a few redacted samples of the packets that go by, so a developer can see what the game actually sends
@@ -122,8 +159,12 @@ export class Inspector {
     return {
       received,
       sent: Object.fromEntries(this.sent),
-      unknownTypes: Object.keys(received).filter((t) => t !== OTHER && !isKnownPacketType(t)).sort(),
-      unknownSentTypes: Object.keys(this.sentCounts()).filter((t) => t !== OTHER && !KNOWN_COMMANDS.has(t)).sort(),
+      unknownTypes: Object.keys(received)
+        .filter((t) => t !== OTHER && !isKnownPacketType(t))
+        .sort(),
+      unknownSentTypes: Object.keys(this.sentCounts())
+        .filter((t) => t !== OTHER && !KNOWN_COMMANDS.has(t))
+        .sort(),
       battleEvents: Object.fromEntries(this.battleEvents),
       battleEventSamples: Object.fromEntries(this.battleSamples),
       unknownBattleEvents: [...this.battleEvents.keys()].filter((k) => k !== OTHER && !KNOWN_EVENTS.has(k)).sort(),

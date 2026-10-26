@@ -2,8 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { REDACTED, cleanText, redact } from '../src/index.js';
 
-test('sensitive keys are replaced, including the game\'s own wire names', () => {
-  const out = redact({ token: 'abc', sessionId: 'x', senha: 'y', nick: 'SomeName', username: 'u', login: 'l', email: 'e', level: 7 }) as Record<string, unknown>;
+test("sensitive keys are replaced, including the game's own wire names", () => {
+  const out = redact({
+    token: 'abc',
+    sessionId: 'x',
+    senha: 'y',
+    nick: 'SomeName',
+    username: 'u',
+    login: 'l',
+    email: 'e',
+    level: 7,
+  }) as Record<string, unknown>;
   for (const key of ['token', 'sessionId', 'senha', 'nick', 'username', 'login', 'email']) assert.equal(out[key], REDACTED, key);
   assert.equal(out.level, 7);
 });
@@ -29,7 +38,7 @@ test('objects with thousands of keys are cut to a count', () => {
   const out = redact({ shinyLooks: map }, { maxObjectKeys: 5 }) as { shinyLooks: Record<string, unknown> };
   assert.equal(Object.keys(out.shinyLooks).length, 6);
   assert.equal(out.shinyLooks['(more keys)'], 995);
-  assert.equal(Object.keys((redact(map) as Record<string, unknown>)).length, 41); // default: 40 keys + the count
+  assert.equal(Object.keys(redact(map) as Record<string, unknown>).length, 41); // default: 40 keys + the count
 });
 
 test('primitives and null pass through', () => {

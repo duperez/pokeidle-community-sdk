@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  BATTLE_EVENT_KINDS, BATTLE_EVENT_READS, CLIENT_COMMAND_TYPES, KNOWN_PACKET_TYPES, PACKET_COVERAGE, SERVER_PACKET_READS, SERVER_PACKET_TYPES,
-  battleEventCoverage, commandCoverage, isKnownPacketType,
+  BATTLE_EVENT_KINDS,
+  BATTLE_EVENT_READS,
+  CLIENT_COMMAND_TYPES,
+  KNOWN_PACKET_TYPES,
+  PACKET_COVERAGE,
+  SERVER_PACKET_READS,
+  SERVER_PACKET_TYPES,
+  battleEventCoverage,
+  commandCoverage,
+  isKnownPacketType,
 } from '../src/index.js';
 
 const unique = (list: readonly string[]) => new Set(list).size === list.length;
@@ -14,7 +22,7 @@ test('the registries are non-empty and have no duplicates', () => {
   }
 });
 
-test('the registry is the SDK\'s list of known packet types', () => {
+test("the registry is the SDK's list of known packet types", () => {
   assert.deepEqual([...KNOWN_PACKET_TYPES], [...SERVER_PACKET_TYPES]);
   for (const t of ['welcome', 'estado', 'batalha', 'mg', 'raid', 'drop.raro', 'vivo']) assert.ok(isKnownPacketType(t), t);
   assert.ok(!isKnownPacketType('something.the.game.adds.later'));
@@ -23,12 +31,14 @@ test('the registry is the SDK\'s list of known packet types', () => {
 test('every server packet type is classified, and has its list of fields the client reads', () => {
   assert.deepEqual(Object.keys(PACKET_COVERAGE).sort(), [...SERVER_PACKET_TYPES].sort());
   assert.deepEqual(Object.keys(SERVER_PACKET_READS).sort(), [...SERVER_PACKET_TYPES].sort());
-  const traffic = Object.entries(PACKET_COVERAGE).filter(([, level]) => level === 'traffic').map(([type]) => type);
+  const traffic = Object.entries(PACKET_COVERAGE)
+    .filter(([, level]) => level === 'traffic')
+    .map(([type]) => type);
   assert.ok(traffic.includes('welcome') && traffic.includes('estado') && traffic.includes('batalha'));
   assert.ok(Object.values(PACKET_COVERAGE).every((level) => level === 'traffic' || level === 'client-code'));
 });
 
-test('every battle event kind is classified: seven verified in traffic, the rest from the client\'s code', () => {
+test("every battle event kind is classified: seven verified in traffic, the rest from the client's code", () => {
   assert.deepEqual(Object.keys(BATTLE_EVENT_READS).sort(), [...BATTLE_EVENT_KINDS].sort());
   const verified = BATTLE_EVENT_KINDS.filter((kind) => battleEventCoverage(kind) === 'traffic');
   assert.deepEqual([...verified].sort(), ['ataque', 'bola', 'compra', 'fugiu', 'morte', 'spawn', 'venda']);
@@ -45,8 +55,17 @@ test('commands are classified as traffic, client-code or name-only; the money-ou
   for (const type of CLIENT_COMMAND_TYPES) assert.ok(['traffic', 'client-code', 'name-only'].includes(commandCoverage(type)), type);
 });
 
-test('the commands we will need for buying and selling exist in the game\'s client', () => {
-  for (const t of ['shop.buy', 'shop.sellPokemon', 'shop.sellAllPokemons', 'loja.comprar', 'market.comprar', 'market.criar', 'market.cancelar', 'item.use']) {
+test("the commands we will need for buying and selling exist in the game's client", () => {
+  for (const t of [
+    'shop.buy',
+    'shop.sellPokemon',
+    'shop.sellAllPokemons',
+    'loja.comprar',
+    'market.comprar',
+    'market.criar',
+    'market.cancelar',
+    'item.use',
+  ]) {
     assert.ok((CLIENT_COMMAND_TYPES as readonly string[]).includes(t), t);
   }
 });

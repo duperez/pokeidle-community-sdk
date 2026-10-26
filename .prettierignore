@@ -1,0 +1,7 @@
+node_modules
+dist
+package-lock.json
+# Written by scripts/generate-*.mjs: the generators own their formatting.
+*.generated.ts
+# Game data kept one entry per line: expanded it would pass the repository's size limit for JSON files.
+packages/sdk/data/extra-items.json

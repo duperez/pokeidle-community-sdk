@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  CLIENT_COMMAND_TYPES, CommandRefusedError, FORBIDDEN_COMMANDS, IRREVERSIBLE_COMMANDS, PokeIdleClient, isForbiddenCommand, isIrreversibleCommand,
-  type Transport, type TransportHandlers,
+  CLIENT_COMMAND_TYPES,
+  CommandRefusedError,
+  FORBIDDEN_COMMANDS,
+  IRREVERSIBLE_COMMANDS,
+  PokeIdleClient,
+  isForbiddenCommand,
+  isIrreversibleCommand,
+  type Transport,
+  type TransportHandlers,
 } from '../src/index.js';
 
 class FakeTransport implements Transport {
@@ -20,7 +27,7 @@ const setup = () => {
   return { transport, client: new PokeIdleClient({ transport }) };
 };
 
-test('every name in the safety lists exists in the game\'s client (a typo would silently protect nothing)', () => {
+test("every name in the safety lists exists in the game's client (a typo would silently protect nothing)", () => {
   const known = new Set<string>(CLIENT_COMMAND_TYPES);
   for (const name of [...FORBIDDEN_COMMANDS, ...IRREVERSIBLE_COMMANDS]) assert.ok(known.has(name), name);
   assert.equal(new Set(IRREVERSIBLE_COMMANDS).size, IRREVERSIBLE_COMMANDS.length);

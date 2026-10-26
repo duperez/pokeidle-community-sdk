@@ -60,7 +60,8 @@ test('extractProtocol fails loudly when the client changes shape, instead of gen
 test('renderRegistry produces a TypeScript file with the four lists', () => {
   const text = renderRegistry(extractProtocol(CLIENT, { minimums: LOW }), 'app.js?v=1');
   assert.ok(text.includes('// Client version: app.js?v=1'));
-  for (const name of ['SERVER_PACKET_TYPES', 'BATTLE_EVENT_KINDS', 'CLIENT_COMMAND_TYPES', 'SERVER_PACKET_READS', 'BATTLE_EVENT_READS']) assert.ok(text.includes(name), name);
+  for (const name of ['SERVER_PACKET_TYPES', 'BATTLE_EVENT_KINDS', 'CLIENT_COMMAND_TYPES', 'SERVER_PACKET_READS', 'BATTLE_EVENT_READS'])
+    assert.ok(text.includes(name), name);
   assert.ok(text.includes("'amigos': ['lista', 'max', 'pedidos']"));
 });
 
@@ -69,11 +70,15 @@ test('the extraction fails instead of writing a shrunken registry when it finds 
 });
 
 test('commands built dynamically are found: ternaries, spread objects and request tables', () => {
-  const source = CLIENT.replace('function pedir()', `function pedir() { enviar({ ...extra, t: 'csv.pedir', tipo }); mandar({ t: ok ? 'showdown.fita' : 'campeonato.fita' }); }
+  const source = CLIENT.replace(
+    'function pedir()',
+    `function pedir() { enviar({ ...extra, t: 'csv.pedir', tipo }); mandar({ t: ok ? 'showdown.fita' : 'campeonato.fita' }); }
 const MODOS = { a: { msg: 'market.historico' }, b: { mensagem: 'showdown.equipe' } };
-function pedir2()`);
+function pedir2()`,
+  );
   const { commands } = extractProtocol(source, { minimums: LOW });
-  for (const name of ['csv.pedir', 'showdown.fita', 'campeonato.fita', 'market.historico', 'showdown.equipe', 'shop.buy']) assert.ok(commands.has(name), name);
+  for (const name of ['csv.pedir', 'showdown.fita', 'campeonato.fita', 'market.historico', 'showdown.equipe', 'shop.buy'])
+    assert.ok(commands.has(name), name);
 });
 
 test('a handler only counts when it receives the packet itself (m), not another object', () => {
