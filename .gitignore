@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# Nothing personal or from the game's accounts belongs in this repository.
+.env
+.env.*
+*.pem
+*.key
+*.local
+.claude/
+.vscode/
+.idea/
+coverage/
+# Raw packet recordings may contain account data: only sanitized fixtures are committed (see test/fixtures).
+recordings/
+*.har

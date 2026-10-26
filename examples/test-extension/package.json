@@ -1,0 +1,13 @@
+{
+  "name": "pokeidle-test-extension",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Chrome extension used to try the community SDK against the real game. A development tool, not a product.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main-world.ts --bundle --format=iife --target=chrome111 --outfile=dist/main-world.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": { "pokeidle-community-sdk": "0.0.1" }
+}
