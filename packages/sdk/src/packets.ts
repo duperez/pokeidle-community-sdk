@@ -14,7 +14,7 @@ export interface Packet {
 export const KNOWN_PACKET_TYPES = [
   'welcome', 'estado', 'batalha', 'campo', 'campo.init', 'chat', 'chat.del', 'chat.fixada', 'chat.fixadas', 'chat.historico',
   'chat.interrompido', 'chat.mute', 'chat.aviso', 'market', 'guild', 'pvp', 'ranking', 'ranking.ficha', 'shiny.captura',
-  'lendario.captura', 'showdown', 'topCatch', 'amigos', 'raidFichas', 'sessao.renovada', 'pong', 'erro', 'perfil', 'economia',
+  'lendario.captura', 'bloqueios', 'showdown', 'topCatch', 'amigos', 'raidFichas', 'sessao.renovada', 'pong', 'erro', 'perfil', 'economia',
   'passe', 'ginasio', 'treino', 'csv', 'campeonato', 'convite', 'oferenda', 'comercio', 'orbs', 'estatisticas',
 ] as const;
 

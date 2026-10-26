@@ -35,7 +35,9 @@ types keep the game's own field names and make every field optional, because the
 everyday use read `client.state` (`GameState`) instead: it applies the full state from `welcome` and every `estado` update
 (including pokémon and pokédex deltas, as the game sends them), exposes English getters (`gold`, `level`,
 `itemCount(id)`, `ballCount(id)`) and ignores malformed data instead of throwing. The state is updated *before* your packet
-listeners run.
+listeners run. The full state arrives only once, in `welcome` right after login: code that starts listening later (for
+example an extension reloaded with the game already open) only sees updates, and `state.complete` is `false` until the
+page reloads.
 
 ## Catalogs and enums
 

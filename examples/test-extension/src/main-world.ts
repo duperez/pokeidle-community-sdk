@@ -31,6 +31,7 @@ function mountOverlay(): void {
     title.textContent = `SDK test · ${client.connected ? 'connected' : 'waiting for the socket'}`;
     const { state } = client;
     const rows: string[] = [];
+    if (state.player && !state.complete) rows.push('PARTIAL STATE: the welcome packet was missed.\nReload the game page (F5) to receive it.', '');
     if (state.player) {
       // Just a look at what the SDK reads; this stays on your screen.
       rows.push(`level ${state.level} · gold ${state.gold} · diamonds ${state.diamonds}`);

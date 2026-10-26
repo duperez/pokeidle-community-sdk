@@ -55,6 +55,16 @@ export class GameState {
   private balls: BallEntry[] = [];
   private shop: ShopEntry[] = [];
   private readonly listeners = new Set<() => void>();
+  private full = false;
+
+  /**
+   * Has the full state arrived? The game sends it once, in the `welcome` packet right after login. If your code starts
+   * listening after that (for example the extension was reloaded with the game already open), you only get updates:
+   * `gold` may be known but `level`, the inventory and the catalogs are not, until the page reloads.
+   */
+  get complete(): boolean {
+    return this.full;
+  }
 
   /** The ball catalog from the last welcome packet. */
   get ballCatalog(): readonly BallEntry[] {
@@ -145,6 +155,7 @@ export class GameState {
     const known = (list: unknown): Array<[string, { id?: number | string; [key: string]: unknown }]> => rowsWithId(list).map((k) => [idKey(k.id), k]);
     if (full || cheio === true || !this.fields) {
       this.fields = ownMaps({ ...rest });
+      if (full || cheio === true) this.full = true; // a delta that arrives first becomes the base but is not a complete state
       this.pokemonById = new Map(known(pokemons));
     } else {
       Object.assign(this.fields, ownMaps(rest)); // `rest` has no unsafe keys, so no setter can run

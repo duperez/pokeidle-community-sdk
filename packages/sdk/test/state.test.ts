@@ -141,3 +141,14 @@ test('changing the packet or the returned snapshot afterwards does not change th
   ((packet['estado'] as Record<string, unknown>)['items'] as Record<string, number>)['200'] = 999;
   assert.equal(state.itemCount(Item.SmallPotion), 5);
 });
+
+test('complete is false until a full state arrives, so late listeners can tell their data is partial', () => {
+  const state = new GameState();
+  assert.equal(state.complete, false);
+  state.applyPacket(delta({ gold: 5 })); // updates only: what a late listener sees
+  assert.equal(state.gold, 5);
+  assert.equal(state.level, null);
+  assert.equal(state.complete, false);
+  state.applyPacket(welcome());
+  assert.equal(state.complete, true);
+});
