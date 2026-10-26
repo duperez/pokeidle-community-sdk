@@ -30,11 +30,19 @@ export interface InspectorDump {
   unknownSentTypes: string[];
   /** How many battle events of each kind arrived (inside `batalha` packets). */
   battleEvents: Record<string, number>;
+  /**
+   * A few examples of each battle event kind (the first ones seen), redacted: the strings of events that can mention other
+   * people (friends, guilds, the market...) are masked, the game-only ones (a sale, a purchase, a level up...) are kept.
+   */
+  battleEventSamples: Record<string, unknown[]>;
   /** Battle event kinds that are not in `BATTLE_EVENT_KINDS`: the game added an event. */
   unknownBattleEvents: string[];
   /** Frames that were not turned into packets, by reason. A non-zero `oversized` means the size limit is dropping packets. */
   ignored: Record<string, number>;
 }
+
+/** Battle events about the game itself (no other player's words): their samples keep the text. */
+const GAME_ONLY_EVENTS = new Set(['ataque', 'morte', 'bola', 'fugiu', 'spawn', 'compra', 'venda', 'descarte', 'lojaCompra', 'levelup', 'capturado', 'hunt', 'cura', 'curado', 'revive', 'evolucao', 'troca', 'xpPerdido', 'centro', 'diamantesCreditados']);
 
 const OTHER = '(other)';
 /** Commands of the game's modules that are not in the main client script (the Mini Games). */
@@ -54,6 +62,7 @@ export class Inspector {
   private readonly samples = new Map<string, unknown[]>();
   private readonly ignored = new Map<IgnoredReason, number>();
   private readonly battleEvents = new Map<string, number>();
+  private readonly battleSamples = new Map<string, unknown[]>();
   private readonly maxTypes: number;
   private readonly maxSamples: number;
   private readonly redactOptions: RedactOptions;
@@ -77,10 +86,16 @@ export class Inspector {
   }
 
   /** One battle event (`ev[].k` of a `batalha` packet). */
-  recordBattleEvent(rawKind: string): void {
+  recordBattleEvent(rawKind: string, event?: unknown): void {
     const kind = rawKind.slice(0, 60); // the name comes from the server: keep it short
     const key = this.battleEvents.has(kind) || this.battleEvents.size < this.maxTypes ? kind : OTHER;
     this.battleEvents.set(key, (this.battleEvents.get(key) ?? 0) + 1);
+    if (event === undefined || key === OTHER) return;
+    const kept = this.battleSamples.get(key) ?? [];
+    if (kept.length < this.maxSamples) {
+      kept.push(redact(event, GAME_ONLY_EVENTS.has(key) ? this.redactOptions : { ...this.redactOptions, maskStrings: true }));
+      this.battleSamples.set(key, kept);
+    }
   }
 
   recordIgnored(reason: IgnoredReason): void {
@@ -110,6 +125,7 @@ export class Inspector {
       unknownTypes: Object.keys(received).filter((t) => t !== OTHER && !isKnownPacketType(t)).sort(),
       unknownSentTypes: Object.keys(this.sentCounts()).filter((t) => t !== OTHER && !KNOWN_COMMANDS.has(t)).sort(),
       battleEvents: Object.fromEntries(this.battleEvents),
+      battleEventSamples: Object.fromEntries(this.battleSamples),
       unknownBattleEvents: [...this.battleEvents.keys()].filter((k) => k !== OTHER && !KNOWN_EVENTS.has(k)).sort(),
       samples: Object.fromEntries(this.samples),
       ignored: Object.fromEntries(this.ignored),
@@ -122,6 +138,7 @@ export class Inspector {
     this.samples.clear();
     this.ignored.clear();
     this.battleEvents.clear();
+    this.battleSamples.clear();
   }
 
   private sentCounts(): Record<string, number> {

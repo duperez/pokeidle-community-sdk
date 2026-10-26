@@ -70,3 +70,12 @@ test('the account id is masked by path, and other ids are kept', () => {
   assert.equal(sample.estado['level'], 7);
   assert.equal(sample.hunts[0]?.['id'], 5);
 });
+
+test('battle events are sampled: game-only kinds keep their text, kinds that can mention people are masked', () => {
+  const inspector = new Inspector({ maxSamplesPerType: 2 });
+  for (let i = 0; i < 4; i++) inspector.recordBattleEvent('venda', { k: 'venda', nome: 'Charmander', ganho: 100 + i });
+  inspector.recordBattleEvent('amigoPedidoRecebido', { k: 'amigoPedidoRecebido', de: 'SomePlayer', nick: 'x', n: 3 });
+  const { battleEventSamples } = inspector.dump();
+  assert.deepEqual(battleEventSamples.venda, [{ k: 'venda', nome: 'Charmander', ganho: 100 }, { k: 'venda', nome: 'Charmander', ganho: 101 }]);
+  assert.deepEqual(battleEventSamples.amigoPedidoRecebido, [{ k: '[text]', de: '[text]', nick: '[redacted]', n: 3 }]);
+});

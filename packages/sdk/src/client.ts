@@ -170,7 +170,7 @@ export class PokeIdleClient {
     for (const event of events) {
       if (event === null || typeof event !== 'object' || typeof (event as { k?: unknown }).k !== 'string') continue;
       const typed = event as BattleEvent;
-      this.inspector?.recordBattleEvent(typed.k);
+      this.inspector?.recordBattleEvent(typed.k, typed);
       for (const listener of [...(this.battleByKind.get(typed.k) ?? [])]) this.safely(() => (listener as (e: BattleEvent) => void)(typed));
       for (const listener of [...this.anyBattle]) this.safely(() => listener(typed));
     }
