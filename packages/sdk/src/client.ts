@@ -112,7 +112,7 @@ export class PokeIdleClient {
   }
 
   /** Every battle event, whatever its kind: switch on `event.k`. */
-  onBattle(listener: (event: BattleEvent) => void): Unsubscribe {
+  onAnyBattleEvent(listener: (event: BattleEvent) => void): Unsubscribe {
     this.anyBattle.add(listener);
     return () => void this.anyBattle.delete(listener);
   }

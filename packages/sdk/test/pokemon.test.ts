@@ -81,3 +81,17 @@ test('three-valued questions: a state without the data says null, never false', 
   assert.equal(state.holdsExpShare(1), null);
   assert.equal(new GameState().isActive(1), null);
 });
+
+test('state.player is the same snapshot until an update; pokemonCount follows the list', () => {
+  const state = stateWith(sellWelcome([pokemon(1), pokemon(2)]));
+  const first = state.player;
+  assert.equal(state.player, first);
+  assert.equal(state.pokemonCount, 2);
+  state.applyPacket({ t: 'estado', estado: { gold: 5 } });
+  assert.notEqual(state.player, first);
+  assert.equal(state.player?.gold, 5);
+  assert.equal(first?.gold, 100_000); // the old snapshot did not change
+  state.applyPacket({ t: 'estado', estado: { pkFora: [1] } });
+  assert.equal(state.pokemonCount, 1);
+  assert.equal(state.player?.pokemons.length, 1);
+});

@@ -64,6 +64,7 @@ export class GameState {
   /** Keyed by the id as text, so `11` and `"11"` are the same pokémon. */
   private pokemonById = new Map<string, PokemonWire>();
   private pokemonCache: readonly Pokemon[] | null = null;
+  private playerCache: PlayerState | null = null;
   private balls: BallEntry[] = [];
   private shop: ShopEntry[] = [];
   private extra: ExtraItemEntry[] = [];
@@ -150,10 +151,17 @@ export class GameState {
 
   /**
    * Everything known about the player, or `null` before the first welcome. Treat it as read-only: it is a snapshot,
-   * and changing it does not change the SDK's state.
+   * the same object until the next update, and changing it does not change the SDK's state.
    */
   get player(): PlayerState | null {
-    return this.fields ? { ...this.fields, pokemons: [...this.pokemonById.values()] } : null;
+    if (!this.fields) return null;
+    this.playerCache ??= { ...this.fields, pokemons: [...this.pokemonById.values()] };
+    return this.playerCache;
+  }
+
+  /** How many pokémon you have (without building a list). */
+  get pokemonCount(): number {
+    return this.pokemonById.size;
   }
 
   get nick(): string | null {
@@ -269,6 +277,7 @@ export class GameState {
   private merge(partial: unknown, full: boolean): void {
     if (!isObject(partial)) return;
     this.pokemonCache = null;
+    this.playerCache = null;
     const { cheio, pokemons, pkMud, pkFora, dexMud, dexFora, ...rest } = safeCopy(partial);
     const known = (list: unknown): Array<[string, PokemonWire]> => rowsWithId(list).map((k) => [idKey(k.id), k]);
     if (full || cheio === true || !this.fields) {

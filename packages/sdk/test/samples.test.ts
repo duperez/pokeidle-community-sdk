@@ -212,7 +212,7 @@ test('battle events are delivered one by one, typed by kind', () => {
   client.onBattleEvent('morte', (e) => log.push(`morte ${e.nome} +${e.ouro}`));
   client.onBattleEvent('bola', (e) => log.push(`bola ${e.ballId} ${e.sucesso}`));
   client.onBattleEvent('compra', (e) => log.push(`compra ${typeof e.gasto}`)); // client-code level
-  client.onBattle((e) => log.push(`any ${e.k}`));
+  client.onAnyBattleEvent((e) => log.push(`any ${e.k}`));
   feed(transport, battle);
   assert.deepEqual(
     log.filter((l) => !l.startsWith('any')),
