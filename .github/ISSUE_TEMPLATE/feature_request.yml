@@ -1,0 +1,14 @@
+name: Feature request
+description: Suggest something the SDK could do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to build, and what is missing?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How would you like it to look?

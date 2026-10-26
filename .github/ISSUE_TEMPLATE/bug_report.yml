@@ -1,0 +1,24 @@
+name: Bug report
+description: Something in the SDK does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal code that shows it
+      render: ts
+  - type: input
+    id: version
+    attributes:
+      label: SDK version / commit
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Do NOT paste real packets, tokens or account data.

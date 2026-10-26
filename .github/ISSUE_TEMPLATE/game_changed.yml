@@ -1,0 +1,22 @@
+name: The game changed
+description: A packet, event or command no longer matches the SDK
+labels: [game-compat]
+body:
+  - type: input
+    id: kind
+    attributes:
+      label: Packet type / battle event / command
+      placeholder: e.g. the `compra` event
+    validations:
+      required: true
+  - type: textarea
+    id: diff
+    attributes:
+      label: Which field names or shapes differ?
+      description: Field NAMES and value TYPES only. Do not paste real packets or account data.
+    validations:
+      required: true
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Does `npm run protocol:check` fail?

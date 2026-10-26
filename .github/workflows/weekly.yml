@@ -1,0 +1,19 @@
+name: Weekly checks
+# The game changes without notice. Once a week: are the generated catalogs and protocol registry still in step with the
+# game's public client? (The mutation check joins them in a later step.)
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+jobs:
+  game-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run catalog:check
+      - run: npm run protocol:check
