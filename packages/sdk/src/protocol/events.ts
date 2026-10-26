@@ -66,6 +66,17 @@ export interface PurchaseEvent {
   readonly [field: string]: unknown;
 }
 
+/** The game confirming a pokémon sale to the NPC shop. Verified in real traffic. */
+export interface SaleEvent {
+  readonly k: 'venda';
+  /** The pokémon's name WITH its level, as the shop shows it: `Charmander Nv 20`. */
+  readonly nome?: string;
+  /** the gold it paid */
+  readonly ganho?: number;
+  readonly qtd?: number;
+  readonly [field: string]: unknown;
+}
+
 export interface FledEvent {
   readonly k: 'fugiu';
   readonly nome?: string;
@@ -95,6 +106,7 @@ export interface TrafficBattleEvents {
   fugiu: FledEvent;
   spawn: SpawnEvent;
   compra: PurchaseEvent;
+  venda: SaleEvent;
 }
 
 /** Every battle event kind, mapped to its event type. */
@@ -110,7 +122,7 @@ export interface BattlePacket extends Packet {
   readonly ev?: BattleEvent[];
 }
 
-const TRAFFIC_EVENTS = ['ataque', 'morte', 'bola', 'fugiu', 'spawn', 'compra'] as const satisfies ReadonlyArray<keyof TrafficBattleEvents>;
+const TRAFFIC_EVENTS = ['ataque', 'morte', 'bola', 'fugiu', 'spawn', 'compra', 'venda'] as const satisfies ReadonlyArray<keyof TrafficBattleEvents>;
 const TRAFFIC_EVENT_SET = new Set<string>(TRAFFIC_EVENTS);
 
 // Compile-time proof that the list above is exactly the set of verified event types.
@@ -118,5 +130,5 @@ type SameKeys<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 const trafficEventsMatchTypes: SameKeys<(typeof TRAFFIC_EVENTS)[number], keyof TrafficBattleEvents> = true;
 void trafficEventsMatchTypes;
 
-/** `traffic` for the six kinds verified in real traffic, `client-code` for all the others. */
+/** `traffic` for the seven kinds verified in real traffic, `client-code` for all the others. */
 export const battleEventCoverage = (kind: BattleEventKind): 'traffic' | 'client-code' => (TRAFFIC_EVENT_SET.has(kind) ? 'traffic' : 'client-code');

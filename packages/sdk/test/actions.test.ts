@@ -708,3 +708,63 @@ test('no timer is left behind after a sale: not after the event, not after repea
   await pending;
   assert.equal(scheduler.pending, 0);
 });
+
+// The real `venda` event names the pokémon WITH its level: { k: 'venda', nome: 'Charmander Nv 20', ganho: 4573, qtd: 1 }
+const charmander = (id: number, level: number, extra: Record<string, unknown> = {}) => pokemon(id, { nome: 'Charmander', level, ...extra });
+const saleEvent = (nome: string, ganho = 4573) => ({ t: 'batalha', ev: [{ k: 'venda', nome, ganho, qtd: 1 }] });
+
+test('the real `venda` event ("Charmander Nv 20") confirms the sale and brings the gold', async () => {
+  const { actions, feed } = setupSell();
+  feed(sellWelcome([pokemon(1, { slot: 0 }), charmander(5, 20)]));
+  const pending = actions.sellPokemon(5, SELL);
+  feed(saleEvent('Charmander Nv 20'));
+  assert.deepEqual(await pending, { status: 'confirmed', request: { pokemonId: 5, name: 'Charmander', level: 20, shiny: false }, confirmedBy: 'event', confidence: 'certain', gained: 4573 });
+});
+
+test('pokémon of the same species at different levels are told apart by the level in the event: still certain', async () => {
+  const { actions, feed } = setupSell();
+  feed(sellWelcome([pokemon(1, { slot: 0 }), charmander(5, 20), charmander(6, 30), charmander(7, 40)]));
+  const pending = actions.sellPokemon(5, SELL);
+  feed(saleEvent('Charmander Nv 20'));
+  const result = await pending;
+  assert.equal(result.status === 'confirmed' && result.confidence, 'certain');
+});
+
+test('two with the same name AND level cannot be told apart by the event: probable', async () => {
+  const { actions, feed } = setupSell();
+  feed(sellWelcome([pokemon(1, { slot: 0 }), charmander(5, 20), charmander(6, 20)]));
+  const pending = actions.sellPokemon(5, SELL);
+  feed(saleEvent('Charmander Nv 20'));
+  const result = await pending;
+  assert.deepEqual([result.status === 'confirmed' && result.confirmedBy, result.status === 'confirmed' && result.confidence, result.status === 'confirmed' && result.gained], ['event', 'probable', 4573]);
+});
+
+test('a `venda` event for another level or another species does not confirm', async () => {
+  const { actions, feed, scheduler } = setupSell();
+  feed(sellWelcome([pokemon(1, { slot: 0 }), charmander(5, 20)]));
+  const pending = actions.sellPokemon(5, SELL);
+  feed(saleEvent('Charmander Nv 21'));
+  feed(saleEvent('Squirtle Nv 20'));
+  scheduler.advance(10_000);
+  assert.equal((await pending).status, 'unconfirmed');
+});
+
+test('an event name with no level matches by name only', async () => {
+  const { actions, feed } = setupSell();
+  feed(sellWelcome([pokemon(1, { slot: 0 }), charmander(5, 20)]));
+  const pending = actions.sellPokemon(5, SELL);
+  feed(saleEvent('Charmander'));
+  const result = await pending;
+  assert.deepEqual([result.status === 'confirmed' && result.confirmedBy, result.status === 'confirmed' && result.gained], ['event', 4573]);
+});
+
+test('a shiny mark or a "Shiny " prefix in the event name is ignored', async () => {
+  for (const nome of ['✨ Charmander Nv 20', 'Shiny Charmander Nv 20']) {
+    const { actions, feed } = setupSell();
+    feed(sellWelcome([pokemon(1, { slot: 0 }), charmander(5, 20, { shiny: true })]));
+    const pending = actions.sellPokemon(5, SELL);
+    feed(saleEvent(nome));
+    const result = await pending;
+    assert.equal(result.status === 'confirmed' && result.confirmedBy, 'event', nome);
+  }
+});

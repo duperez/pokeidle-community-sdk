@@ -69,7 +69,9 @@ Selling (`sellPokemon`) goes through the same `dispatch` (one in flight, rate li
 rejected order). Before sending it applies the game's own rules for the Depot, read from the client: not the active pokémon
 (`activeId`), not in the team (`slot` is set), not in the Collection (`automation.pokemonTravado`), not holding the Exp.
 Share (`xpShareHeld.itemId`). The sale is confirmed by the `venda` event or by the pokémon leaving the list. The event
-(verified in real traffic) carries only the pokémon's NAME, so with several pokémon of that name it counts as `probable`;
+(verified in real traffic: `{ k: 'venda', nome: 'Charmander Nv 20', ganho: 4573, qtd: 1 }`) names the pokémon WITH its level, and
+nothing else, so it is matched on name and level and counts as `certain` only when no other pokémon of yours has that same
+name and level (otherwise `probable`); a shiny mark in the name is ignored;
 when the list arrives first the SDK waits a short grace window (`confirmGraceMs`) so the gold is not lost to packet order.
 It fails closed: when the active pokémon, the Collection list or the Exp. Share item cannot
 be read (a partial state, ids that arrive as text are understood), the answer is "not sellable". The sale price comes from a function the client shares with the server and is not readable

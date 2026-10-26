@@ -70,8 +70,8 @@ reload starts them over):
 it needs the explicit confirmation (not for a dry run). It refuses, with the reason, what the game's own client refuses to
 sell: your active pokémon, your team, the Collection (locked) and one holding the Exp. Share. Selling is irreversible, so
 it fails closed: if the state is partial and a protection cannot be read, it refuses. It is confirmed by the game's
-`venda` event (verified in real traffic; it carries the gold, but only the pokémon's name, so it is `certain` when you own
-one pokémon of that name and `probable` when you own several) or by the pokémon leaving your list (strong evidence, not
+`venda` event (verified in real traffic: `{ nome: 'Charmander Nv 20', ganho: 4573, qtd: 1 }`; it carries the gold and the
+pokémon's name with its level, so it is `certain` when no other pokémon of yours has that name and level, `probable` otherwise) or by the pokémon leaving your list (strong evidence, not
 proof: a partial list or a market listing also removes it). When the list comes first, the SDK waits `confirmGraceMs`
 (default 1 s) for the event, so the gold is not lost to the order in which the packets arrive. It shares the one-at-a-time rule, the rate
 limit and the waiting period with the purchases. There is no "sell all" yet: it follows your collection rule, whose effect
@@ -98,8 +98,8 @@ command the client sends (216): the registry is extracted from the client itself
 
 | Level | Meaning | Packets | Battle events | Commands |
 |---|---|---|---|---|
-| `traffic` | fields verified in real traffic | 20 | 6 | 6 |
-| `client-code` | field names read from the game's client, values `unknown` until seen | 31 | 127 | typed shapes for the buy/sell/market commands |
+| `traffic` | fields verified in real traffic | 20 | 7 | 6 |
+| `client-code` | field names read from the game's client, values `unknown` until seen | 31 | 126 | typed shapes for the buy/sell/market commands |
 | `name-only` | known by name | none | none | the rest |
 
 `client.on('market', (p) => p.medias)` is typed for all 51 packet types (a typo does not compile; `onType` is for types the SDK does not know yet), `client.onBattleEvent('morte', (e) => e.ouro)`

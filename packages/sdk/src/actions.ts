@@ -292,10 +292,10 @@ export class Actions {
     const timeoutMs = this.options.confirmTimeoutMs ?? DEFAULTS.confirmTimeoutMs;
     const startedAt = this.scheduler.now();
     const state = this.client.state;
-    // The `venda` event carries only a name. When you own several pokémon of that name it cannot say WHICH one was sold,
-    // so it still counts (the game does emit it) but only as `probable`.
-    const sameName = request.name === null ? 0 : (state.player?.pokemons ?? []).filter((p) => typeof p.nome === 'string' && p.nome.toLowerCase() === request.name?.toLowerCase()).length;
-    const name = request.name?.toLowerCase() ?? null;
+    // The `venda` event names the pokémon WITH its level ("Charmander Nv 20"), nothing else. So it is matched on name and
+    // level, and it is `certain` only when no other pokémon of yours has that same name AND level; otherwise `probable`.
+    const wanted = request.name === null ? null : normalizeName(request.name);
+    const sameKind = wanted === null ? 0 : (state.player?.pokemons ?? []).filter((p) => typeof p.nome === 'string' && normalizeName(p.nome) === wanted && (request.level === null || p.level === request.level)).length;
     const graceMs = this.options.confirmGraceMs ?? DEFAULTS.confirmGraceMs;
     let graceTimer: unknown;
     let finish: (result: SellResult) => void = () => {};
@@ -314,9 +314,10 @@ export class Actions {
     });
     offs.push(
       this.client.onBattleEvent('venda', (event) => {
-        const eventName = typeof event['nome'] === 'string' ? event['nome'].toLowerCase() : null;
-        if (name === null || eventName !== name) return;
-        finish({ status: 'confirmed', request, confirmedBy: 'event', confidence: sameName === 1 ? 'certain' : 'probable', gained: typeof event['ganho'] === 'number' ? event['ganho'] : null });
+        const sold = typeof event['nome'] === 'string' ? parseSaleName(event['nome']) : null;
+        if (wanted === null || sold === null || sold.name !== wanted) return;
+        if (sold.level !== null && request.level !== null && sold.level !== request.level) return; // another level: another pokémon
+        finish({ status: 'confirmed', request, confirmedBy: 'event', confidence: sameKind === 1 ? 'certain' : 'probable', gained: typeof event['ganho'] === 'number' ? event['ganho'] : null });
       }),
       state.onChange(() => {
         if (state.findPokemon(request.pokemonId) !== undefined || graceTimer !== undefined) return;
@@ -398,6 +399,15 @@ export class Actions {
     timer = this.scheduler.setTimeout(() => finish({ status: 'unconfirmed', request, waitedMs: this.scheduler.now() - startedAt }), timeoutMs);
     return { result, cancel: cleanup };
   }
+}
+
+/** Lower case, without leading symbols (a shiny mark) or a `Shiny ` prefix, so "✨ Charmander" and "Charmander" compare equal. */
+const normalizeName = (name: string): string => name.toLowerCase().replace(/^[^\p{L}\p{N}]+/u, '').replace(/^shiny\s+/, '').trim();
+
+/** `Charmander Nv 20` -> name `charmander`, level 20. Without a level suffix the level is `null`. */
+function parseSaleName(text: string): { name: string; level: number | null } {
+  const match = /^(.*?)\s+Nv\.?\s*(\d+)\s*$/i.exec(text);
+  return match ? { name: normalizeName(match[1] ?? ''), level: Number(match[2]) } : { name: normalizeName(text), level: null };
 }
 
 /** The useful part of an `erro` packet. */
