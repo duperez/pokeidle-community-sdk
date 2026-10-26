@@ -1,5 +1,5 @@
-import { isKnownPacketType, type Packet } from './packets.js';
-import { redact, type RedactOptions } from './redact.js';
+import { isKnownPacketType, type IgnoredReason, type Packet } from './packets.js';
+import { REDACTED, redact, type RedactOptions } from './redact.js';
 
 export interface InspectorOptions {
   /** How many distinct packet types are tracked (the server decides the names, so the map must not grow forever). Default 200. */
@@ -7,6 +7,13 @@ export interface InspectorOptions {
   /** Samples kept per packet type. Default 3. */
   maxSamplesPerType?: number;
   redact?: RedactOptions;
+  /**
+   * Packet types (by prefix) that carry what other people wrote or who they are: chat, friends, rankings, guilds...
+   * Their samples keep the structure only; every text is replaced. Override to add more.
+   */
+  socialTypePrefixes?: readonly string[];
+  /** Dotted paths that are always masked in samples, because a generic key (like `id`) cannot be masked everywhere. Default: the account id. */
+  maskedPaths?: readonly string[];
 }
 
 export interface InspectorDump {
@@ -18,9 +25,13 @@ export interface InspectorDump {
   unknownTypes: string[];
   /** A few redacted examples per type, oldest first. Safe to share. */
   samples: Record<string, unknown[]>;
+  /** Frames that were not turned into packets, by reason. A non-zero `oversized` means the size limit is dropping packets. */
+  ignored: Record<string, number>;
 }
 
 const OTHER = '(other)';
+const DEFAULT_MASKED_PATHS = ['estado.id'] as const;
+const DEFAULT_SOCIAL_PREFIXES = ['chat', 'amigos', 'ranking', 'guild', 'perfil', 'convite', 'comercio', 'oferenda', 'pvp', 'campeonato', 'topCatch', 'market', 'showdown', 'kick', 'twitch'] as const;
 
 /**
  * Keeps counts and a few redacted samples of the packets that go by, so a developer can see what the game actually sends
@@ -30,14 +41,19 @@ export class Inspector {
   private readonly received = new Map<string, number>();
   private readonly sent = new Map<string, number>();
   private readonly samples = new Map<string, unknown[]>();
+  private readonly ignored = new Map<IgnoredReason, number>();
   private readonly maxTypes: number;
   private readonly maxSamples: number;
   private readonly redactOptions: RedactOptions;
+  private readonly socialPrefixes: readonly string[];
+  private readonly maskedPaths: readonly string[];
 
   constructor(options: InspectorOptions = {}) {
     this.maxTypes = options.maxTypes ?? 200;
     this.maxSamples = options.maxSamplesPerType ?? 3;
     this.redactOptions = options.redact ?? {};
+    this.socialPrefixes = options.socialTypePrefixes ?? DEFAULT_SOCIAL_PREFIXES;
+    this.maskedPaths = options.maskedPaths ?? DEFAULT_MASKED_PATHS;
   }
 
   recordReceived(packet: Packet): void {
@@ -48,13 +64,20 @@ export class Inspector {
     this.record(this.sent, packet, false);
   }
 
+  recordIgnored(reason: IgnoredReason): void {
+    this.ignored.set(reason, (this.ignored.get(reason) ?? 0) + 1);
+  }
+
   private record(counts: Map<string, number>, packet: Packet, keepSample: boolean): void {
     const key = counts.has(packet.t) || counts.size < this.maxTypes ? packet.t : OTHER;
     counts.set(key, (counts.get(key) ?? 0) + 1);
     if (!keepSample || key === OTHER) return;
     const kept = this.samples.get(key) ?? [];
     if (kept.length < this.maxSamples) {
-      kept.push(redact(packet, this.redactOptions));
+      const social = this.socialPrefixes.some((prefix) => key.startsWith(prefix));
+      const sample = redact(packet, social ? { ...this.redactOptions, maskStrings: true } : this.redactOptions);
+      for (const path of this.maskedPaths) maskPath(sample, path);
+      kept.push(sample);
       this.samples.set(key, kept);
     }
   }
@@ -67,6 +90,7 @@ export class Inspector {
       sent: Object.fromEntries(this.sent),
       unknownTypes: Object.keys(received).filter((t) => t !== OTHER && !isKnownPacketType(t)).sort(),
       samples: Object.fromEntries(this.samples),
+      ignored: Object.fromEntries(this.ignored),
     };
   }
 
@@ -74,5 +98,18 @@ export class Inspector {
     this.received.clear();
     this.sent.clear();
     this.samples.clear();
+    this.ignored.clear();
   }
+}
+
+/** Replaces the value at a dotted path (on an already redacted copy, so mutating it is safe). */
+function maskPath(root: unknown, path: string): void {
+  const keys = path.split('.');
+  let node: unknown = root;
+  for (const key of keys.slice(0, -1)) {
+    if (node === null || typeof node !== 'object') return;
+    node = (node as Record<string, unknown>)[key];
+  }
+  const last = keys.at(-1);
+  if (last && node !== null && typeof node === 'object' && last in (node as object)) (node as Record<string, unknown>)[last] = REDACTED;
 }

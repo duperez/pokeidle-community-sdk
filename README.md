@@ -72,7 +72,7 @@ unpacked) and open the game. A small panel shows which packet types arrive. The 
 
 ## Privacy
 
-The library redacts tokens, e-mails and player names from everything it records. This repository contains no account data,
+The library redacts tokens, e-mails, your own nick and account id, and everything other people wrote (chat, friend lists, rankings, guilds: only the structure is kept) from everything it records. Redaction is a safety net, not a guarantee: look at a dump before you share it. This repository contains no account data,
 no recordings and no credentials, and a test fails if something of the kind is added. Please never paste raw packet
 recordings in issues: use the redacted dump.
 

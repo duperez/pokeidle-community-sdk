@@ -49,7 +49,9 @@ items share a name the lowest id keeps the clean key and the others get `_<id>`.
 ## Redaction
 
 Packets contain session tokens, e-mails and player names. Everything the SDK records (`Inspector`) is redacted when it is
-recorded, never later: sensitive keys are replaced, free text is cleaned and arrays and depth are limited. Raw recordings
+recorded, never later: sensitive keys are replaced, free text is cleaned and arrays and depth are limited. Samples of
+packets with content written by other people (chat, friends, rankings, guilds...) keep only their structure, and the
+account id (`estado.id`) is masked by path. The redaction is a safety net, not a guarantee: read a dump before sharing it. Raw recordings
 must never be committed (`recordings/` is ignored); only sanitized fixtures belong in the repository.
 
 ## Compatibility

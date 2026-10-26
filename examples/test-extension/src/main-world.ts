@@ -27,7 +27,7 @@ function mountOverlay(): void {
   document.documentElement.append(box);
 
   const render = (): void => {
-    const { received, unknownTypes } = inspector.dump();
+    const { received, unknownTypes, ignored } = inspector.dump();
     title.textContent = `SDK test · ${client.connected ? 'connected' : 'waiting for the socket'}`;
     const { state } = client;
     const rows: string[] = [];
@@ -42,6 +42,7 @@ function mountOverlay(): void {
     }
     rows.push(...Object.entries(received).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([type, n]) => `${type}: ${n}`));
     if (unknownTypes.length) rows.push(`unknown: ${unknownTypes.join(', ')}`);
+    if (Object.keys(ignored).length) rows.push(`ignored frames: ${JSON.stringify(ignored)}`);
     list.textContent = rows.join('\n');
     list.style.whiteSpace = 'pre-wrap';
   };

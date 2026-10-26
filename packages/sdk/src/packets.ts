@@ -24,20 +24,35 @@ const KNOWN = new Set<string>(KNOWN_PACKET_TYPES);
 
 export const isKnownPacketType = (type: string): type is KnownPacketType => KNOWN.has(type);
 
-/** Frames bigger than this are ignored: the game's packets are small, and parsing a huge frame would only stall the page. */
-export const DEFAULT_MAX_PACKET_BYTES = 1_000_000;
+/**
+ * Frames bigger than this (in characters) are ignored. It is a safety net against a runaway frame, not a normal limit:
+ * the `welcome` packet carries the player's whole pokémon list plus the game's catalogs, so for a big account it is
+ * several megabytes. A limit that is too low drops `welcome` and leaves the state empty.
+ */
+export const DEFAULT_MAX_PACKET_BYTES = 32_000_000;
 
-/** Parses a text frame. Returns `null` for anything that is not a JSON object with a string `t`. Never throws. */
-export function parsePacket(text: string, maxBytes: number = DEFAULT_MAX_PACKET_BYTES): Packet | null {
-  if (typeof text !== 'string' || text.length === 0 || text.length > maxBytes) return null;
-  if (text.charCodeAt(0) !== 123 /* { */) return null; // cheap pre-check: packets are JSON objects
+/** Why a frame was not turned into a packet. */
+export type IgnoredReason = 'oversized' | 'not-a-packet';
+
+export type FrameResult = { readonly packet: Packet } | { readonly ignored: IgnoredReason };
+
+/** Reads a text frame, saying why when it is ignored. Never throws. */
+export function readFrame(text: string, maxBytes: number = DEFAULT_MAX_PACKET_BYTES): FrameResult {
+  if (typeof text !== 'string' || text.length === 0) return { ignored: 'not-a-packet' };
+  if (text.length > maxBytes) return { ignored: 'oversized' };
+  if (text.charCodeAt(0) !== 123 /* { */) return { ignored: 'not-a-packet' }; // cheap pre-check: packets are JSON objects
   let value: unknown;
   try {
     value = JSON.parse(text);
   } catch {
-    return null;
+    return { ignored: 'not-a-packet' };
   }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-  const t = (value as { t?: unknown }).t;
-  return typeof t === 'string' ? (value as Packet) : null;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return { ignored: 'not-a-packet' };
+  return typeof (value as { t?: unknown }).t === 'string' ? { packet: value as Packet } : { ignored: 'not-a-packet' };
+}
+
+/** Parses a text frame. Returns `null` for anything that is not a JSON object with a string `t`. Never throws. */
+export function parsePacket(text: string, maxBytes: number = DEFAULT_MAX_PACKET_BYTES): Packet | null {
+  const result = readFrame(text, maxBytes);
+  return 'packet' in result ? result.packet : null;
 }

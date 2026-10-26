@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { KNOWN_PACKET_TYPES, isKnownPacketType, parsePacket } from '../src/index.js';
+import { KNOWN_PACKET_TYPES, isKnownPacketType, parsePacket, readFrame } from '../src/index.js';
 
 test('parsePacket accepts JSON objects with a string type', () => {
   assert.deepEqual(parsePacket('{"t":"pong","n":1}'), { t: 'pong', n: 1 });
@@ -23,4 +23,15 @@ test('known packet types', () => {
   assert.ok(isKnownPacketType('welcome'));
   assert.ok(!isKnownPacketType('something.new'));
   assert.equal(new Set(KNOWN_PACKET_TYPES).size, KNOWN_PACKET_TYPES.length, 'no duplicates');
+});
+
+test('readFrame says why a frame was ignored', () => {
+  assert.deepEqual(readFrame('nope'), { ignored: 'not-a-packet' });
+  assert.deepEqual(readFrame('{"t":"x","a":"aaaaaaaaaaaaaaaaaaaa"}', 10), { ignored: 'oversized' });
+  assert.deepEqual(readFrame('{"t":"pong"}'), { packet: { t: 'pong' } });
+});
+
+test('the default limit lets through a multi-megabyte welcome (big accounts send one)', () => {
+  const frame = `{"t":"welcome","pokemons":"${'a'.repeat(5_000_000)}"}`;
+  assert.equal(parsePacket(frame)?.t, 'welcome');
 });

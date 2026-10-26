@@ -39,3 +39,34 @@ test('reset clears everything', () => {
   inspector.reset();
   assert.deepEqual(inspector.dump().received, {});
 });
+
+test('samples of social packets (chat, friends, guilds...) keep the structure and drop every text', () => {
+  const inspector = new Inspector();
+  inspector.recordReceived({ t: 'chat', canal: 'world', de: 'SomePlayer', texto: 'hello there, buy my stuff', ts: 123, nivel: 900, anuncioChat: { nome: 'Rattata', preco: 5 } });
+  inspector.recordReceived({ t: 'amigos', lista: [{ nick: 'Friend', nivel: 5 }] });
+  inspector.recordReceived({ t: 'batalha', ev: [{ k: 'ataque', por: 'jogador', golpe: 'Tackle' }] });
+  const { samples } = inspector.dump();
+  const chat = JSON.stringify(samples.chat);
+  assert.ok(!chat.includes('SomePlayer') && !chat.includes('hello there') && !chat.includes('Rattata'));
+  assert.deepEqual((samples.chat?.[0] as Record<string, unknown>)['ts'], 123); // numbers and structure survive
+  assert.ok(!JSON.stringify(samples.amigos).includes('Friend'));
+  assert.ok(JSON.stringify(samples.batalha).includes('Tackle')); // game data that is not about people is kept
+});
+
+test('the list of social packet types can be changed', () => {
+  const inspector = new Inspector({ socialTypePrefixes: ['secret.'] });
+  inspector.recordReceived({ t: 'secret.thing', note: 'private words' });
+  inspector.recordReceived({ t: 'chat', texto: 'now visible' });
+  const { samples } = inspector.dump();
+  assert.ok(!JSON.stringify(samples['secret.thing']).includes('private words'));
+  assert.ok(JSON.stringify(samples.chat).includes('now visible'));
+});
+
+test('the account id is masked by path, and other ids are kept', () => {
+  const inspector = new Inspector();
+  inspector.recordReceived({ t: 'welcome', estado: { id: 123456, level: 7 }, hunts: [{ id: 5 }] });
+  const sample = inspector.dump().samples.welcome?.[0] as { estado: Record<string, unknown>; hunts: Array<Record<string, unknown>> };
+  assert.equal(sample.estado['id'], '[redacted]');
+  assert.equal(sample.estado['level'], 7);
+  assert.equal(sample.hunts[0]?.['id'], 5);
+});

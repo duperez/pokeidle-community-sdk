@@ -12,6 +12,7 @@ const EMAIL = /[\w.+-]+@[\w-]+(\.[\w-]+)+/g;
 const LONG_SEQUENCE = /[A-Za-z0-9_-]{24,}/g;
 
 export const REDACTED = '[redacted]';
+export const TEXT_MASK = '[text]';
 
 export interface RedactOptions {
   /** How many items of an array are kept (the rest becomes a count). Default 3. */
@@ -20,6 +21,8 @@ export interface RedactOptions {
   maxDepth?: number;
   /** Longest string kept. Default 120. */
   maxStringLength?: number;
+  /** Replace every string value with `[text]`, keeping only the structure. For content written by other people. */
+  maskStrings?: boolean;
 }
 
 /** Free text: no e-mails, no token-looking sequences, and short. */
@@ -30,9 +33,10 @@ export function cleanText(value: unknown, maxLength = 120): string {
 
 /** A safe, small copy of any value: sensitive keys replaced, text cleaned, arrays and depth limited. Never mutates its input. */
 export function redact(value: unknown, options: RedactOptions = {}, depth = 0): unknown {
-  const { maxArrayItems = 3, maxDepth = 5, maxStringLength = 120 } = options;
+  const { maxArrayItems = 3, maxDepth = 5, maxStringLength = 120, maskStrings = false } = options;
   if (value === null || typeof value !== 'object') {
-    return typeof value === 'string' ? cleanText(value, maxStringLength) : value;
+    if (typeof value !== 'string') return value;
+    return maskStrings ? TEXT_MASK : cleanText(value, maxStringLength);
   }
   if (depth >= maxDepth) return Array.isArray(value) ? `[array of ${value.length}]` : '{…}';
   if (Array.isArray(value)) {

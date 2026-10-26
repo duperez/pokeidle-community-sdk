@@ -1,5 +1,5 @@
 import { Inspector } from './inspector.js';
-import { DEFAULT_MAX_PACKET_BYTES, parsePacket, type Packet } from './packets.js';
+import { DEFAULT_MAX_PACKET_BYTES, readFrame, type Packet } from './packets.js';
 import type { PacketMap } from './protocol/wire.js';
 import { GameState } from './state.js';
 import type { Transport } from './transport.js';
@@ -10,7 +10,7 @@ export interface ClientOptions {
   transport: Transport;
   /** Records counts and redacted samples of what goes by. `false` turns it off. Default: a new `Inspector`. */
   inspector?: Inspector | false;
-  /** Frames above this size are ignored. */
+  /** Frames longer than this are ignored (and counted in the inspector). The default is large on purpose: `welcome` can be several MB. */
   maxPacketBytes?: number;
   /** Called when one of your listeners throws (it never breaks the other listeners). Default: `console.error`. */
   onError?: (error: unknown) => void;
@@ -105,8 +105,12 @@ export class PokeIdleClient {
   }
 
   private handleIncoming(text: string): void {
-    const packet = parsePacket(text, this.maxBytes);
-    if (!packet) return;
+    const frame = readFrame(text, this.maxBytes);
+    if ('ignored' in frame) {
+      this.inspector?.recordIgnored(frame.ignored); // never silent: a dropped packet shows up in the inspector
+      return;
+    }
+    const packet = frame.packet;
     this.inspector?.recordReceived(packet);
     this.safely(() => this.state.applyPacket(packet)); // before the listeners, so they see the new state
     this.call(this.byType.get(packet.t), packet);
@@ -114,8 +118,9 @@ export class PokeIdleClient {
   }
 
   private handleOutgoing(text: string): void {
-    const packet = parsePacket(text, this.maxBytes);
-    if (!packet) return;
+    const frame = readFrame(text, this.maxBytes);
+    if ('ignored' in frame) return;
+    const packet = frame.packet;
     this.inspector?.recordSent(packet);
     this.call(this.outgoing, packet);
   }

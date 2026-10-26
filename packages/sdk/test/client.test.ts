@@ -119,3 +119,14 @@ test('on() gives a typed packet for known types, and client.state is updated bef
   transport.handlers?.onMessage('{"t":"some.other.type","a":1}');
   assert.equal(seen.at(-1), 2);
 });
+
+test('a frame that is ignored is counted by the inspector, never dropped silently', () => {
+  const transport = new FakeTransport();
+  const client = new PokeIdleClient({ transport, maxPacketBytes: 50 });
+  client.start();
+  transport.handlers?.onMessage(`{"t":"welcome","big":"${'a'.repeat(100)}"}`);
+  transport.handlers?.onMessage('garbage');
+  transport.handlers?.onMessage('{"t":"pong"}');
+  assert.deepEqual(client.inspector?.dump().ignored, { oversized: 1, 'not-a-packet': 1 });
+  assert.deepEqual(client.inspector?.dump().received, { pong: 1 });
+});
