@@ -2,16 +2,24 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import ts from 'typescript';
 
 // The public API is whatever `src/index.ts` exports, values and types. Changing it must be a decision: this test fails
-// on ANY difference. After an intended change run `UPDATE_API_SNAPSHOT=1 npm test`, review the diff of the snapshot file
+// on ANY difference in a name or in a type/member signature. After an intended change run `UPDATE_API_SNAPSHOT=1 npm test`, review the diff of the snapshot file
 // and say it in the CHANGELOG.
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const snapshotPath = root + 'test/api-surface.snapshot.json';
 
-function publicSurface(): string[] {
+/** Long types (the big unions of names) are kept as a fingerprint, so the snapshot stays readable and small. */
+const brief = (text: string): string =>
+  text.length <= 240
+    ? text
+    : `${text.slice(0, 80)}… [${text.length} chars, sha1 ${createHash('sha1').update(text).digest('hex').slice(0, 12)}]`;
+
+/** One line per exported name with its full type; classes and interfaces list every member too. */
+function publicSurface(): Record<string, string[]> {
   const program = ts.createProgram([root + 'src/index.ts'], {
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
@@ -25,30 +33,55 @@ function publicSurface(): string[] {
   assert.ok(entry);
   const moduleSymbol = checker.getSymbolAtLocation(entry);
   assert.ok(moduleSymbol);
-  return checker
-    .getExportsOfModule(moduleSymbol)
-    .map((symbol) => {
-      const real = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
-      return `${symbol.name} (${real.flags & ts.SymbolFlags.Value ? 'value' : 'type'})`;
-    })
-    .sort();
+  const flags = ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.InTypeAlias;
+  const out: Record<string, string[]> = {};
+  for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
+    const real = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    const decl = real.declarations?.[0];
+    assert.ok(decl);
+    const lines: string[] = [];
+    if (real.flags & ts.SymbolFlags.Value) {
+      lines.push(`value: ${checker.typeToString(checker.getTypeOfSymbolAtLocation(real, decl), undefined, flags)}`);
+    }
+    if (real.flags & (ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Enum)) {
+      const declared = checker.getDeclaredTypeOfSymbol(real);
+      lines.push(`type: ${checker.typeToString(declared, undefined, flags)}`);
+      if (real.flags & (ts.SymbolFlags.Class | ts.SymbolFlags.Interface)) {
+        for (const member of checker.getPropertiesOfType(declared)) {
+          const memberDecl = member.declarations?.[0];
+          if (memberDecl && ts.getCombinedModifierFlags(memberDecl) & ts.ModifierFlags.Private) continue;
+          const optional = member.flags & ts.SymbolFlags.Optional ? '?' : '';
+          lines.push(
+            `  ${member.name}${optional}: ${checker.typeToString(checker.getTypeOfSymbolAtLocation(member, decl), undefined, flags)}`,
+          );
+        }
+      }
+    }
+    out[symbol.name] = lines.map(brief);
+  }
+  return Object.fromEntries(Object.entries(out).sort(([x], [y]) => x.localeCompare(y)));
 }
 
-test('the public API surface matches the committed snapshot', () => {
+test('the public API surface (names AND signatures) matches the committed snapshot', () => {
   const current = publicSurface();
-  if (process.env['UPDATE_API_SNAPSHOT'] === '1' || !existsSync(snapshotPath)) {
+  if (process.env['UPDATE_API_SNAPSHOT'] === '1') {
     writeFileSync(snapshotPath, JSON.stringify(current, null, 2) + '\n');
     return;
   }
-  const expected = JSON.parse(readFileSync(snapshotPath, 'utf8')) as string[];
+  // A missing snapshot is a failure, never a silent re-creation.
+  assert.ok(existsSync(snapshotPath), 'api-surface.snapshot.json is missing: run `UPDATE_API_SNAPSHOT=1 npm test` and commit it');
+  const expected = JSON.parse(readFileSync(snapshotPath, 'utf8')) as Record<string, string[]>;
+  const names = (o: Record<string, unknown>) => Object.keys(o);
   assert.deepEqual(
-    current.filter((n) => !expected.includes(n)),
+    names(current).filter((n) => !(n in expected)),
     [],
     'new public exports (update the snapshot and the CHANGELOG if intended)',
   );
   assert.deepEqual(
-    expected.filter((n) => !current.includes(n)),
+    names(expected).filter((n) => !(n in current)),
     [],
-    'public exports removed (a breaking change: update the snapshot and the CHANGELOG if intended)',
+    'public exports removed (breaking: update the snapshot and the CHANGELOG if intended)',
   );
+  const changed = names(current).filter((n) => JSON.stringify(current[n]) !== JSON.stringify(expected[n]));
+  assert.deepEqual(changed, [], 'the signature of these exports changed (update the snapshot and the CHANGELOG if intended)');
 });

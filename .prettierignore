@@ -5,3 +5,4 @@ package-lock.json
 *.generated.ts
 # Game data kept one entry per line: expanded it would pass the repository's size limit for JSON files.
 packages/sdk/data/extra-items.json
+packages/sdk/test/api-surface.snapshot.json

@@ -50,7 +50,7 @@ const ownMaps = (fields: Record<string, unknown>): Record<string, unknown> => {
   return fields;
 };
 const rowsWithId = (v: unknown): PokemonWire[] =>
-  Array.isArray(v) ? v.filter((k): k is PokemonWire => isObject(k) && k['id'] !== undefined && k['id'] !== null) : [];
+  Array.isArray(v) ? v.filter((k): k is PokemonWire => isObject(k) && asId(k['id']) !== null) : [];
 
 /**
  * Keeps the player's state up to date. The game sends the whole state once (`welcome`, marked `cheio`) and then small
@@ -136,7 +136,8 @@ export class GameState {
   /** Does this pokémon hold the Exp. Share? `null` when the pokémon or the Exp. Share item is not known. */
   holdsExpShare(id: number): boolean | null {
     const pokemon = this.pokemon(id);
-    return pokemon === undefined || this.xpShareId === null ? null : pokemon.heldItemId === this.xpShareId;
+    if (pokemon === undefined || this.xpShareId === null || !pokemon.heldItemKnown) return null;
+    return pokemon.heldItemId === this.xpShareId;
   }
 
   /** The game's own items (not in the public items catalog), from the last welcome packet. */
@@ -155,7 +156,7 @@ export class GameState {
    */
   get player(): PlayerState | null {
     if (!this.fields) return null;
-    this.playerCache ??= { ...this.fields, pokemons: [...this.pokemonById.values()] };
+    this.playerCache ??= Object.freeze({ ...this.fields, pokemons: Object.freeze([...this.pokemonById.values()]) as PokemonWire[] });
     return this.playerCache;
   }
 

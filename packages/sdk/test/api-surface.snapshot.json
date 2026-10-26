@@ -1,134 +1,968 @@
-[
-  "Actions (value)",
-  "ActionsOptions (type)",
-  "ActorWire (type)",
-  "AttackEvent (type)",
-  "AutomationWire (type)",
-  "BALL_CATALOG (value)",
-  "BATTLE_EVENT_KINDS (value)",
-  "BATTLE_EVENT_READS (value)",
-  "Ball (value)",
-  "BallCatalogEntryWire (type)",
-  "BallEntry (type)",
-  "BallEvent (type)",
-  "BallId (type)",
-  "BallInfo (type)",
-  "BattleEvent (type)",
-  "BattleEventKind (type)",
-  "BattleEventMap (type)",
-  "BattlePacket (type)",
-  "BlocklistPacket (type)",
-  "BuyRequest (type)",
-  "BuyResult (type)",
-  "CLIENT_COMMAND_TYPES (value)",
-  "ChatDeletedPacket (type)",
-  "ChatHistoryPacket (type)",
-  "ChatMessageWire (type)",
-  "ChatPacket (type)",
-  "ChatPinnedListPacket (type)",
-  "ChatPinnedPacket (type)",
-  "ChatStoppedPacket (type)",
-  "ClientCodeEvent (type)",
-  "ClientCodePacket (type)",
-  "ClientCommand (type)",
-  "ClientCommandType (type)",
-  "ClientOptions (type)",
-  "CommandCoverage (type)",
-  "CommandMap (type)",
-  "CommandRefusedError (value)",
-  "Coverage (type)",
-  "Currency (type)",
-  "DEFAULT_MAX_PACKET_BYTES (value)",
-  "DeathEvent (type)",
-  "ExtraItemEntry (type)",
-  "ExtraItemWire (type)",
-  "FORBIDDEN_COMMANDS (value)",
-  "FieldInitPacket (type)",
-  "FieldPacket (type)",
-  "FledEvent (type)",
-  "FrameResult (type)",
-  "FriendsPacket (type)",
-  "GameState (value)",
-  "GenericCommand (type)",
-  "GuildPacket (type)",
-  "HuntWire (type)",
-  "IRREVERSIBLE_COMMANDS (value)",
-  "ITEM_CATALOG (value)",
-  "IgnoredReason (type)",
-  "Inspector (value)",
-  "InspectorDump (type)",
-  "InspectorOptions (type)",
-  "Item (value)",
-  "ItemCategory (type)",
-  "ItemId (type)",
-  "ItemInfo (type)",
-  "KNOWN_PACKET_TYPES (value)",
-  "KnownPacketType (type)",
-  "MarketAverages (type)",
-  "MarketPacket (type)",
-  "MiniGameClues (type)",
-  "MiniGameCommands (type)",
-  "MiniGameKind (type)",
-  "MiniGameOtherPacket (type)",
-  "MiniGamePacket (type)",
-  "MiniGameRevealPacket (type)",
-  "MiniGameRoundPacket (type)",
-  "MiniGameSnapshotPacket (type)",
-  "MiniGameStagePacket (type)",
-  "MiniGameStages (type)",
-  "MobWire (type)",
-  "ModuleCommandType (type)",
-  "PACKET_COVERAGE (value)",
-  "Packet (type)",
-  "PacketMap (type)",
-  "PageLike (type)",
-  "PageTransport (value)",
-  "PlayerState (type)",
-  "PlayerStateWire (type)",
-  "PokeIdleClient (value)",
-  "Pokemon (type)",
-  "PokemonWire (type)",
-  "PurchaseEvent (type)",
-  "REDACTED (value)",
-  "RaidPacket (type)",
-  "RankingCardPacket (type)",
-  "RateLimit (type)",
-  "RateLimited (type)",
-  "RedactOptions (type)",
-  "SERVER_PACKET_READS (value)",
-  "SERVER_PACKET_TYPES (value)",
-  "SaleEvent (type)",
-  "Scheduler (type)",
-  "SellRequest (type)",
-  "SellResult (type)",
-  "SendableCommand (type)",
-  "ServerPacket (type)",
-  "ServerPacketType (type)",
-  "ShinyCapturePacket (type)",
-  "ShopEntry (type)",
-  "ShopItemWire (type)",
-  "SpawnEvent (type)",
-  "StatePacket (type)",
-  "StatsWire (type)",
-  "TEXT_MASK (value)",
-  "TrafficBattleEvents (type)",
-  "TrafficPackets (type)",
-  "Transport (type)",
-  "TransportHandlers (type)",
-  "TypedCommands (type)",
-  "Unsubscribe (type)",
-  "WelcomePacket (type)",
-  "ballInfo (value)",
-  "battleEventCoverage (value)",
-  "cleanText (value)",
-  "commandCoverage (value)",
-  "isForbiddenCommand (value)",
-  "isIrreversibleCommand (value)",
-  "isKnownPacketType (value)",
-  "itemInfo (value)",
-  "itemsInCategory (value)",
-  "normalizePokemon (value)",
-  "parsePacket (value)",
-  "readFrame (value)",
-  "redact (value)"
-]
+{
+  "Actions": [
+    "value: typeof Actions",
+    "type: Actions",
+    "  buyBall: (ball: number, quantity: number, options?: { dryRun?: boolean | undefined; }) => Promise<BuyResult>",
+    "  buyItem: (item: number, quantity: number, options?: { dryRun?: boolean | undefined; }) => Promise<BuyResult>",
+    "  spentLastHour: number",
+    "  sellPokemon: (pokemonId: number, options?: { dryRun?: boolean | undefined; confirmIrreversible?: boolean | undefined; }) => Promise<SellResult>"
+  ],
+  "ActionsOptions": [
+    "type: ActionsOptions",
+    "  dryRun?: boolean | undefined",
+    "  rateLimit?: false | RateLimit | undefined",
+    "  maxGoldPerHour?: number | undefined",
+    "  confirmTimeoutMs?: number | undefined",
+    "  confirmGraceMs?: number | undefined",
+    "  unconfirmedCooldownMs?: number | undefined",
+    "  checks?: boolean | { notForSale?: boolean | undefined; gold?: boolean | undefined; sellable?: boolean | undefined; } | undefined",
+    "  scheduler?: Scheduler | undefined"
+  ],
+  "ActorWire": [
+    "type: ActorWire",
+    "  c?: number | undefined",
+    "  r?: number | undefined",
+    "  dc?: number | undefined",
+    "  dr?: number | undefined",
+    "  d?: number | undefined",
+    "  em?: number | undefined",
+    "  ms?: number | undefined",
+    "  lt?: number | undefined",
+    "  vs?: number[] | undefined"
+  ],
+  "AttackEvent": [
+    "type: AttackEvent",
+    "  k: \"ataque\"",
+    "  por?: string | undefined",
+    "  slot?: number | undefined",
+    "  golpe?: string | undefined",
+    "  tipo?: string | undefined",
+    "  dano?: number | undefined",
+    "  ef?: number | undefined",
+    "  stab?: boolean | undefined",
+    "  hpAlvo?: number | undefined",
+    "  aoe?: boolean | undefined"
+  ],
+  "AutomationWire": [
+    "type: AutomationWire",
+    "  autoBallAteCapturar?: boolean | undefined",
+    "  autoBallSemParar?: boolean | undefined",
+    "  ballIds?: number[] | undefined",
+    "  autoRevive?: boolean | undefined",
+    "  reviveIds?: number[] | undefined",
+    "  autoPotion?: boolean | undefined",
+    "  potionIds?: number[] | undefined",
+    "  hpLimiar?: number | undefined",
+    "  pokemonTravado?: number[] | undefined",
+    "  pvpAutoFila?: boolean | undefined",
+    "  autoLockShiny?: boolean | undefined",
+    "  autoLockNota9?: boolean | undefined",
+    "  autoLockNotaMin?: number | undefined",
+    "  autoLockP5?: boolean | undefined",
+    "  autoVoltarHunt?: boolean | undefined",
+    "  desistiuHunt?: boolean | undefined",
+    "  bossAuto?: boolean | undefined",
+    "  bossAutoKey?: string | undefined"
+  ],
+  "Ball": [
+    "value: { readonly PokeBall: 1; readonly GreatBall: 2; readonly SuperBall: 3; readonly UltraBall: 4; readonly BeastBall: 5; }"
+  ],
+  "BALL_CATALOG": [
+    "value: readonly BallInfo[]"
+  ],
+  "BallCatalogEntryWire": [
+    "type: BallCatalogEntryWire",
+    "  id?: number | undefined",
+    "  nome?: string | undefined",
+    "  catchRate?: number | undefined",
+    "  priceGold?: number | undefined",
+    "  compravel?: boolean | undefined"
+  ],
+  "BallEntry": [
+    "type: BallEntry",
+    "  id: number",
+    "  name: string",
+    "  catchRate: number | null",
+    "  priceGold: number | null",
+    "  buyable: boolean"
+  ],
+  "BallEvent": [
+    "type: BallEvent",
+    "  k: \"bola\"",
+    "  ballId?: number | undefined",
+    "  slot?: number | undefined",
+    "  sucesso?: boolean | undefined",
+    "  chance?: number | undefined",
+    "  shiny?: boolean | undefined"
+  ],
+  "BallId": [
+    "type: 2 | 1 | 3 | 4 | 5"
+  ],
+  "ballInfo": [
+    "value: (id: number) => BallInfo | undefined"
+  ],
+  "BallInfo": [
+    "type: BallInfo",
+    "  id: number",
+    "  name: string",
+    "  catchRate: number | null",
+    "  priceGold: number | null",
+    "  buyable: boolean"
+  ],
+  "BATTLE_EVENT_KINDS": [
+    "value: readonly [\"afiliadoComissao\", \"afiliadoRecolhido\", \"amigoAceito\", \"amigoC… [2194 chars, sha1 205a16b207f9]"
+  ],
+  "BATTLE_EVENT_READS": [
+    "value: { readonly afiliadoComissao: readonly [\"qtd\", \"tipo\"]; readonly afiliadoR… [6559 chars, sha1 5d49e8ba5157]"
+  ],
+  "BattleEvent": [
+    "type: ClientCodeEvent<\"oferenda\"> | ClientCodeEvent<\"afiliadoComissao\"> | Client… [4477 chars, sha1 c93bd6b0cfde]"
+  ],
+  "battleEventCoverage": [
+    "value: (kind: \"oferenda\" | \"afiliadoComissao\" | \"afiliadoRecolhido\" | \"amigoAcei… [2352 chars, sha1 2b0715e47308]"
+  ],
+  "BattleEventKind": [
+    "type: \"oferenda\" | \"afiliadoComissao\" | \"afiliadoRecolhido\" | \"amigoAceito\" | \"a… [2314 chars, sha1 436d1eca71a8]"
+  ],
+  "BattleEventMap": [
+    "type: { oferenda: ClientCodeEvent<\"oferenda\">; afiliadoComissao: ClientCodeEvent… [6262 chars, sha1 265438f3372b]"
+  ],
+  "BattlePacket": [
+    "type: BattlePacket",
+    "  t: \"batalha\"",
+    "  ev?: BattleEvent[] | undefined"
+  ],
+  "BlocklistPacket": [
+    "type: BlocklistPacket",
+    "  t: \"bloqueios\"",
+    "  lista?: unknown[] | undefined",
+    "  max?: number | undefined"
+  ],
+  "BuyRequest": [
+    "type: BuyRequest",
+    "  kind: \"ball\" | \"item\"",
+    "  id: number",
+    "  quantity: number",
+    "  unitPrice: number | null",
+    "  totalPrice: number | null"
+  ],
+  "BuyResult": [
+    "type: { status: \"confirmed\"; request: BuyRequest; confirmedBy: \"event\" | \"invent… [880 chars, sha1 6b2f6208e3ae]"
+  ],
+  "ChatDeletedPacket": [
+    "type: ChatDeletedPacket",
+    "  t: \"chat.del\"",
+    "  id?: string | undefined",
+    "  por?: string | undefined"
+  ],
+  "ChatHistoryPacket": [
+    "type: ChatHistoryPacket",
+    "  t: \"chat.historico\"",
+    "  canal?: string | undefined",
+    "  mensagens?: ChatMessageWire[] | undefined"
+  ],
+  "ChatMessageWire": [
+    "type: ChatMessageWire",
+    "  id?: string | undefined",
+    "  canal?: string | undefined",
+    "  idioma?: string | undefined",
+    "  de?: string | undefined",
+    "  texto?: string | undefined",
+    "  ts?: number | undefined",
+    "  cargo?: string | undefined",
+    "  nivel?: number | undefined",
+    "  guildId?: number | undefined",
+    "  guildTag?: string | undefined",
+    "  guildTagCor?: string | undefined",
+    "  anuncioChat?: { id?: number | undefined; tipo?: string | undefined; qtd?: numb… [319 chars, sha1 22547c2aab19]",
+    "  pkShare?: { nick?: string | undefined; nome?: string | undefined; apelido?: string | null | undefined; pokemonId?: number | undefined; } | undefined",
+    "  tagDiscord?: { qtd?: number | undefined; dias?: number | undefined; nick?: string | undefined; } | undefined"
+  ],
+  "ChatPacket": [
+    "type: ChatPacket",
+    "  t: \"chat\"",
+    "  id?: string | undefined",
+    "  canal?: string | undefined",
+    "  idioma?: string | undefined",
+    "  de?: string | undefined",
+    "  texto?: string | undefined",
+    "  ts?: number | undefined",
+    "  cargo?: string | undefined",
+    "  nivel?: number | undefined",
+    "  guildId?: number | undefined",
+    "  guildTag?: string | undefined",
+    "  guildTagCor?: string | undefined",
+    "  anuncioChat?: { id?: number | undefined; tipo?: string | undefined; qtd?: numb… [319 chars, sha1 22547c2aab19]",
+    "  pkShare?: { nick?: string | undefined; nome?: string | undefined; apelido?: string | null | undefined; pokemonId?: number | undefined; } | undefined",
+    "  tagDiscord?: { qtd?: number | undefined; dias?: number | undefined; nick?: string | undefined; } | undefined"
+  ],
+  "ChatPinnedListPacket": [
+    "type: ChatPinnedListPacket",
+    "  t: \"chat.fixadas\"",
+    "  lista?: { canal?: string | undefined; idioma?: string | undefined; msg?: ChatMessageWire | undefined; por?: string | undefined; em?: number | undefined; }[] | undefined"
+  ],
+  "ChatPinnedPacket": [
+    "type: ChatPinnedPacket",
+    "  t: \"chat.fixada\"",
+    "  canal?: string | undefined",
+    "  idioma?: string | undefined",
+    "  fixada?: { msg?: ChatMessageWire | undefined; por?: string | undefined; em?: number | undefined; } | null | undefined"
+  ],
+  "ChatStoppedPacket": [
+    "type: ChatStoppedPacket",
+    "  t: \"chat.interrompido\"",
+    "  estado?: unknown",
+    "  aoVivo?: unknown"
+  ],
+  "cleanText": [
+    "value: (value: unknown, maxLength?: number) => string"
+  ],
+  "CLIENT_COMMAND_TYPES": [
+    "value: readonly [\"afiliado.recolher\", \"amigo.aceitar\", \"amigo.busca\", \"amigo.can… [4011 chars, sha1 debe86440909]"
+  ],
+  "ClientCodeEvent": [
+    "type: { readonly k: K; } & { readonly [F in { readonly afiliadoComissao: readonl… [6662 chars, sha1 412ebe4a7a28]"
+  ],
+  "ClientCodePacket": [
+    "type: Packet & { readonly t: T; } & { readonly [F in { readonly amigos: readonly… [4329 chars, sha1 71a6436d642a]"
+  ],
+  "ClientCommand": [
+    "type: { readonly t: \"shop.buy\"; readonly kind: \"ball\" | \"item\"; readonly id: num… [8983 chars, sha1 ba1e4e4eb67c]"
+  ],
+  "ClientCommandType": [
+    "type: \"shop.buy\" | \"shop.sellPokemon\" | \"chat.historico\" | \"chat.mute\" | \"afilia… [4214 chars, sha1 3abfebcf25ff]"
+  ],
+  "ClientOptions": [
+    "type: ClientOptions",
+    "  transport: Transport",
+    "  inspector?: false | Inspector | undefined",
+    "  maxPacketBytes?: number | undefined",
+    "  actions?: ActionsOptions | undefined",
+    "  onError?: ErrorHandler | undefined"
+  ],
+  "commandCoverage": [
+    "value: (type: \"shop.buy\" | \"shop.sellPokemon\" | \"chat.historico\" | \"chat.mute\" |… [4267 chars, sha1 2c0627938170]"
+  ],
+  "CommandCoverage": [
+    "type: Coverage | \"name-only\""
+  ],
+  "CommandMap": [
+    "type: { \"shop.buy\": { readonly t: \"shop.buy\"; readonly kind: \"ball\" | \"item\"; re… [12622 chars, sha1 4e6e3c191b27]"
+  ],
+  "CommandRefusedError": [
+    "value: typeof CommandRefusedError",
+    "type: CommandRefusedError",
+    "  command: string",
+    "  name: string",
+    "  message: string",
+    "  stack?: string | undefined",
+    "  cause?: unknown"
+  ],
+  "Coverage": [
+    "type: \"traffic\" | \"client-code\""
+  ],
+  "Currency": [
+    "type: \"gold\" | \"orb\""
+  ],
+  "DeathEvent": [
+    "type: DeathEvent",
+    "  k: \"morte\"",
+    "  quem?: string | undefined",
+    "  slot?: number | undefined",
+    "  nome?: string | undefined",
+    "  xp?: number | undefined",
+    "  xpTreinador?: number | undefined",
+    "  xpPokemon?: number | undefined",
+    "  lootBoost?: boolean | undefined",
+    "  ouro?: number | undefined",
+    "  ouroLoot?: number | undefined",
+    "  drops?: { [key: string]: unknown; nome?: string | undefined; itemId?: number | undefined; }[] | undefined",
+    "  safari?: boolean | undefined"
+  ],
+  "DEFAULT_MAX_PACKET_BYTES": [
+    "value: 32000000"
+  ],
+  "ExtraItemEntry": [
+    "type: ExtraItemEntry",
+    "  id: number",
+    "  name: string",
+    "  category: string",
+    "  rare: boolean",
+    "  npcPrice: number | null"
+  ],
+  "ExtraItemWire": [
+    "type: ExtraItemWire",
+    "  id?: number | undefined",
+    "  name?: string | undefined",
+    "  icon?: string | undefined",
+    "  category?: string | undefined",
+    "  rare?: boolean | undefined",
+    "  npcPrice?: number | undefined"
+  ],
+  "FieldInitPacket": [
+    "type: FieldInitPacket",
+    "  t: \"campo.init\"",
+    "  slug?: string | undefined",
+    "  mapa?: string | undefined",
+    "  ts?: number | undefined",
+    "  box?: number[] | undefined",
+    "  groundZ?: number | undefined",
+    "  heroi?: ActorWire | undefined",
+    "  treinador?: ActorWire | undefined",
+    "  mobs?: MobWire[] | undefined",
+    "  alvo?: number | null | undefined"
+  ],
+  "FieldPacket": [
+    "type: FieldPacket",
+    "  t: \"campo\"",
+    "  seq?: number | undefined",
+    "  ts?: number | undefined",
+    "  alvo?: number | null | undefined",
+    "  heroi?: ActorWire | undefined",
+    "  treinador?: ActorWire | undefined",
+    "  mobs?: MobWire[] | undefined",
+    "  fora?: number[] | undefined"
+  ],
+  "FledEvent": [
+    "type: FledEvent",
+    "  k: \"fugiu\"",
+    "  nome?: string | undefined",
+    "  level?: number | undefined",
+    "  shiny?: boolean | undefined"
+  ],
+  "FORBIDDEN_COMMANDS": [
+    "value: readonly [\"orbs.sacar\"]"
+  ],
+  "FrameResult": [
+    "type: { readonly packet: Packet; } | { readonly ignored: IgnoredReason; }"
+  ],
+  "FriendsPacket": [
+    "type: FriendsPacket",
+    "  t: \"amigos\"",
+    "  lista?: unknown[] | undefined",
+    "  pedidos?: unknown[] | undefined",
+    "  max?: number | undefined"
+  ],
+  "GameState": [
+    "value: typeof GameState",
+    "type: GameState",
+    "  complete: boolean",
+    "  ballCatalog: readonly BallEntry[]",
+    "  xpShareItemId: number | null",
+    "  activePokemonId: number | null",
+    "  findPokemon: (id: number) => PokemonWire | undefined",
+    "  pokemon: (id: number) => Pokemon | undefined",
+    "  pokemons: readonly Pokemon[]",
+    "  isActive: (id: number) => boolean | null",
+    "  isInTeam: (id: number) => boolean | null",
+    "  isInCollection: (id: number) => boolean | null",
+    "  holdsExpShare: (id: number) => boolean | null",
+    "  extraItems: readonly ExtraItemEntry[]",
+    "  shopItems: readonly ShopEntry[]",
+    "  player: PlayerState | null",
+    "  pokemonCount: number",
+    "  nick: string | null",
+    "  level: number | null",
+    "  xp: number | null",
+    "  gold: number | null",
+    "  diamonds: number | null",
+    "  orbs: number | null",
+    "  huntSlug: string | null",
+    "  itemCount: (id: number) => number",
+    "  ballCount: (id: number) => number",
+    "  itemName: (id: number) => string | null",
+    "  ballName: (id: number) => string | null",
+    "  onChange: (listener: () => void) => () => void",
+    "  applyPacket: (packet: Packet) => void"
+  ],
+  "GenericCommand": [
+    "type: { readonly [field: string]: unknown; readonly t: K; }"
+  ],
+  "GuildPacket": [
+    "type: GuildPacket",
+    "  t: \"guild\"",
+    "  bancoAoVivo?: { guildId?: number | undefined; banco?: number | undefined; cicl… [300 chars, sha1 a7ad27def81d]"
+  ],
+  "HuntWire": [
+    "type: HuntWire",
+    "  slug?: string | undefined",
+    "  nome?: string | undefined",
+    "  area?: string | undefined",
+    "  nivel?: number | undefined",
+    "  especies?: { pokeId?: number | undefined; nome?: string | undefined; pontos?: number | undefined; }[] | undefined",
+    "  totalSpawns?: number | undefined"
+  ],
+  "IgnoredReason": [
+    "type: \"oversized\" | \"not-a-packet\""
+  ],
+  "Inspector": [
+    "value: typeof Inspector",
+    "type: Inspector",
+    "  recordReceived: (packet: Packet) => void",
+    "  recordSent: (packet: Packet) => void",
+    "  recordBattleEvent: (rawKind: string, event?: unknown) => void",
+    "  recordIgnored: (reason: IgnoredReason) => void",
+    "  dump: () => InspectorDump",
+    "  reset: () => void"
+  ],
+  "InspectorDump": [
+    "type: InspectorDump",
+    "  received: { [x: string]: number; }",
+    "  sent: { [x: string]: number; }",
+    "  unknownTypes: string[]",
+    "  samples: { [x: string]: unknown[]; }",
+    "  unknownSentTypes: string[]",
+    "  battleEvents: { [x: string]: number; }",
+    "  battleEventSamples: { [x: string]: unknown[]; }",
+    "  unknownBattleEvents: string[]",
+    "  ignored: { [x: string]: number; }"
+  ],
+  "InspectorOptions": [
+    "type: InspectorOptions",
+    "  maxTypes?: number | undefined",
+    "  maxSamplesPerType?: number | undefined",
+    "  redact?: RedactOptions | undefined",
+    "  socialTypePrefixes?: readonly string[] | undefined",
+    "  maskedPaths?: readonly string[] | undefined"
+  ],
+  "IRREVERSIBLE_COMMANDS": [
+    "value: readonly [\"market.comprar\", \"market.comprarLote\", \"market.criar\", \"loja.c… [569 chars, sha1 e2451b0e175c]"
+  ],
+  "isForbiddenCommand": [
+    "value: (type: string) => boolean"
+  ],
+  "isIrreversibleCommand": [
+    "value: (type: string) => boolean"
+  ],
+  "isKnownPacketType": [
+    "value: (type: string) => type is \"amigos\" | \"batalha\" | \"bicicletas.lista\" | \"bl… [715 chars, sha1 807be1b381a2]"
+  ],
+  "Item": [
+    "value: { readonly AirTank: 1; readonly AncientStone: 2; readonly ArmadilloClaw: … [20360 chars, sha1 ba86f632721f]"
+  ],
+  "ITEM_CATALOG": [
+    "value: readonly ItemInfo[]"
+  ],
+  "ItemCategory": [
+    "type: \"revive\" | \"skin\" | \"bicicleta\" | \"caixa\" | \"card\" | \"casa\" | \"clan\" | \"heal\" | \"key-item\" | \"loot\" | \"stone\" | \"tm\""
+  ],
+  "ItemId": [
+    "type: 51 | 133 | 2 | 1 | 3 | 8 | 4 | 7 | 9 | 5 | 120 | 6 | 10 | 11 | 12 | 13 | 1… [5010 chars, sha1 9182253d53b2]"
+  ],
+  "itemInfo": [
+    "value: (id: number) => ItemInfo | undefined"
+  ],
+  "ItemInfo": [
+    "type: ItemInfo",
+    "  id: number",
+    "  name: string",
+    "  category: \"revive\" | \"skin\" | \"bicicleta\" | \"caixa\" | \"card\" | \"casa\" | \"clan\" | \"heal\" | \"key-item\" | \"loot\" | \"stone\" | \"tm\"",
+    "  rare: boolean",
+    "  npcPrice: number | null"
+  ],
+  "itemsInCategory": [
+    "value: (category: ItemCategory) => readonly ItemInfo[]"
+  ],
+  "KNOWN_PACKET_TYPES": [
+    "value: readonly [\"amigos\", \"batalha\", \"bicicletas.lista\", \"bloqueios\", \"campeona… [650 chars, sha1 d99354003a3f]"
+  ],
+  "KnownPacketType": [
+    "type: \"amigos\" | \"batalha\" | \"bicicletas.lista\" | \"bloqueios\" | \"campeonato\" | \"… [688 chars, sha1 edb0179ba528]"
+  ],
+  "MarketAverages": [
+    "type: { [x: string]: Partial<Record<Currency, { media?: number | undefined; unidades?: number | undefined; }>>; }"
+  ],
+  "MarketPacket": [
+    "type: MarketPacket",
+    "  t: \"market\"",
+    "  aba?: string | undefined",
+    "  medias?: MarketAverages | undefined",
+    "  linhas?: unknown[] | undefined",
+    "  resumo?: unknown",
+    "  pagina?: number | undefined",
+    "  seq?: number | undefined",
+    "  itemId?: number | undefined",
+    "  moeda?: Currency | undefined"
+  ],
+  "MiniGameClues": [
+    "type: MiniGameClues",
+    "  img?: string | undefined",
+    "  tipos?: string[] | undefined",
+    "  regiao?: string | undefined",
+    "  stats?: StatsWire | undefined",
+    "  cadeia?: { total?: number | undefined; posicao?: number | undefined; } | undefined",
+    "  letra?: string | undefined",
+    "  tamanho?: number | undefined"
+  ],
+  "MiniGameCommands": [
+    "type: MiniGameCommands",
+    "  mg.entrar: { readonly t: \"mg.entrar\"; readonly idioma: string; }",
+    "  mg.sair: { readonly t: \"mg.sair\"; }",
+    "  mg.palpite: { readonly t: \"mg.palpite\"; readonly k: number; readonly texto: string; }"
+  ],
+  "MiniGameKind": [
+    "type: \"zoom\" | \"sombra\" | \"dex\" | \"intervalo\""
+  ],
+  "MiniGameOtherPacket": [
+    "type: MiniGameOtherPacket",
+    "  t: \"mg\"",
+    "  op: string",
+    "  k?: number | undefined"
+  ],
+  "MiniGamePacket": [
+    "type: MiniGameRoundPacket | MiniGameStagePacket | MiniGameRevealPacket | MiniGameSnapshotPacket | MiniGameOtherPacket"
+  ],
+  "MiniGameRevealPacket": [
+    "type: MiniGameRevealPacket",
+    "  t: \"mg\"",
+    "  op: \"revela\"",
+    "  agora?: number | undefined",
+    "  k?: number | undefined",
+    "  resposta?: { pokeId?: number | undefined; nome?: string | undefined; looktype?: number | undefined; dex?: number | undefined; } | undefined",
+    "  acertaram?: number | undefined",
+    "  jogando?: number | undefined"
+  ],
+  "MiniGameRoundPacket": [
+    "type: MiniGameRoundPacket",
+    "  t: \"mg\"",
+    "  op: \"rodada\"",
+    "  agora?: number | undefined",
+    "  k?: number | undefined",
+    "  tipo?: MiniGameKind | undefined",
+    "  fases?: MiniGameStages | undefined",
+    "  vista?: MiniGameClues | undefined",
+    "  sala?: { id?: string | undefined; idioma?: string | undefined; n?: number | undefined; } | undefined"
+  ],
+  "MiniGameSnapshotPacket": [
+    "type: MiniGameSnapshotPacket",
+    "  t: \"mg\"",
+    "  op: \"estado\"",
+    "  k?: number | undefined",
+    "  tipo?: MiniGameKind | undefined",
+    "  fases?: MiniGameStages | undefined",
+    "  estagio?: number | undefined",
+    "  vista?: MiniGameClues | undefined",
+    "  sala?: { id?: string | undefined; idioma?: string | undefined; n?: number | undefined; } | undefined",
+    "  anterior?: { k?: number | undefined; revela?: { pokeId?: number | undefined; nome?: string | undefined; looktype?: number | undefined; dex?: number | undefined; } | undefined; } | undefined",
+    "  acertaram?: number | undefined",
+    "  jogando?: number | undefined"
+  ],
+  "MiniGameStagePacket": [
+    "type: MiniGameStagePacket",
+    "  t: \"mg\"",
+    "  op: \"fase\"",
+    "  agora?: number | undefined",
+    "  k?: number | undefined",
+    "  estagio?: number | undefined",
+    "  vista?: MiniGameClues | undefined"
+  ],
+  "MiniGameStages": [
+    "type: MiniGameStages",
+    "  inicio?: number | undefined",
+    "  estagios?: number[] | undefined",
+    "  palpitesAte?: number | undefined",
+    "  revelaAte?: number | undefined",
+    "  fim?: number | undefined"
+  ],
+  "MobWire": [
+    "type: MobWire",
+    "  s?: number | undefined",
+    "  c?: number | undefined",
+    "  r?: number | undefined",
+    "  dc?: number | undefined",
+    "  dr?: number | undefined",
+    "  d?: number | undefined",
+    "  em?: number | undefined",
+    "  ms?: number | undefined",
+    "  hp?: number | undefined",
+    "  mhp?: number | undefined",
+    "  x?: number | undefined",
+    "  lt?: number | undefined",
+    "  n?: string | undefined",
+    "  nv?: number | undefined",
+    "  sh?: number | undefined"
+  ],
+  "ModuleCommandType": [
+    "type: keyof MiniGameCommands"
+  ],
+  "normalizePokemon": [
+    "value: (wire: PokemonWire) => Pokemon | null"
+  ],
+  "Packet": [
+    "type: Packet",
+    "  t: string"
+  ],
+  "PACKET_COVERAGE": [
+    "value: { readonly welcome: \"traffic\"; readonly estado: \"traffic\"; readonly batal… [1724 chars, sha1 7bea5f47517f]"
+  ],
+  "PacketMap": [
+    "type: { amigos: FriendsPacket; batalha: BattlePacket; \"bicicletas.lista\": Client… [2087 chars, sha1 2ce36f694f2a]"
+  ],
+  "PageLike": [
+    "type: PageLike",
+    "  WebSocket: { new (url: string | URL, protocols?: string | string[] | undefined): WebSocket; prototype: WebSocket; readonly CONNECTING: 0; readonly OPEN: 1; readonly CLOSING: 2; readonly CLOSED: 3; }",
+    "  location: { host: string; href: string; }"
+  ],
+  "PageTransport": [
+    "value: typeof PageTransport",
+    "type: PageTransport",
+    "  readyState: number",
+    "  start: (handlers: TransportHandlers) => void",
+    "  stop: () => void",
+    "  send: (text: string) => boolean"
+  ],
+  "parsePacket": [
+    "value: (text: string, maxBytes?: number) => Packet | null"
+  ],
+  "PlayerState": [
+    "type: PlayerStateWire & { pokemons: PokemonWire[]; }"
+  ],
+  "PlayerStateWire": [
+    "type: PlayerStateWire",
+    "  cheio?: boolean | undefined",
+    "  id?: number | undefined",
+    "  nick?: string | undefined",
+    "  level?: number | undefined",
+    "  xp?: number | undefined",
+    "  xpNivel?: number | undefined",
+    "  xpProximo?: number | undefined",
+    "  gold?: number | undefined",
+    "  diamonds?: number | undefined",
+    "  orbs?: number | undefined",
+    "  huntSlug?: string | null | undefined",
+    "  outlandTier?: number | undefined",
+    "  noCentro?: boolean | undefined",
+    "  centroMotivo?: string | null | undefined",
+    "  centro?: { sala?: number | undefined; capacidade?: number | undefined; } | null | undefined",
+    "  centroLivreEm?: number | undefined",
+    "  ondaSeq?: number | undefined",
+    "  combateOndaSeq?: number | undefined",
+    "  activeId?: number | undefined",
+    "  servidorAgora?: number | undefined",
+    "  items?: Record<string, number> | undefined",
+    "  balls?: Record<string, number> | undefined",
+    "  automation?: AutomationWire | undefined",
+    "  pokemons?: PokemonWire[] | undefined",
+    "  pkMud?: PokemonWire[] | undefined",
+    "  pkFora?: number[] | undefined",
+    "  dexMud?: Record<string, { k?: number | undefined; c?: number | undefined; sv?: number | undefined; }> | undefined",
+    "  dexFora?: string[] | undefined",
+    "  pokedex?: Record<string, { k?: number | undefined; c?: number | undefined; sv?: number | undefined; }> | undefined",
+    "  loja?: { [key: string]: unknown; vipAte?: number | undefined; vip?: boolean | undefined; boosts?: Record<string, number> | undefined; } | undefined",
+    "  bonusXp?: { tr?: number | undefined; pk?: number | undefined; partes?: { id?: string | undefined; tr?: number | undefined; pk?: number | undefined; ate?: number | undefined; }[] | undefined; } | undefined",
+    "  twitch?: { [key: string]: unknown; login?: string | undefined; aoVivo?: boolean | undefined; assistindo?: boolean | undefined; pct?: number | undefined; extra?: number | undefined; } | undefined",
+    "  kick?: { [key: string]: unknown; login?: string | undefined; vinculado?: boolean | undefined; pct?: number | undefined; minutos?: number | undefined; } | undefined"
+  ],
+  "PokeIdleClient": [
+    "value: typeof PokeIdleClient",
+    "type: PokeIdleClient",
+    "  inspector: Inspector | null",
+    "  state: GameState",
+    "  actions: Actions",
+    "  start: () => void",
+    "  stop: () => void",
+    "  connected: boolean",
+    "  on: <K extends keyof PacketMap>(type: K, listener: (packet: PacketMap[K]) => void) => Unsubscribe",
+    "  onType: (type: string, listener: PacketListener) => Unsubscribe",
+    "  onBattleEvent: <K extends BattleEventKind>(kind: K, listener: (event: BattleEventMap[K]) => void) => Unsubscribe",
+    "  onAnyBattleEvent: (listener: (event: BattleEvent) => void) => Unsubscribe",
+    "  onPacket: (listener: PacketListener) => Unsubscribe",
+    "  onOutgoing: (listener: PacketListener) => Unsubscribe",
+    "  onConnectionChange: (listener: (connected: boolean) => void) => Unsubscribe",
+    "  sendRaw: (text: string) => boolean",
+    "  sendCommand: (command: SendableCommand, options?: { confirmIrreversible?: boolean | undefined; }) => boolean"
+  ],
+  "Pokemon": [
+    "type: Pokemon",
+    "  id: number",
+    "  name: string | null",
+    "  level: number | null",
+    "  shiny: boolean | null",
+    "  inTeam: boolean",
+    "  heldItemId: number | null",
+    "  heldItemKnown: boolean"
+  ],
+  "PokemonWire": [
+    "type: PokemonWire",
+    "  id?: number | undefined",
+    "  speciesId?: number | undefined",
+    "  nome?: string | undefined",
+    "  looktype?: number | undefined",
+    "  lookShiny?: number | null | undefined",
+    "  tipos?: string[] | undefined",
+    "  level?: number | undefined",
+    "  xp?: number | undefined",
+    "  xpNivel?: number | undefined",
+    "  xpProximo?: number | undefined",
+    "  quality?: number | undefined",
+    "  potencia?: number | undefined",
+    "  shiny?: boolean | undefined",
+    "  slot?: number | undefined",
+    "  hp?: number | undefined",
+    "  maxHp?: number | undefined",
+    "  poder?: number | undefined",
+    "  nota?: number | undefined",
+    "  stats?: StatsWire | undefined",
+    "  ivs?: StatsWire | undefined",
+    "  refino?: StatsWire | undefined",
+    "  refinoTotal?: number | undefined",
+    "  tmElemental?: string | null | undefined",
+    "  tmAoe?: boolean | undefined",
+    "  heldItemId?: number | null | undefined",
+    "  starter?: boolean | undefined",
+    "  caughtAt?: number | undefined",
+    "  caughtBy?: boolean | undefined",
+    "  pisoNivel?: number | undefined"
+  ],
+  "PurchaseEvent": [
+    "type: PurchaseEvent",
+    "  k: \"compra\"",
+    "  nome?: string | undefined",
+    "  qtd?: number | undefined",
+    "  gasto?: number | undefined"
+  ],
+  "RaidPacket": [
+    "type: RaidPacket",
+    "  t: \"raid\"",
+    "  agora?: number | undefined",
+    "  edicao?: { id?: string | undefined; numero?: number | undefined; dia?: string … [332 chars, sha1 1a1a714dd10c]",
+    "  gigantamax?: { [key: string]: unknown; dex?: number | undefined; slug?: string | undefined; nome?: string | undefined; tipos?: string[] | undefined; hpMax?: number | undefined; } | undefined",
+    "  maxEquipe?: number | undefined",
+    "  inscritos?: number | undefined",
+    "  eu?: { inscrito?: boolean | undefined; inscritoEm?: number | undefined; equipeIds?: number[] | undefined; } | undefined",
+    "  batalha?: unknown",
+    "  resultado?: unknown"
+  ],
+  "RankingCardPacket": [
+    "type: RankingCardPacket",
+    "  t: \"ranking.ficha\"",
+    "  pokemon?: (PokemonWire & { dono?: string | undefined; }) | undefined"
+  ],
+  "RateLimit": [
+    "type: RateLimit",
+    "  minIntervalMs?: number | undefined",
+    "  maxPerMinute?: number | undefined"
+  ],
+  "RateLimited": [
+    "type: RateLimited",
+    "  status: \"rate-limited\"",
+    "  reason: \"interval\" | \"per-minute\" | \"unconfirmed-cooldown\"",
+    "  retryInMs: number"
+  ],
+  "readFrame": [
+    "value: (text: string, maxBytes?: number) => FrameResult"
+  ],
+  "redact": [
+    "value: (value: unknown, options?: RedactOptions, depth?: number) => unknown"
+  ],
+  "REDACTED": [
+    "value: \"[redacted]\""
+  ],
+  "RedactOptions": [
+    "type: RedactOptions",
+    "  maxArrayItems?: number | undefined",
+    "  maxDepth?: number | undefined",
+    "  maxStringLength?: number | undefined",
+    "  maxObjectKeys?: number | undefined",
+    "  maskStrings?: boolean | undefined"
+  ],
+  "SaleEvent": [
+    "type: SaleEvent",
+    "  k: \"venda\"",
+    "  nome?: string | undefined",
+    "  ganho?: number | undefined",
+    "  qtd?: number | undefined"
+  ],
+  "Scheduler": [
+    "type: Scheduler",
+    "  now: () => number",
+    "  setTimeout: (callback: () => void, ms: number) => unknown",
+    "  clearTimeout: (handle: unknown) => void"
+  ],
+  "SellRequest": [
+    "type: SellRequest",
+    "  pokemonId: number",
+    "  name: string | null",
+    "  level: number | null",
+    "  shiny: boolean | null"
+  ],
+  "SellResult": [
+    "type: RateLimited | { status: \"confirmed\"; request: SellRequest; confirmedBy: \"e… [706 chars, sha1 65d78ab3bc3f]"
+  ],
+  "SendableCommand": [
+    "type: { readonly t: \"shop.buy\"; readonly kind: \"ball\" | \"item\"; readonly id: num… [8952 chars, sha1 cd0664c487cc]"
+  ],
+  "SERVER_PACKET_READS": [
+    "value: { readonly amigos: readonly [\"busca\", \"coins\", \"conversa\", \"dm\", \"dmAtual… [4258 chars, sha1 672387e9bd3f]"
+  ],
+  "SERVER_PACKET_TYPES": [
+    "value: readonly [\"amigos\", \"batalha\", \"bicicletas.lista\", \"bloqueios\", \"campeona… [650 chars, sha1 d99354003a3f]"
+  ],
+  "ServerPacket": [
+    "type: WelcomePacket | StatePacket | FieldInitPacket | FieldPacket | ChatPacket |… [1570 chars, sha1 43e155788135]"
+  ],
+  "ServerPacketType": [
+    "type: \"amigos\" | \"batalha\" | \"bicicletas.lista\" | \"bloqueios\" | \"campeonato\" | \"… [688 chars, sha1 edb0179ba528]"
+  ],
+  "ShinyCapturePacket": [
+    "type: ShinyCapturePacket",
+    "  t: \"shiny.captura\"",
+    "  nick?: string | undefined",
+    "  looktype?: number | undefined",
+    "  vs?: number[] | undefined",
+    "  pokemon?: { id?: number | undefined; nome?: string | undefined; speciesId?: number | undefined; level?: number | undefined; looktype?: number | undefined; } | undefined"
+  ],
+  "ShopEntry": [
+    "type: ShopEntry",
+    "  itemId: number",
+    "  name: string",
+    "  price: number | null"
+  ],
+  "ShopItemWire": [
+    "type: ShopItemWire",
+    "  itemId?: number | undefined",
+    "  preco?: number | undefined",
+    "  nome?: string | undefined"
+  ],
+  "SpawnEvent": [
+    "type: SpawnEvent",
+    "  k: \"spawn\"",
+    "  slot?: number | undefined",
+    "  speciesId?: number | undefined",
+    "  nome?: string | undefined",
+    "  looktype?: number | undefined",
+    "  level?: number | undefined",
+    "  hp?: number | undefined",
+    "  maxHp?: number | undefined",
+    "  tipos?: string[] | undefined"
+  ],
+  "StatePacket": [
+    "type: StatePacket",
+    "  t: \"estado\"",
+    "  estado?: PlayerStateWire | undefined"
+  ],
+  "StatsWire": [
+    "type: StatsWire",
+    "  hp?: number | undefined",
+    "  atk?: number | undefined",
+    "  def?: number | undefined",
+    "  spAtk?: number | undefined",
+    "  spDef?: number | undefined",
+    "  speed?: number | undefined"
+  ],
+  "TEXT_MASK": [
+    "value: \"[text]\""
+  ],
+  "TrafficBattleEvents": [
+    "type: TrafficBattleEvents",
+    "  ataque: AttackEvent",
+    "  morte: DeathEvent",
+    "  bola: BallEvent",
+    "  fugiu: FledEvent",
+    "  spawn: SpawnEvent",
+    "  compra: PurchaseEvent",
+    "  venda: SaleEvent"
+  ],
+  "TrafficPackets": [
+    "type: TrafficPackets",
+    "  welcome: WelcomePacket",
+    "  estado: StatePacket",
+    "  batalha: BattlePacket",
+    "  campo: FieldPacket",
+    "  campo.init: FieldInitPacket",
+    "  chat: ChatPacket",
+    "  chat.historico: ChatHistoryPacket",
+    "  chat.fixadas: ChatPinnedListPacket",
+    "  chat.fixada: ChatPinnedPacket",
+    "  chat.del: ChatDeletedPacket",
+    "  chat.interrompido: ChatStoppedPacket",
+    "  amigos: FriendsPacket",
+    "  bloqueios: BlocklistPacket",
+    "  market: MarketPacket",
+    "  ranking.ficha: RankingCardPacket",
+    "  shiny.captura: ShinyCapturePacket",
+    "  raid: RaidPacket",
+    "  guild: GuildPacket",
+    "  mg: MiniGameRoundPacket | MiniGameStagePacket | MiniGameRevealPacket | MiniGameSnapshotPacket | MiniGameOtherPacket",
+    "  pong: Packet & { readonly t: \"pong\"; }"
+  ],
+  "Transport": [
+    "type: Transport",
+    "  start: (handlers: TransportHandlers) => void",
+    "  stop: () => void",
+    "  send: (text: string) => boolean",
+    "  readyState: number"
+  ],
+  "TransportHandlers": [
+    "type: TransportHandlers",
+    "  onMessage: (text: string) => void",
+    "  onOutgoing?: ((text: string) => void) | undefined",
+    "  onOpen?: (() => void) | undefined",
+    "  onClose?: (() => void) | undefined",
+    "  onError?: ErrorHandler | undefined"
+  ],
+  "TypedCommands": [
+    "type: TypedCommands",
+    "  hello: { readonly t: \"hello\"; readonly nick: string; readonly token: string; readonly delta: 1; readonly dispositivo: string; }",
+    "  ping: { readonly t: \"ping\"; }",
+    "  cliente.economia: { readonly t: \"cliente.economia\"; readonly ativo: boolean; }",
+    "  bloqueio.lista: { readonly t: \"bloqueio.lista\"; }",
+    "  chat.historico: { readonly t: \"chat.historico\"; readonly canal: string; }",
+    "  shop.buy: { readonly t: \"shop.buy\"; readonly kind: \"ball\" | \"item\"; readonly id: number; readonly qty: number; }",
+    "  shop.sellPokemon: { readonly t: \"shop.sellPokemon\"; readonly pokemonId: number; }",
+    "  shop.sellAllPokemons: { readonly t: \"shop.sellAllPokemons\"; readonly ateId: number; }",
+    "  loja.comprar: { readonly t: \"loja.comprar\"; readonly id: string; readonly precoVisto: number; }",
+    "  market.comprar: { readonly t: \"market.comprar\"; readonly id: number; readonly qtd: number; readonly preco: number; readonly moeda: Currency; readonly sorteioUi?: 1 | undefined; }",
+    "  market.criar: { readonly t: \"market.criar\"; readonly tipo: \"item\" | \"pokemon\";… [358 chars, sha1 3069591d15ec]",
+    "  market.cancelar: { readonly t: \"market.cancelar\"; readonly id: number; }",
+    "  market.editar: { readonly t: \"market.editar\"; readonly id: number; readonly preco: number; readonly moeda: Currency; }",
+    "  market.estender: { readonly t: \"market.estender\"; readonly id: number; readonly dias: number; }",
+    "  market.favoritar: { readonly t: \"market.favoritar\"; readonly id: number; readonly ativo: boolean; }",
+    "  market.anuncio: { readonly t: \"market.anuncio\"; readonly id: number; }",
+    "  market.anunciarChat: { readonly t: \"market.anunciarChat\"; readonly id: number; }",
+    "  market.itens: { readonly t: \"market.itens\"; }",
+    "  market.item: { readonly t: \"market.item\"; readonly itemId: number; readonly moeda: Currency; }",
+    "  market.meus: { readonly t: \"market.meus\"; }",
+    "  market.medias: { readonly t: \"market.medias\"; }",
+    "  item.use: { readonly t: \"item.use\"; readonly itemId: number; }",
+    "  bolsa.descartar: { readonly t: \"bolsa.descartar\"; readonly tipo: string; readonly id: number; readonly qtd: number; }",
+    "  orbs.painel: { readonly t: \"orbs.painel\"; }"
+  ],
+  "Unsubscribe": [
+    "type: () => void"
+  ],
+  "WelcomePacket": [
+    "type: WelcomePacket",
+    "  t: \"welcome\"",
+    "  admin?: boolean | undefined",
+    "  chatMod?: boolean | undefined",
+    "  chatCmd?: boolean | undefined",
+    "  chatFixar?: boolean | undefined",
+    "  chatInterromper?: boolean | undefined",
+    "  estado?: PlayerStateWire | undefined",
+    "  hunts?: HuntWire[] | undefined",
+    "  catalogoBolas?: BallCatalogEntryWire[] | undefined",
+    "  itensCompraveis?: ShopItemWire[] | undefined",
+    "  itensNossos?: ExtraItemWire[] | undefined",
+    "  xpShareHeld?: { enabled?: boolean | undefined; itemId?: number | undefined; pct?: number | undefined; } | undefined",
+    "  potencias?: { n?: number | undefined; chance?: number | undefined; bonus?: number | undefined; }[] | undefined",
+    "  shinyLooks?: Record<string, number> | undefined",
+    "  chanceShiny?: number | undefined",
+    "  misticoPool?: number[] | undefined",
+    "  safariPool?: number | undefined",
+    "  maxEquipe?: number | undefined",
+    "  tabelaTipos?: Record<string, Record<string, number>> | undefined",
+    "  multHpSelvagem?: number | undefined",
+    "  multDanoSelvagem?: number | undefined",
+    "  itensTipos?: Record<string, string> | undefined",
+    "  pedrasEvolucao?: Record<string, { itemId?: number | undefined; nome?: string | undefined; }> | undefined",
+    "  outlandTiers?: { tier?: number | undefined; rotulo?: string | undefined; nivel?: number | undefined; mult?: number | undefined; }[] | undefined",
+    "  economia?: { [key: string]: unknown; orbCompraUsdt?: number | undefined; orbSa… [476 chars, sha1 bd5e92190ced]",
+    "  mercado?: { [key: string]: unknown; catalogo?: { id?: number | undefined; nome… [654 chars, sha1 4379c067d932]",
+    "  lojaProdutos?: { [key: string]: unknown; id?: string | undefined; cat?: string | undefined; grupo?: string | undefined; nome?: string | undefined; preco?: number | undefined; descricao?: string | undefined; }[] | undefined",
+    "  captura?: { base?: number | undefined; piso?: number | undefined; teto?: number | undefined; raridadeDiv?: number | undefined; precoSemPreco?: number | undefined; porDegrau?: Record<string, number> | undefined; } | undefined",
+    "  mega?: { [key: string]: unknown; fragmentoId?: number | undefined; custo?: num… [315 chars, sha1 ba9269da8035]",
+    "  bossesCatalogo?: { [key: string]: unknown; key?: string | undefined; name?: string | undefined; pokeId?: number | undefined; level?: number | undefined; type1?: string | undefined; type2?: string | null | undefined; }[] | undefined",
+    "  bossesJogaveis?: { [key: string]: unknown; key?: string | undefined; nome?: st… [250 chars, sha1 3a91622481f1]"
+  ]
+}

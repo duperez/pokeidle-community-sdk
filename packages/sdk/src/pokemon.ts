@@ -13,8 +13,10 @@ export interface Pokemon {
   shiny: boolean | null;
   /** Is it one of the pokémon in your team (as opposed to the Depot)? */
   inTeam: boolean;
-  /** The item it holds, or `null` when it holds nothing or the server did not say. */
+  /** The item it holds, or `null` when it holds nothing (or the server did not say). */
   heldItemId: number | null;
+  /** `false` when the server sent a value for the held item that could not be read: what it holds is then UNKNOWN, not "nothing". */
+  heldItemKnown: boolean;
 }
 
 /** `null` when the row has no usable id. */
@@ -29,5 +31,6 @@ export function normalizePokemon(wire: PokemonWire): Pokemon | null {
     // Fail closed: any value in `slot` (even an odd one) means "team"; only its absence means the Depot.
     inTeam: wire.slot !== undefined && wire.slot !== null,
     heldItemId: asId(wire.heldItemId),
+    heldItemKnown: wire.heldItemId === undefined || wire.heldItemId === null || asId(wire.heldItemId) !== null,
   };
 }

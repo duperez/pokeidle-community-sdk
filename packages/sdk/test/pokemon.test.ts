@@ -11,8 +11,17 @@ test('normalizePokemon: game field names in, English model out', () => {
     shiny: true,
     inTeam: true,
     heldItemId: 70050,
+    heldItemKnown: true,
   });
-  assert.deepEqual(normalizePokemon({ id: 7 }), { id: 7, name: null, level: null, shiny: null, inTeam: false, heldItemId: null });
+  assert.deepEqual(normalizePokemon({ id: 7 }), {
+    id: 7,
+    name: null,
+    level: null,
+    shiny: null,
+    inTeam: false,
+    heldItemId: null,
+    heldItemKnown: true,
+  });
 });
 
 test('normalizePokemon: text ids work, rows without a usable id are refused, odd values become null', () => {
@@ -20,7 +29,7 @@ test('normalizePokemon: text ids work, rows without a usable id are refused, odd
   assert.equal(normalizePokemon({}), null);
   assert.equal(normalizePokemon({ id: 'abc' as never }), null);
   const odd = normalizePokemon({ id: 1, nome: 5 as never, level: NaN, shiny: 'yes' as never, heldItemId: 'x' as never });
-  assert.deepEqual(odd, { id: 1, name: null, level: null, shiny: null, inTeam: false, heldItemId: null });
+  assert.deepEqual(odd, { id: 1, name: null, level: null, shiny: null, inTeam: false, heldItemId: null, heldItemKnown: false });
 });
 
 test('normalizePokemon fails closed on the team: any slot value but null/absent means team', () => {
@@ -94,4 +103,21 @@ test('state.player is the same snapshot until an update; pokemonCount follows th
   state.applyPacket({ t: 'estado', estado: { pkFora: [1] } });
   assert.equal(state.pokemonCount, 1);
   assert.equal(state.player?.pokemons.length, 1);
+});
+
+test('an unreadable held item is UNKNOWN, not "nothing": holdsExpShare answers null (fail closed)', () => {
+  const state = stateWith(sellWelcome([pokemon(5, { heldItemId: ' 70050 ' }), pokemon(6, { heldItemId: null }), pokemon(7)]));
+  assert.equal(state.pokemon(5)?.heldItemKnown, false);
+  assert.equal(state.holdsExpShare(5), null);
+  assert.equal(state.holdsExpShare(6), false);
+  assert.equal(state.holdsExpShare(7), false);
+});
+
+test('state.player is frozen, and rows without a numeric id are left out everywhere', () => {
+  const state = stateWith(sellWelcome([pokemon(1), { id: 'abc', nome: 'Bad' }]));
+  assert.equal(Object.isFrozen(state.player), true);
+  assert.equal(Object.isFrozen(state.player?.pokemons), true);
+  assert.equal(state.pokemonCount, 1);
+  assert.equal(state.pokemons.length, 1);
+  assert.equal(state.findPokemon(1)?.id, 1);
 });
