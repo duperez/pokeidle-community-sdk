@@ -1,5 +1,5 @@
+export { type Actions } from './actions.js';
 export {
-  type Actions,
   type ActionsOptions,
   type BuyRequest,
   type BuyResult,
@@ -8,7 +8,7 @@ export {
   type Scheduler,
   type SellRequest,
   type SellResult,
-} from './actions.js';
+} from './actions-types.js';
 export { PokeIdleClient, type ClientOptions, type Unsubscribe } from './client.js';
 export { Inspector, type InspectorDump, type InspectorOptions } from './inspector.js';
 export {

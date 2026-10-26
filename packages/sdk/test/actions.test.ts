@@ -718,3 +718,14 @@ test('a shiny mark or a "Shiny " prefix in the event name is ignored', async () 
     assert.equal(result.status === 'confirmed' && result.confirmedBy, 'event', nome);
   }
 });
+
+test('limits are inclusive at the boundary: spending exactly the cap or exactly your gold is allowed, one more is not', async () => {
+  const capped = setup({ maxGoldPerHour: 1300 });
+  assert.equal((await capped.actions.buyBall(Ball.UltraBall, 10, { dryRun: true })).status, 'dry-run'); // 1 300 of 1 300
+  assert.equal((await capped.actions.buyBall(Ball.UltraBall, 11, { dryRun: true })).status, 'spend-cap'); // 1 430
+
+  const poor = setup({}, false);
+  poor.feed(welcome({ gold: 1300 }));
+  assert.equal((await poor.actions.buyBall(Ball.UltraBall, 10, { dryRun: true })).status, 'dry-run'); // 1 300 with 1 300
+  assert.equal((await poor.actions.buyBall(Ball.UltraBall, 11, { dryRun: true })).status, 'insufficient-gold');
+});

@@ -1,4 +1,5 @@
-import { Actions, type ActionsOptions } from './actions.js';
+import { Actions } from './actions.js';
+import type { ActionsOptions } from './actions-types.js';
 import { defaultErrorHandler, type ErrorHandler } from './errors.js';
 import type { PacketListener, Unsubscribe } from './listeners.js';
 import { Inspector } from './inspector.js';
