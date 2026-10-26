@@ -1,4 +1,5 @@
 import { ballInfo, itemInfo } from './catalog/index.js';
+import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
 import type { Packet } from './packets.js';
 import type { PlayerStateWire, PokemonWire, ShopItemWire, BallCatalogEntryWire, ExtraItemWire } from './protocol/wire.js';
 
@@ -61,6 +62,8 @@ const rowsWithId = (v: unknown): PokemonWire[] =>
  * Anything malformed is ignored instead of throwing: the server's format can change without notice.
  */
 export class GameState {
+  constructor(private readonly options: { onError?: ErrorHandler } = {}) {}
+
   private fields: Record<string, unknown> | null = null;
   /** Keyed by the id as text, so `11` and `"11"` are the same pokémon. */
   private pokemonById = new Map<string, PokemonWire>();
@@ -262,14 +265,8 @@ export class GameState {
       if (Array.isArray(dexFora)) for (const key of dexFora) delete dex[String(key)];
       this.fields['pokedex'] = dex;
     }
-    for (const listener of [...this.listeners]) {
-      try {
-        listener();
-      } catch (error) {
-        // eslint-disable-next-line no-console -- to be routed through the client's `onError` (code quality plan, phase 3)
-        console.error('[pokeidle-community-sdk] state listener failed', error);
-      }
-    }
+    const onError = this.options.onError ?? defaultErrorHandler;
+    for (const listener of [...this.listeners]) guarded(onError, listener);
   }
 }
 

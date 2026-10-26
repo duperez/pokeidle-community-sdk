@@ -1,3 +1,4 @@
+import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
 import type { Transport, TransportHandlers } from './transport.js';
 
 /** Minimal view of the page the transport needs. Tests pass a fake; in a real page it is `window`. */
@@ -28,8 +29,13 @@ type WithHook = PageLike & { [HOOK_KEY]?: SharedHook };
 export class PageTransport implements Transport {
   private hook: SharedHook | null = null;
   private handlers: TransportHandlers | null = null;
+  private subscription: TransportHandlers | null = null;
 
-  constructor(private readonly page: PageLike = globalThis) {}
+  /** @param options.onError used when whoever starts the transport does not hand over its own error handler */
+  constructor(
+    private readonly page: PageLike = globalThis,
+    private readonly options: { onError?: ErrorHandler } = {},
+  ) {}
 
   get readyState(): number {
     return this.hook?.socket?.readyState ?? -1;
@@ -39,14 +45,23 @@ export class PageTransport implements Transport {
     if (this.handlers) return;
     this.handlers = handlers;
     this.hook = installHook(this.page);
-    this.hook.subscribers.add(handlers);
+    // Each subscriber is guarded with ITS error handler: one that throws reaches its owner and never the other subscribers.
+    const onError = handlers.onError ?? this.options.onError ?? defaultErrorHandler;
+    this.subscription = {
+      onMessage: (text) => guarded(onError, () => handlers.onMessage(text)),
+      onOutgoing: (text) => guarded(onError, () => handlers.onOutgoing?.(text)),
+      onOpen: () => guarded(onError, () => handlers.onOpen?.()),
+      onClose: () => guarded(onError, () => handlers.onClose?.()),
+    };
+    this.hook.subscribers.add(this.subscription);
     // A socket adopted before this transport started is already open: say so, or the client would think it is offline.
     if (this.hook.socket?.readyState === 1) handlers.onOpen?.();
   }
 
   stop(): void {
     if (!this.handlers || !this.hook) return;
-    this.hook.subscribers.delete(this.handlers);
+    if (this.subscription) this.hook.subscribers.delete(this.subscription);
+    this.subscription = null;
     this.handlers = null;
     this.hook = null; // the page patch stays: other copies may share it and it is harmless without subscribers
   }
@@ -79,15 +94,9 @@ function installHook(page: WithHook): SharedHook {
       return false;
     }
   };
+  // Backstop for subscribers that are not guarded (another copy of the SDK, an older version): never let one stop the rest.
   const each = (fn: (h: TransportHandlers) => void): void => {
-    for (const h of [...hook.subscribers]) {
-      try {
-        fn(h);
-      } catch (error) {
-        // eslint-disable-next-line no-console -- to be routed through the client's `onError` (code quality plan, phase 3)
-        console.error('[pokeidle-community-sdk] handler failed', error);
-      }
-    }
+    for (const h of [...hook.subscribers]) guarded(defaultErrorHandler, () => fn(h));
   };
   const adopt = (ws: WebSocket): void => {
     hook.socket = ws;

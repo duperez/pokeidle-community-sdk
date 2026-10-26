@@ -1,4 +1,5 @@
 import { Actions, type ActionsOptions } from './actions.js';
+import { defaultErrorHandler, type ErrorHandler } from './errors.js';
 import type { PacketListener, Unsubscribe } from './listeners.js';
 import { Inspector } from './inspector.js';
 import { DEFAULT_MAX_PACKET_BYTES, readFrame, type Packet } from './packets.js';
@@ -18,8 +19,12 @@ export interface ClientOptions {
   maxPacketBytes?: number;
   /** Options of `client.actions`: dry run, rate limit, spending cap. */
   actions?: ActionsOptions;
-  /** Called when one of your listeners throws (it never breaks the other listeners). Default: `console.error`. */
-  onError?: (error: unknown) => void;
+  /**
+   * Called when something the SDK cannot throw to you fails: one of your listeners, a state callback or a transport
+   * handler threw. It never breaks the other listeners. Default: logs to the console. The same handler is given to the
+   * transport and to `client.state`.
+   */
+  onError?: ErrorHandler;
 }
 
 /**
@@ -29,12 +34,12 @@ export interface ClientOptions {
 export class PokeIdleClient {
   readonly inspector: Inspector | null;
   /** The player's state, kept up to date from the game's packets. */
-  readonly state = new GameState();
+  readonly state: GameState;
   /** What you can DO in the game (buy...), with safety nets: see `ActionsOptions`. */
   readonly actions: Actions;
   private readonly transport: Transport;
   private readonly maxBytes: number;
-  private readonly onError: (error: unknown) => void;
+  private readonly onError: ErrorHandler;
   private readonly byType = new Map<string, Set<PacketListener>>();
   private readonly anyPacket = new Set<PacketListener>();
   private readonly outgoing = new Set<PacketListener>();
@@ -48,8 +53,8 @@ export class PokeIdleClient {
     this.inspector = options.inspector === false ? null : (options.inspector ?? new Inspector());
     this.maxBytes = options.maxPacketBytes ?? DEFAULT_MAX_PACKET_BYTES;
     this.actions = new Actions(this, options.actions);
-    // eslint-disable-next-line no-console -- the one place the default error handler is defined
-    this.onError = options.onError ?? ((error) => console.error('[pokeidle-community-sdk] listener failed', error));
+    this.onError = options.onError ?? defaultErrorHandler;
+    this.state = new GameState({ onError: this.onError });
   }
 
   /** Starts listening. Safe to call more than once. */
@@ -61,6 +66,7 @@ export class PokeIdleClient {
       onOutgoing: (text) => this.handleOutgoing(text),
       onOpen: () => this.emitConnection(true),
       onClose: () => this.emitConnection(false),
+      onError: this.onError,
     });
   }
 

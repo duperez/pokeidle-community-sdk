@@ -1,3 +1,5 @@
+import type { ErrorHandler } from './errors.js';
+
 /** What a transport tells the client. All handlers receive the raw text frame, exactly as the game sent it. */
 export interface TransportHandlers {
   /** A frame arrived from the server. */
@@ -6,6 +8,8 @@ export interface TransportHandlers {
   onOutgoing?(text: string): void;
   onOpen?(): void;
   onClose?(): void;
+  /** Where the transport reports an error thrown by one of these handlers (it must not stop the other subscribers). */
+  onError?: ErrorHandler;
 }
 
 /**
