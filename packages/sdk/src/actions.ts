@@ -1,5 +1,7 @@
 import { itemInfo } from './catalog/index.js';
 import type { PokeIdleClient } from './client.js';
+import { isIrreversibleCommand, type SendableCommand } from './protocol/commands.js';
+import { CommandRefusedError } from './protocol/send-guard.js';
 
 // Actions: the things you DO in the game, as functions that tell you what happened. Each one checks what it can before
 // sending, sends the game's own command, and then waits for the game to confirm it instead of assuming it worked.
@@ -34,9 +36,10 @@ export interface ActionsOptions {
   unconfirmedCooldownMs?: number;
   /**
    * The checks made before sending. `true` (default) turns them all on, `false` all off and lets the game decide;
-   * an object turns each on or off: `notForSale` (the catalogs say it is not sold) and `gold` (not enough gold).
+   * an object turns each on or off: `notForSale` (a purchase the catalogs say is not sold), `gold` (not enough gold) and
+   * `sellable` (a pokémon the game's client would not sell: active, team, Collection, Exp. Share).
    */
-  checks?: boolean | { notForSale?: boolean; gold?: boolean };
+  checks?: boolean | { notForSale?: boolean; gold?: boolean; sellable?: boolean };
   /** Clock and timers, replaceable for tests. @internal */
   scheduler?: Scheduler;
 }
@@ -45,6 +48,13 @@ export interface Scheduler {
   now(): number;
   setTimeout(callback: () => void, ms: number): unknown;
   clearTimeout(handle: unknown): void;
+}
+
+/** An action held back by a limit; `retryInMs` says for how long. */
+export interface RateLimited {
+  status: 'rate-limited';
+  reason: 'interval' | 'per-minute' | 'unconfirmed-cooldown';
+  retryInMs: number;
 }
 
 export interface BuyRequest {
@@ -77,8 +87,36 @@ export type BuyResult =
   | { status: 'no-state' }
   | { status: 'not-for-sale'; request: BuyRequest; reason: string }
   | { status: 'insufficient-gold'; request: BuyRequest; needed: number; have: number }
-  | { status: 'rate-limited'; reason: 'interval' | 'per-minute' | 'unconfirmed-cooldown'; retryInMs: number }
+  | RateLimited
   | { status: 'spend-cap'; request: BuyRequest; spentLastHour: number; cap: number }
+  | { status: 'busy' };
+
+export interface SellRequest {
+  pokemonId: number;
+  name: string | null;
+  level: number | null;
+  shiny: boolean | null;
+}
+
+export type SellResult =
+  /**
+   * `gained` is the gold the game reports for the sale (from its `venda` event), or `null` when only the state confirmed it.
+   * `state` means the pokémon left your list, which is strong evidence but not proof of a sale (a partial list, a new
+   * `welcome`, or a market listing also remove it).
+   */
+  | { status: 'confirmed'; request: SellRequest; confirmedBy: 'event' | 'state'; confidence: 'certain' | 'probable'; gained: number | null }
+  | { status: 'dry-run'; request: SellRequest; command: { t: 'shop.sellPokemon'; pokemonId: number } }
+  /** Sent, but the game did not confirm in time. It may still have been sold: do not assume it was not. */
+  | { status: 'unconfirmed'; request: SellRequest; waitedMs: number }
+  /** The game answered with an error while we waited (see `BuyResult`): only `probable` that it was about this sale. */
+  | { status: 'rejected'; request: SellRequest; confidence: 'probable'; error: { chave?: string; msg?: string; params?: Record<string, unknown> } }
+  | { status: 'not-connected' }
+  | { status: 'no-state' }
+  /** The pokémon is not in your list (the state may be partial, or it was already sold). */
+  | { status: 'not-found'; pokemonId: number }
+  /** The game does not let this one be sold, going by the same rules its client uses: see `reason`. */
+  | { status: 'not-sellable'; request: SellRequest; reason: string }
+  | RateLimited
   | { status: 'busy' };
 
 const MAX_PER_ORDER = 9999; // the game's own client never asks for more
@@ -151,12 +189,26 @@ export class Actions {
     if (dryRun) return { status: 'dry-run', request, command: { ...command } };
 
     const before = kind === 'ball' ? state.ballCount(id) : state.itemCount(id);
+    return this.dispatch({ command: { ...command }, confirmIrreversible: false, now, spendGold: request.totalPrice, wait: () => this.waitForConfirmation(request, before) });
+  }
+
+  /**
+   * The part every action shares: one at a time, listen BEFORE sending (the answer can be instant), send, record the
+   * rate and spending budgets, wait, and after an unconfirmed or rejected order hold the next one back.
+   */
+  private async dispatch<R extends { status: string }>(spec: {
+    command: SendableCommand;
+    confirmIrreversible: boolean;
+    now: number;
+    spendGold: number | null;
+    wait: () => { result: Promise<R>; cancel: () => void };
+  }): Promise<R | { status: 'not-connected' }> {
     this.inFlight = true;
     try {
-      const confirmation = this.waitForConfirmation(request, before); // listen BEFORE sending: the answer can be instant
+      const confirmation = spec.wait();
       let sent = false;
       try {
-        sent = this.client.sendCommand({ ...command });
+        sent = this.client.sendCommand(spec.command, { confirmIrreversible: spec.confirmIrreversible });
       } catch (error) {
         confirmation.cancel(); // a guard refused it (CommandRefusedError): nothing was sent
         throw error;
@@ -165,15 +217,106 @@ export class Actions {
         confirmation.cancel();
         return { status: 'not-connected' };
       }
-      this.lastSentAt = now;
-      this.sends = [...this.sends.filter((t) => now - t < MINUTE_MS), now];
-      if (request.totalPrice !== null) this.spending = [...this.spending.filter((e) => now - e.at < HOUR_MS), { at: now, gold: request.totalPrice }];
+      this.lastSentAt = spec.now;
+      this.sends = [...this.sends.filter((t) => spec.now - t < MINUTE_MS), spec.now];
+      if (spec.spendGold !== null) this.spending = [...this.spending.filter((e) => spec.now - e.at < HOUR_MS), { at: spec.now, gold: spec.spendGold }];
       const result = await confirmation.result;
       if (result.status === 'unconfirmed' || result.status === 'rejected') this.blockedUntil = this.scheduler.now() + (this.options.unconfirmedCooldownMs ?? DEFAULTS.unconfirmedCooldownMs);
       return result;
     } finally {
       this.inFlight = false;
     }
+  }
+
+  /**
+   * Sells ONE pokémon from your Depot to the NPC shop. IRREVERSIBLE: it needs `{ confirmIrreversible: true }` (not for a
+   * dry run). It refuses what the game's own client refuses (your active pokémon, your team, the Collection, one holding
+   * the Exp. Share) and waits for the game's `venda` event or for the pokémon to leave your list.
+   */
+  async sellPokemon(pokemonId: number, options: { dryRun?: boolean; confirmIrreversible?: boolean } = {}): Promise<SellResult> {
+    if (!Number.isInteger(pokemonId) || pokemonId < 0) throw new RangeError(`the pokémon id must be a non-negative integer, got ${String(pokemonId)}`);
+    const dryRun = options.dryRun ?? this.options.dryRun ?? false;
+    if (!dryRun && options.confirmIrreversible !== true && isIrreversibleCommand('shop.sellPokemon')) {
+      throw new CommandRefusedError('shop.sellPokemon', 'selling a pokémon cannot be undone: pass { confirmIrreversible: true } if you mean it');
+    }
+    if (this.inFlight) return { status: 'busy' };
+    if (!this.client.connected) return { status: 'not-connected' };
+    const state = this.client.state;
+    if (!state.complete) return { status: 'no-state' };
+
+    const pokemon = state.findPokemon(pokemonId);
+    if (!pokemon) return { status: 'not-found', pokemonId };
+    const request: SellRequest = { pokemonId, name: typeof pokemon.nome === 'string' ? pokemon.nome : null, level: typeof pokemon.level === 'number' ? pokemon.level : null, shiny: typeof pokemon.shiny === 'boolean' ? pokemon.shiny : null };
+    if (resolveChecks(this.options.checks).sellable) {
+      const reason = this.whyNotSellable(pokemon);
+      if (reason) return { status: 'not-sellable', request, reason };
+    }
+
+    const now = this.scheduler.now();
+    const limited = this.checkRateLimit(now);
+    if (limited) return limited;
+    const command = { t: 'shop.sellPokemon', pokemonId } as const;
+    if (dryRun) return { status: 'dry-run', request, command: { ...command } };
+
+    return this.dispatch({ command: { ...command }, confirmIrreversible: true, now, spendGold: null, wait: () => this.waitForSale(request) });
+  }
+
+  /**
+   * The rules of the game's own client for what the Depot sells. `null` when the pokémon can be sold.
+   * Fails CLOSED: selling cannot be undone, so when a protection depends on data that is missing or unreadable (a partial
+   * state) the answer is "no", never "nothing protects it".
+   */
+  private whyNotSellable(pokemon: { id?: number; slot?: number | null; heldItemId?: number | null }): string | null {
+    const state = this.client.state;
+    const id = Number(pokemon.id);
+    if (!Number.isFinite(id)) return 'the pokémon has no id';
+    const active = state.activePokemonId;
+    if (active === null) return 'your active pokémon is not known (the state is partial): reload the game page';
+    if (id === active) return 'it is your active pokémon';
+    if (pokemon.slot !== undefined && pokemon.slot !== null) return 'it is in your team (only the Depot is sold)';
+    if (!state.collectionKnown) return 'your Collection is not known (the state is partial): reload the game page';
+    if (state.isInCollection(id)) return 'it is in your Collection (locked)';
+    const xpShare = state.xpShareItemId;
+    if (xpShare === null) return 'the Exp. Share item is not known (the state is partial): reload the game page';
+    if (Number(pokemon.heldItemId) === xpShare) return 'it holds the Exp. Share';
+    return null;
+  }
+
+  /** Resolves with the first of: the game's `venda` event for this pokémon, the pokémon leaving the list, an error, the timeout. */
+  private waitForSale(request: SellRequest): { result: Promise<SellResult>; cancel: () => void } {
+    const timeoutMs = this.options.confirmTimeoutMs ?? DEFAULTS.confirmTimeoutMs;
+    const startedAt = this.scheduler.now();
+    const state = this.client.state;
+    // The `venda` event carries only a name. With two pokémon of the same name it cannot tell which one was sold, so
+    // then only the pokémon leaving the list confirms.
+    const sameName = request.name === null ? 0 : (state.player?.pokemons ?? []).filter((p) => typeof p.nome === 'string' && p.nome.toLowerCase() === request.name?.toLowerCase()).length;
+    const name = sameName === 1 ? (request.name?.toLowerCase() ?? null) : null;
+    let finish: (result: SellResult) => void = () => {};
+    const offs: Array<() => void> = [];
+    let timer: unknown;
+    const cleanup = (): void => {
+      for (const off of offs) off();
+      if (timer !== undefined) this.scheduler.clearTimeout(timer);
+    };
+    const result = new Promise<SellResult>((resolve) => {
+      finish = (value) => {
+        cleanup();
+        resolve(value);
+      };
+    });
+    offs.push(
+      this.client.onBattleEvent('venda', (event) => {
+        const eventName = typeof event['nome'] === 'string' ? event['nome'].toLowerCase() : null;
+        if (name === null || eventName !== name) return;
+        finish({ status: 'confirmed', request, confirmedBy: 'event', confidence: 'certain', gained: typeof event['ganho'] === 'number' ? event['ganho'] : null });
+      }),
+      state.onChange(() => {
+        if (state.findPokemon(request.pokemonId) === undefined) finish({ status: 'confirmed', request, confirmedBy: 'state', confidence: 'probable', gained: null });
+      }),
+      this.client.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })),
+    );
+    timer = this.scheduler.setTimeout(() => finish({ status: 'unconfirmed', request, waitedMs: this.scheduler.now() - startedAt }), timeoutMs);
+    return { result, cancel: cleanup };
   }
 
   private priceOf(kind: 'ball' | 'item', id: number): { unit: number | null; reason?: string } {
@@ -192,7 +335,7 @@ export class Actions {
     return { unit: null, reason: info ? `${info.name} is not an item the NPC shop is known to sell` : `item ${id} is not in the catalog` };
   }
 
-  private checkRateLimit(now: number): BuyResult | null {
+  private checkRateLimit(now: number): RateLimited | null {
     if (now < this.blockedUntil) return { status: 'rate-limited', reason: 'unconfirmed-cooldown', retryInMs: this.blockedUntil - now };
     const limit = this.options.rateLimit;
     if (limit === false) return null;
@@ -238,29 +381,27 @@ export class Actions {
         // At least the quantity ordered: a drop or a purchase made elsewhere that adds a little must not confirm this order.
         if (after - before >= request.quantity) finish({ status: 'confirmed', request, confirmedBy: 'inventory', confidence: 'probable', before, after, spent: request.totalPrice });
       }),
-      this.client.onType('erro', (packet) => {
-        const params = packet['params'];
-        finish({
-          status: 'rejected',
-          request,
-          confidence: 'probable',
-          error: {
-            ...(typeof packet['chave'] === 'string' ? { chave: packet['chave'] } : {}),
-            ...(typeof packet['msg'] === 'string' ? { msg: packet['msg'] } : {}),
-            ...(params !== null && typeof params === 'object' && !Array.isArray(params) ? { params: params as Record<string, unknown> } : {}),
-          },
-        });
-      }),
+      this.client.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })),
     );
     timer = this.scheduler.setTimeout(() => finish({ status: 'unconfirmed', request, waitedMs: this.scheduler.now() - startedAt }), timeoutMs);
     return { result, cancel: cleanup };
   }
 }
 
-function resolveChecks(checks: ActionsOptions['checks']): { notForSale: boolean; gold: boolean } {
-  if (checks === undefined || checks === true) return { notForSale: true, gold: true };
-  if (checks === false) return { notForSale: false, gold: false };
-  return { notForSale: checks.notForSale ?? true, gold: checks.gold ?? true };
+/** The useful part of an `erro` packet. */
+function errorOf(packet: Record<string, unknown>): { chave?: string; msg?: string; params?: Record<string, unknown> } {
+  const params = packet['params'];
+  return {
+    ...(typeof packet['chave'] === 'string' ? { chave: packet['chave'] } : {}),
+    ...(typeof packet['msg'] === 'string' ? { msg: packet['msg'] } : {}),
+    ...(params !== null && typeof params === 'object' && !Array.isArray(params) ? { params: params as Record<string, unknown> } : {}),
+  };
+}
+
+function resolveChecks(checks: ActionsOptions['checks']): { notForSale: boolean; gold: boolean; sellable: boolean } {
+  if (checks === undefined || checks === true) return { notForSale: true, gold: true, sellable: true };
+  if (checks === false) return { notForSale: false, gold: false, sellable: false };
+  return { notForSale: checks.notForSale ?? true, gold: checks.gold ?? true, sellable: checks.sellable ?? true };
 }
 
 /** A bad number would silently turn a protection off (`x < NaN` is always false): refuse it. */

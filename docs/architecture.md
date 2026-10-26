@@ -60,11 +60,19 @@ connection and full-state checks, price and gold checks from the catalogs the se
 the rate limit, then the send. It listens for the answer BEFORE sending (the answer can be instant) and resolves with the
 first of: the game's `compra` event (same quantity and, when known, same name), the inventory growing, an `erro` packet or
 the timeout. The inventory alone is a weak signal (balls used in the hunt at the same time can hide a small purchase),
-so the event is preferred; `confirmedBy` records which one confirmed, which also tells us whether the `compra` event
-really is emitted for NPC-shop purchases. A timeout is `unconfirmed`, not a failure: the order may be late, so the next
+so the event is preferred. It was verified in real traffic: the `compra` event is emitted for NPC-shop purchases, with
+`nome`, `qtd` and `gasto`, and arrives before the `estado` update (so `after` can equal `before`). `confirmedBy` records
+which signal confirmed. A timeout is `unconfirmed`, not a failure: the order may be late, so the next
 one waits (default 30 s), the same rule the Companion app uses after more than 57 000 real purchases.
 
-The prices come from the catalogs: balls from the server's ball catalog (`priceGold`), shop items from the welcome packet,
+Selling (`sellPokemon`) goes through the same `dispatch` (one in flight, rate limit, waiting after an unconfirmed or
+rejected order). Before sending it applies the game's own rules for the Depot, read from the client: not the active pokémon
+(`activeId`), not in the team (`slot` is set), not in the Collection (`automation.pokemonTravado`), not holding the Exp.
+Share (`xpShareHeld.itemId`). It fails closed: when the active pokémon, the Collection list or the Exp. Share item cannot
+be read (a partial state, ids that arrive as text are understood), the answer is "not sellable". The sale price comes from a function the client shares with the server and is not readable
+from the page script, so a dry run does not estimate it: the gold comes back in the `venda` event.
+
+The prices of purchases come from the catalogs: balls from the server's ball catalog (`priceGold`), shop items from the welcome packet,
 and potions and revives from the item catalog's `npcPrice` (checked against real purchases).
 
 ## Sending commands

@@ -166,6 +166,8 @@ export interface WelcomePacket extends Packet {
   readonly itensCompraveis?: ShopItemWire[];
   /** The game's own items (not in the public items catalog). */
   readonly itensNossos?: ExtraItemWire[];
+  /** The Exp. Share that a pokémon can hold: a pokémon holding it cannot be sold. */
+  readonly xpShareHeld?: { enabled?: boolean; itemId?: number; pct?: number };
   readonly potencias?: Array<{ n?: number; chance?: number; bonus?: number }>;
   readonly shinyLooks?: Record<string, number>;
   readonly chanceShiny?: number;

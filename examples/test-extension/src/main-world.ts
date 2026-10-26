@@ -35,7 +35,22 @@ function mountOverlay(): void {
   realBuy.textContent = 'REALLY buy 1 Poke Ball (5 gold)';
   realBuy.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
   realBuy.addEventListener('click', () => void client.actions.buyBall(Ball.PokeBall, 1).then((r) => show('buy', r)));
-  box.append(title, list, copy, copyCatalogs, document.createElement('br'), dryRun, realBuy, lastAction);
+  // Selling is IRREVERSIBLE: type the id of one pokémon of your Depot, try the dry run first, and the real button asks you again.
+  const sellId = document.createElement('input');
+  sellId.placeholder = 'pokémon id';
+  sellId.style.cssText = 'margin-top:6px;width:90px';
+  const sellDry = document.createElement('button');
+  sellDry.textContent = 'Dry run: sell';
+  sellDry.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
+  sellDry.addEventListener('click', () => void client.actions.sellPokemon(Number(sellId.value), { dryRun: true }).then((r) => show('sell dry run', r), (e: unknown) => show('sell error', String(e))));
+  const sellReal = document.createElement('button');
+  sellReal.textContent = 'SELL (irreversible)';
+  sellReal.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
+  sellReal.addEventListener('click', () => {
+    if (!window.confirm(`Sell pokémon ${sellId.value}? This cannot be undone.`)) return;
+    void client.actions.sellPokemon(Number(sellId.value), { confirmIrreversible: true }).then((r) => show('sell', r), (e: unknown) => show('sell error', String(e)));
+  });
+  box.append(title, list, copy, copyCatalogs, document.createElement('br'), dryRun, realBuy, document.createElement('br'), sellId, sellDry, sellReal, lastAction);
   document.documentElement.append(box);
 
   const render = (): void => {

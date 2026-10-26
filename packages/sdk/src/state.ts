@@ -30,6 +30,9 @@ export interface ShopEntry {
   price: number | null;
 }
 
+/** An id that may arrive as a number or as numeric text (the game is not consistent about it). */
+const asId = (v: unknown): number | null => (typeof v === 'string' && /^\d{1,15}$/.test(v) ? Number(v) : asNumber(v));
+
 const MAX_LIST = 2000;
 /** Keys that must never be copied from server data into our objects (they would change an object's prototype). */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -49,8 +52,7 @@ const ownMaps = (fields: Record<string, unknown>): Record<string, unknown> => {
 const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const asNumber = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const asText = (v: unknown, max = 60): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
-const rowsWithId = (v: unknown): Array<{ id?: number | string; [key: string]: unknown }> =>
-  Array.isArray(v) ? v.filter((k): k is { id: number | string } => isObject(k) && k['id'] != null) : [];
+const rowsWithId = (v: unknown): PokemonWire[] => (Array.isArray(v) ? v.filter((k): k is PokemonWire => isObject(k) && k['id'] != null) : []);
 
 /**
  * Keeps the player's state up to date. The game sends the whole state once (`welcome`, marked `cheio`) and then small
@@ -60,10 +62,11 @@ const rowsWithId = (v: unknown): Array<{ id?: number | string; [key: string]: un
 export class GameState {
   private fields: Record<string, unknown> | null = null;
   /** Keyed by the id as text, so `11` and `"11"` are the same pokémon. */
-  private pokemonById = new Map<string, { id?: number | string; [key: string]: unknown }>();
+  private pokemonById = new Map<string, PokemonWire>();
   private balls: BallEntry[] = [];
   private shop: ShopEntry[] = [];
   private extra: ExtraItemEntry[] = [];
+  private xpShareId: number | null = null;
   private readonly listeners = new Set<() => void>();
   private full = false;
 
@@ -79,6 +82,32 @@ export class GameState {
   /** The ball catalog from the last welcome packet. */
   get ballCatalog(): readonly BallEntry[] {
     return this.balls;
+  }
+
+  /** The item id of the Exp. Share a pokémon can hold (a pokémon holding it cannot be sold), or `null` before the welcome packet. */
+  get xpShareItemId(): number | null {
+    return this.xpShareId;
+  }
+
+  /** Is the list of pokémon locked in the Collection present and readable? Without it `isInCollection` knows nothing. */
+  get collectionKnown(): boolean {
+    return Array.isArray((this.fields?.['automation'] as { pokemonTravado?: unknown } | undefined)?.pokemonTravado);
+  }
+
+  /** The id of the pokémon that is out in the hunt right now, or `null`. */
+  get activePokemonId(): number | null {
+    return asId(this.fields?.['activeId']);
+  }
+
+  /** One of the player's pokémon by id (the id may come as a number or as text), or `undefined`. */
+  findPokemon(id: number): PokemonWire | undefined {
+    return this.pokemonById.get(String(id));
+  }
+
+  /** Is this pokémon in the Collection? The game calls it locked: it is kept out of the Depot's sales. */
+  isInCollection(id: number): boolean {
+    const locked = (this.fields?.['automation'] as { pokemonTravado?: unknown } | undefined)?.pokemonTravado;
+    return Array.isArray(locked) && locked.some((x) => Number(x) === id);
   }
 
   /** The game's own items (not in the public items catalog), from the last welcome packet. */
@@ -150,6 +179,8 @@ export class GameState {
         return id === null ? [] : [{ id, name: asText(b.nome, 40) ?? `Ball ${id}`, catchRate: asNumber(b.catchRate), priceGold: asNumber(b.priceGold), buyable: b.compravel === true }];
       });
     }
+    const xpShare = packet['xpShareHeld'];
+    if (isObject(xpShare)) this.xpShareId = asId(xpShare['itemId']);
     const extra = packet['itensNossos'];
     if (Array.isArray(extra)) {
       this.extra = extra.slice(0, MAX_LIST).filter(isObject).flatMap((e: ExtraItemWire) => {
@@ -175,7 +206,7 @@ export class GameState {
   private merge(partial: unknown, full: boolean): void {
     if (!isObject(partial)) return;
     const { cheio, pokemons, pkMud, pkFora, dexMud, dexFora, ...rest } = safeCopy(partial);
-    const known = (list: unknown): Array<[string, { id?: number | string; [key: string]: unknown }]> => rowsWithId(list).map((k) => [idKey(k.id), k]);
+    const known = (list: unknown): Array<[string, PokemonWire]> => rowsWithId(list).map((k) => [idKey(k.id), k]);
     if (full || cheio === true || !this.fields) {
       this.fields = ownMaps({ ...rest });
       if (full || cheio === true) this.full = true; // a delta that arrives first becomes the base but is not a complete state

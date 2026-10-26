@@ -28,10 +28,10 @@ test('every server packet type is classified, and has its list of fields the cli
   assert.ok(Object.values(PACKET_COVERAGE).every((level) => level === 'traffic' || level === 'client-code'));
 });
 
-test('every battle event kind is classified: five verified in traffic, the rest from the client\'s code', () => {
+test('every battle event kind is classified: six verified in traffic, the rest from the client\'s code', () => {
   assert.deepEqual(Object.keys(BATTLE_EVENT_READS).sort(), [...BATTLE_EVENT_KINDS].sort());
   const verified = BATTLE_EVENT_KINDS.filter((kind) => battleEventCoverage(kind) === 'traffic');
-  assert.deepEqual([...verified].sort(), ['ataque', 'bola', 'fugiu', 'morte', 'spawn']);
+  assert.deepEqual([...verified].sort(), ['ataque', 'bola', 'compra', 'fugiu', 'morte', 'spawn']);
   assert.ok(BATTLE_EVENT_KINDS.every((kind) => ['traffic', 'client-code'].includes(battleEventCoverage(kind))));
 });
 

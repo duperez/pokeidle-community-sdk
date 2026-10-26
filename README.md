@@ -51,10 +51,10 @@ if (result.status === 'confirmed') console.log(result.confirmedBy, result.before
 // 'dry-run' | 'unconfirmed' | 'rejected' | 'not-for-sale' | 'insufficient-gold' | 'rate-limited' | 'spend-cap' | 'busy' | ...
 ```
 
-`buyBall` and `buyItem` (potions, revives) exist today. The result says what happened, and `unconfirmed` means *sent but
+`buyBall`, `buyItem` (potions, revives) and `sellPokemon` exist today. The result says what happened, and `unconfirmed` means *sent but
 not confirmed in time*: it may still have happened, so the SDK waits 30 s before allowing another purchase instead of
 risking paying twice (the same wait follows a `rejected`: the game's errors carry no request id, so an error can be about
-something else). A purchase is confirmed by the game's own `compra` event (same quantity and name: `confidence: 'certain'`)
+something else). A purchase is confirmed by the game's own `compra` event (verified in real traffic: `nome`, `qtd` and `gasto`; same quantity and name: `confidence: 'certain'`; it arrives before the inventory update, so `after` can still equal `before`)
 or by the inventory growing by at least the quantity (`'probable'`), whichever comes first. Safety nets, all configurable
 and none of them stops you from turning it off (`new PokeIdleClient({ actions: { ... } })`; they live in memory, so a page
 reload starts them over):
@@ -63,8 +63,17 @@ reload starts them over):
   when a real call would be blocked.
 - A rate limit: 3 s between actions and at most 10 per minute (`rateLimit: false` turns it off).
 - `maxGoldPerHour`: a spending cap, counted when the order is sent (an order whose price is unknown is refused while a cap is set).
-- Checks before sending: not for sale, not enough gold (`checks: false`, or `{ notForSale, gold }` one by one, lets the game decide).
+- Checks before sending: not for sale, not enough gold (`checks: false`, or `{ notForSale, gold, sellable }` one by one, lets the game decide).
 - One action in flight at a time. Invalid quantities throw a `RangeError`.
+
+`sellPokemon(id, { confirmIrreversible: true })` sells ONE pokémon from your Depot to the NPC shop and cannot be undone, so
+it needs the explicit confirmation (not for a dry run). It refuses, with the reason, what the game's own client refuses to
+sell: your active pokémon, your team, the Collection (locked) and one holding the Exp. Share. Selling is irreversible, so
+it fails closed: if the state is partial and a protection cannot be read, it refuses. It is confirmed by the game's
+`venda` event (with the gold it reports; ignored when two pokémon share the name, because the event carries only a name) or
+by the pokémon leaving your list (strong evidence, not proof: a partial list or a market listing also removes it). It shares the one-at-a-time rule, the rate
+limit and the waiting period with the purchases. There is no "sell all" yet: it follows your collection rule, whose effect
+the SDK cannot predict from the client.
 
 ### Sending commands
 
@@ -87,8 +96,8 @@ command the client sends (216): the registry is extracted from the client itself
 
 | Level | Meaning | Packets | Battle events | Commands |
 |---|---|---|---|---|
-| `traffic` | fields verified in real traffic | 20 | 5 | 6 |
-| `client-code` | field names read from the game's client, values `unknown` until seen | 31 | 128 | typed shapes for the buy/sell/market commands |
+| `traffic` | fields verified in real traffic | 20 | 6 | 6 |
+| `client-code` | field names read from the game's client, values `unknown` until seen | 31 | 127 | typed shapes for the buy/sell/market commands |
 | `name-only` | known by name | none | none | the rest |
 
 `client.on('market', (p) => p.medias)` is typed for all 51 packet types (a typo does not compile; `onType` is for types the SDK does not know yet), `client.onBattleEvent('morte', (e) => e.ouro)`
