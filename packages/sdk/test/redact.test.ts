@@ -24,6 +24,14 @@ test('e-mails and token-looking text are cleaned inside free text', () => {
   assert.equal(cleanText('x'.repeat(300)), '[…]'); // one long run looks like a token
 });
 
+test('only text and plain scalars are text; an object is not turned into "[object Object]"', () => {
+  assert.equal(cleanText(42), '42');
+  assert.equal(cleanText(true), 'true');
+  assert.equal(cleanText({ a: 1 }), '');
+  assert.equal(cleanText(null), '');
+  assert.equal(cleanText(undefined), '');
+});
+
 test('arrays and depth are limited, and the input is not mutated', () => {
   const input = { list: [1, 2, 3, 4, 5], deep: { a: { b: { c: { d: { e: 1 } } } } } };
   const copy = JSON.stringify(input);

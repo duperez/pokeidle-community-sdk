@@ -49,6 +49,7 @@ export class PokeIdleClient {
     this.inspector = options.inspector === false ? null : (options.inspector ?? new Inspector());
     this.maxBytes = options.maxPacketBytes ?? DEFAULT_MAX_PACKET_BYTES;
     this.actions = new Actions(this, options.actions);
+    // eslint-disable-next-line no-console -- the one place the default error handler is defined
     this.onError = options.onError ?? ((error) => console.error('[pokeidle-community-sdk] listener failed', error));
   }
 
@@ -99,9 +100,9 @@ export class PokeIdleClient {
    */
   onBattleEvent<K extends BattleEventKind>(kind: K, listener: (event: BattleEventMap[K]) => void): Unsubscribe {
     const set = this.battleByKind.get(kind) ?? new Set();
-    set.add(listener as (event: never) => void);
+    set.add(listener);
     this.battleByKind.set(kind, set);
-    return () => void set.delete(listener as (event: never) => void);
+    return () => void set.delete(listener);
   }
 
   /** Every battle event, whatever its kind: switch on `event.k`. */

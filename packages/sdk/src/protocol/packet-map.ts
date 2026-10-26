@@ -1,7 +1,7 @@
 import type { Packet } from '../packets.js';
 import type { BattlePacket } from './events.js';
 import type { MiniGamePacket } from './mini-games.js';
-import { SERVER_PACKET_READS, SERVER_PACKET_TYPES } from './registry.generated.js';
+import type { SERVER_PACKET_READS, SERVER_PACKET_TYPES } from './registry.generated.js';
 import type {
   BlocklistPacket,
   ChatDeletedPacket,

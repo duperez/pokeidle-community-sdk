@@ -1,4 +1,4 @@
-import { CLIENT_COMMAND_TYPES } from './registry.generated.js';
+import type { CLIENT_COMMAND_TYPES } from './registry.generated.js';
 import type { Coverage } from './packet-map.js';
 import type { Currency } from './wire.js';
 

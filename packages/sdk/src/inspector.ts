@@ -196,5 +196,5 @@ function maskPath(root: unknown, path: string): void {
     node = (node as Record<string, unknown>)[key];
   }
   const last = keys.at(-1);
-  if (last && node !== null && typeof node === 'object' && last in (node as object)) (node as Record<string, unknown>)[last] = REDACTED;
+  if (last && node !== null && typeof node === 'object' && last in node) (node as Record<string, unknown>)[last] = REDACTED;
 }

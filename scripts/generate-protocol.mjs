@@ -121,7 +121,7 @@ export function extractProtocol(rawSource, { minimums = MINIMUMS } = {}) {
   // 2) battle events: the `case`s of `aoEvento`
   const eventFn = functionBody(source, 'aoEvento');
   if (!eventFn) throw new Error('could not find aoEvento: the client changed shape');
-  const parts = eventFn.body.split(/\n    case '([A-Za-z]+)':/);
+  const parts = eventFn.body.split(/\n {4}case '([A-Za-z]+)':/);
   const events = new Map();
   let pending = [];
   for (let i = 1; i < parts.length; i += 2) {

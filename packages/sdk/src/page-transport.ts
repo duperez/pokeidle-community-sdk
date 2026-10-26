@@ -29,7 +29,7 @@ export class PageTransport implements Transport {
   private hook: SharedHook | null = null;
   private handlers: TransportHandlers | null = null;
 
-  constructor(private readonly page: PageLike = globalThis as unknown as PageLike) {}
+  constructor(private readonly page: PageLike = globalThis) {}
 
   get readyState(): number {
     return this.hook?.socket?.readyState ?? -1;
@@ -38,7 +38,7 @@ export class PageTransport implements Transport {
   start(handlers: TransportHandlers): void {
     if (this.handlers) return;
     this.handlers = handlers;
-    this.hook = installHook(this.page as WithHook);
+    this.hook = installHook(this.page);
     this.hook.subscribers.add(handlers);
     // A socket adopted before this transport started is already open: say so, or the client would think it is offline.
     if (this.hook.socket?.readyState === 1) handlers.onOpen?.();
@@ -65,6 +65,8 @@ function installHook(page: WithHook): SharedHook {
   if (existing) return existing;
 
   const Original = page.WebSocket;
+  // Taken unbound on purpose: it is called later with `.call` on the right socket.
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   const originalSend = Original.prototype.send;
   const hook: SharedHook = { version: 1, socket: null, subscribers: new Set(), originalSend };
   const adopted = new WeakSet<object>();
@@ -82,6 +84,7 @@ function installHook(page: WithHook): SharedHook {
       try {
         fn(h);
       } catch (error) {
+        // eslint-disable-next-line no-console -- to be routed through the client's `onError` (code quality plan, phase 3)
         console.error('[pokeidle-community-sdk] handler failed', error);
       }
     }
@@ -91,7 +94,7 @@ function installHook(page: WithHook): SharedHook {
     if (adopted.has(ws)) return;
     adopted.add(ws);
     ws.addEventListener('message', (event) => {
-      if (typeof (event as MessageEvent).data === 'string') each((h) => h.onMessage((event as MessageEvent).data as string));
+      if (typeof event.data === 'string') each((h) => h.onMessage(event.data as string));
     });
     ws.addEventListener('open', () => each((h) => h.onOpen?.()));
     ws.addEventListener('close', () => each((h) => h.onClose?.()));

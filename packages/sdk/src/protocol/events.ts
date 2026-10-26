@@ -1,5 +1,5 @@
 import type { Packet } from '../packets.js';
-import { BATTLE_EVENT_READS, type BATTLE_EVENT_KINDS } from './registry.generated.js';
+import type { BATTLE_EVENT_READS, BATTLE_EVENT_KINDS } from './registry.generated.js';
 
 // The events inside a `batalha` packet (`ev[]`). Each has a string `k` (its kind). Five kinds were verified in real
 // traffic and have typed fields; all the others are known by name and by the field names the client reads from them,

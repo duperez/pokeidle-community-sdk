@@ -290,9 +290,9 @@ function watchSubscriptions(client: PokeIdleClient) {
     };
   const target = client as unknown as { onType: (...a: never[]) => () => void; onBattleEvent: (...a: never[]) => () => void };
   const state = client.state as unknown as { onChange: (...a: never[]) => () => void };
-  target.onType = wrap(target.onType.bind(client) as never) as never;
-  target.onBattleEvent = wrap(target.onBattleEvent.bind(client) as never) as never;
-  state.onChange = wrap(state.onChange.bind(client.state) as never) as never;
+  target.onType = wrap(target.onType.bind(client) as never);
+  target.onBattleEvent = wrap(target.onBattleEvent.bind(client) as never);
+  state.onChange = wrap(state.onChange.bind(client.state) as never);
   return () => active;
 }
 

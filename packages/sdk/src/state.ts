@@ -46,14 +46,14 @@ function safeCopy(source: Record<string, unknown>): Record<string, unknown> {
 }
 /** `items` and `balls` are maps of id to quantity: copied so a listener that changes the packet cannot corrupt the state. */
 const ownMaps = (fields: Record<string, unknown>): Record<string, unknown> => {
-  for (const key of ['items', 'balls']) if (isObject(fields[key])) fields[key] = safeCopy(fields[key] as Record<string, unknown>);
+  for (const key of ['items', 'balls']) if (isObject(fields[key])) fields[key] = safeCopy(fields[key]);
   return fields;
 };
 const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const asNumber = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const asText = (v: unknown, max = 60): string | null => (typeof v === 'string' ? v.slice(0, max) : null);
 const rowsWithId = (v: unknown): PokemonWire[] =>
-  Array.isArray(v) ? v.filter((k): k is PokemonWire => isObject(k) && k['id'] != null) : [];
+  Array.isArray(v) ? v.filter((k): k is PokemonWire => isObject(k) && k['id'] !== undefined && k['id'] !== null) : [];
 
 /**
  * Keeps the player's state up to date. The game sends the whole state once (`welcome`, marked `cheio`) and then small
@@ -126,7 +126,7 @@ export class GameState {
    * and changing it does not change the SDK's state.
    */
   get player(): PlayerState | null {
-    return this.fields ? ({ ...this.fields, pokemons: [...this.pokemonById.values()] } as PlayerState) : null;
+    return this.fields ? { ...this.fields, pokemons: [...this.pokemonById.values()] } : null;
   }
 
   get nick(): string | null {
@@ -266,6 +266,7 @@ export class GameState {
       try {
         listener();
       } catch (error) {
+        // eslint-disable-next-line no-console -- to be routed through the client's `onError` (code quality plan, phase 3)
         console.error('[pokeidle-community-sdk] state listener failed', error);
       }
     }

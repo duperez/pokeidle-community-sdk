@@ -29,9 +29,9 @@ export interface RedactOptions {
 
 /** Free text: no e-mails, no token-looking sequences, and short. */
 export function cleanText(value: unknown, maxLength = 120): string {
-  const text = String(value ?? '')
-    .replace(EMAIL, '[email]')
-    .replace(LONG_SEQUENCE, '[…]');
+  // Only text and plain scalars are text: an object would print as "[object Object]", which is noise, not data.
+  const raw = typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : '';
+  const text = raw.replace(EMAIL, '[email]').replace(LONG_SEQUENCE, '[…]');
   return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
 }
 
