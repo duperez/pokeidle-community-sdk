@@ -1,3 +1,4 @@
+export { type Actions, type ActionsOptions, type BuyRequest, type BuyResult, type RateLimit, type Scheduler } from './actions.js';
 export { PokeIdleClient, type ClientOptions, type Unsubscribe } from './client.js';
 export { Inspector, type InspectorDump, type InspectorOptions } from './inspector.js';
 export { KNOWN_PACKET_TYPES, DEFAULT_MAX_PACKET_BYTES, isKnownPacketType, parsePacket, readFrame, type FrameResult, type IgnoredReason, type KnownPacketType, type Packet } from './packets.js';

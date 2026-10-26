@@ -40,6 +40,32 @@ client.onPacket((packet) => { /* every packet, typed as a plain Packet */ });
 console.log(client.inspector?.dump()); // counts and redacted samples, safe to share
 ```
 
+### Actions
+
+Actions are the things you do in the game, as functions that tell you what happened. They check what they can before
+sending, send the game's own command and then wait for the game to confirm it:
+
+```ts
+const result = await client.actions.buyBall(Ball.UltraBall, 10);
+if (result.status === 'confirmed') console.log(result.confirmedBy, result.before, '->', result.after);
+// 'dry-run' | 'unconfirmed' | 'rejected' | 'not-for-sale' | 'insufficient-gold' | 'rate-limited' | 'spend-cap' | 'busy' | ...
+```
+
+`buyBall` and `buyItem` (potions, revives) exist today. The result says what happened, and `unconfirmed` means *sent but
+not confirmed in time*: it may still have happened, so the SDK waits 30 s before allowing another purchase instead of
+risking paying twice (the same wait follows a `rejected`: the game's errors carry no request id, so an error can be about
+something else). A purchase is confirmed by the game's own `compra` event (same quantity and name: `confidence: 'certain'`)
+or by the inventory growing by at least the quantity (`'probable'`), whichever comes first. Safety nets, all configurable
+and none of them stops you from turning it off (`new PokeIdleClient({ actions: { ... } })`; they live in memory, so a page
+reload starts them over):
+
+- `dryRun`: say what would be sent and send nothing (also per call). It goes through the same limits, so it tells you
+  when a real call would be blocked.
+- A rate limit: 3 s between actions and at most 10 per minute (`rateLimit: false` turns it off).
+- `maxGoldPerHour`: a spending cap, counted when the order is sent (an order whose price is unknown is refused while a cap is set).
+- Checks before sending: not for sale, not enough gold (`checks: false`, or `{ notForSale, gold }` one by one, lets the game decide).
+- One action in flight at a time. Invalid quantities throw a `RangeError`.
+
 ### Sending commands
 
 `client.sendCommand({ t: 'shop.buy', kind: 'ball', id: Ball.UltraBall, qty: 10 })` sends a command the game's client knows,

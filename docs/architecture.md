@@ -53,6 +53,20 @@ without a typed shape. A few commands are deliberately left name-only so the SDK
 accident (for example the one that withdraws orbs as real cryptocurrency). `PACKET_COVERAGE` is exhaustive at compile
 time, so a packet type the game adds cannot go unclassified.
 
+## Actions
+
+`Actions` (`actions.ts`) sits on top of `sendCommand`. A purchase goes through: input validation (throws), one-in-flight,
+connection and full-state checks, price and gold checks from the catalogs the server sent, the optional spending cap and
+the rate limit, then the send. It listens for the answer BEFORE sending (the answer can be instant) and resolves with the
+first of: the game's `compra` event (same quantity and, when known, same name), the inventory growing, an `erro` packet or
+the timeout. The inventory alone is a weak signal (balls used in the hunt at the same time can hide a small purchase),
+so the event is preferred; `confirmedBy` records which one confirmed, which also tells us whether the `compra` event
+really is emitted for NPC-shop purchases. A timeout is `unconfirmed`, not a failure: the order may be late, so the next
+one waits (default 30 s), the same rule the Companion app uses after more than 57 000 real purchases.
+
+The prices come from the catalogs: balls from the server's ball catalog (`priceGold`), shop items from the welcome packet,
+and potions and revives from the item catalog's `npcPrice` (checked against real purchases).
+
 ## Sending commands
 
 `sendCommand` is the low-level sender. Its guards (`protocol/send-guard.ts`) are about accidents: a forbidden command is

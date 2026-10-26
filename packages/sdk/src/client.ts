@@ -1,3 +1,4 @@
+import { Actions, type ActionsOptions } from './actions.js';
 import { Inspector } from './inspector.js';
 import { DEFAULT_MAX_PACKET_BYTES, readFrame, type Packet } from './packets.js';
 import type { BattleEvent, BattleEventKind, BattleEventMap } from './protocol/events.js';
@@ -14,6 +15,8 @@ export interface ClientOptions {
   inspector?: Inspector | false;
   /** Frames longer than this are ignored (and counted in the inspector). The default is large on purpose: `welcome` can be several MB. */
   maxPacketBytes?: number;
+  /** Options of `client.actions`: dry run, rate limit, spending cap. */
+  actions?: ActionsOptions;
   /** Called when one of your listeners throws (it never breaks the other listeners). Default: `console.error`. */
   onError?: (error: unknown) => void;
 }
@@ -28,6 +31,8 @@ export class PokeIdleClient {
   readonly inspector: Inspector | null;
   /** The player's state, kept up to date from the game's packets. */
   readonly state = new GameState();
+  /** What you can DO in the game (buy...), with safety nets: see `ActionsOptions`. */
+  readonly actions: Actions;
   private readonly transport: Transport;
   private readonly maxBytes: number;
   private readonly onError: (error: unknown) => void;
@@ -43,6 +48,7 @@ export class PokeIdleClient {
     this.transport = options.transport;
     this.inspector = options.inspector === false ? null : (options.inspector ?? new Inspector());
     this.maxBytes = options.maxPacketBytes ?? DEFAULT_MAX_PACKET_BYTES;
+    this.actions = new Actions(this, options.actions);
     this.onError = options.onError ?? ((error) => console.error('[pokeidle-community-sdk] listener failed', error));
   }
 

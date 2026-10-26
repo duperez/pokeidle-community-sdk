@@ -23,7 +23,19 @@ function mountOverlay(): void {
   copyCatalogs.textContent = 'Copy game catalogs';
   copyCatalogs.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
   copyCatalogs.addEventListener('click', () => void navigator.clipboard.writeText(JSON.stringify({ balls: client.state.ballCatalog, shopItems: client.state.shopItems, extraItems: client.state.extraItems }, null, 2)));
-  box.append(title, list, copy, copyCatalogs);
+  // Actions: the first is a dry run (sends nothing); the second REALLY buys one Poke Ball (5 gold) to see the game confirm it.
+  const lastAction = document.createElement('div');
+  lastAction.style.cssText = 'margin-top:6px;white-space:pre-wrap;word-break:break-word;font-size:11px';
+  const show = (label: string, result: unknown): void => { lastAction.textContent = `${label}: ${JSON.stringify(result)}`; };
+  const dryRun = document.createElement('button');
+  dryRun.textContent = 'Dry run: buy 1 Poke Ball';
+  dryRun.style.cssText = 'margin-top:6px;cursor:pointer';
+  dryRun.addEventListener('click', () => void client.actions.buyBall(Ball.PokeBall, 1, { dryRun: true }).then((r) => show('dry run', r)));
+  const realBuy = document.createElement('button');
+  realBuy.textContent = 'REALLY buy 1 Poke Ball (5 gold)';
+  realBuy.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
+  realBuy.addEventListener('click', () => void client.actions.buyBall(Ball.PokeBall, 1).then((r) => show('buy', r)));
+  box.append(title, list, copy, copyCatalogs, document.createElement('br'), dryRun, realBuy, lastAction);
   document.documentElement.append(box);
 
   const render = (): void => {
