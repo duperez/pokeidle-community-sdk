@@ -152,3 +152,10 @@ test('complete is false until a full state arrives, so late listeners can tell t
   state.applyPacket(welcome());
   assert.equal(state.complete, true);
 });
+
+test('the game\'s own items (not in the public catalog) are read from the welcome packet and named', () => {
+  const state = new GameState();
+  state.applyPacket(welcome({ itensNossos: [{ id: 70000, name: 'Bronze Boss Token', icon: '/x.png', category: 'key-item', rare: false, npcPrice: 0 }, { id: 'x' }, null] }));
+  assert.deepEqual(state.extraItems, [{ id: 70000, name: 'Bronze Boss Token', category: 'key-item', rare: false, npcPrice: 0 }]);
+  assert.equal(state.itemName(70000), 'Bronze Boss Token');
+});

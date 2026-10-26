@@ -6,7 +6,8 @@
 //
 // Items come from the game's public `assets/items.json`. Balls are not in that file: the server sends them in the
 // `welcome` packet, so `packages/sdk/data/balls.json` is a snapshot of that catalog (game data only, nothing about an
-// account). The test extension has a button that copies it.
+// account). The same goes for the game's own items (`itensNossos` in that packet: boss tokens, eggs, fragments...),
+// kept in `packages/sdk/data/extra-items.json` when present. The test extension has a button that copies both.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,6 +17,7 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SDK = path.join(ROOT, 'packages/sdk');
 const ITEMS_URL = 'https://pokeidle.io/assets/items.json';
 const BALLS_SNAPSHOT = path.join(SDK, 'data/balls.json');
+const EXTRA_ITEMS_SNAPSHOT = path.join(SDK, 'data/extra-items.json');
 const OUT_ITEMS = path.join(SDK, 'src/catalog/items.generated.ts');
 const OUT_BALLS = path.join(SDK, 'src/catalog/balls.generated.ts');
 
@@ -100,6 +102,12 @@ function renderBalls(balls) {
   return lines.join('\n');
 }
 
+/** The public catalog plus the game's own items. When an id is in both, the public catalog wins. */
+export function mergeItems(publicItems, extraItems) {
+  const known = new Set(publicItems.map((i) => i.id));
+  return [...publicItems, ...extraItems.filter((i) => !known.has(i.id))];
+}
+
 async function loadItems() {
   const response = await fetch(ITEMS_URL, { signal: AbortSignal.timeout(30_000) });
   if (!response.ok) throw new Error(`could not download ${ITEMS_URL}: HTTP ${response.status}`);
@@ -107,7 +115,8 @@ async function loadItems() {
 }
 
 const main = async () => {
-  const items = await loadItems();
+  const extra = fs.existsSync(EXTRA_ITEMS_SNAPSHOT) ? validateItems({ items: JSON.parse(fs.readFileSync(EXTRA_ITEMS_SNAPSHOT, 'utf8')) }) : [];
+  const items = mergeItems(await loadItems(), extra);
   const balls = validateBalls(JSON.parse(fs.readFileSync(BALLS_SNAPSHOT, 'utf8')));
   const outputs = [[OUT_ITEMS, renderItems(items)], [OUT_BALLS, renderBalls(balls)]];
   if (check) {

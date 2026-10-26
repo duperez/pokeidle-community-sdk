@@ -24,6 +24,14 @@ test('arrays and depth are limited, and the input is not mutated', () => {
   assert.equal(JSON.stringify(input), copy);
 });
 
+test('objects with thousands of keys are cut to a count', () => {
+  const map = Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [String(i), i]));
+  const out = redact({ shinyLooks: map }, { maxObjectKeys: 5 }) as { shinyLooks: Record<string, unknown> };
+  assert.equal(Object.keys(out.shinyLooks).length, 6);
+  assert.equal(out.shinyLooks['(more keys)'], 995);
+  assert.equal(Object.keys((redact(map) as Record<string, unknown>)).length, 41); // default: 40 keys + the count
+});
+
 test('primitives and null pass through', () => {
   assert.equal(redact(5), 5);
   assert.equal(redact(null), null);

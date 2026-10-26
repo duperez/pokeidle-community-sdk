@@ -31,7 +31,7 @@ client.start();
 client.on('welcome', () => {
   console.log(client.state.level, client.state.gold);
   console.log('revives:', client.state.itemCount(Item.Revive));
-  console.log('great balls:', client.state.ballCount(Ball.GreatBall));
+  console.log('ultra balls:', client.state.ballCount(Ball.UltraBall));
 });
 client.state.onChange(() => { /* gold, items, pokémon... changed */ });
 

@@ -22,7 +22,7 @@ function mountOverlay(): void {
   const copyCatalogs = document.createElement('button');
   copyCatalogs.textContent = 'Copy game catalogs';
   copyCatalogs.style.cssText = 'margin:6px 0 0 6px;cursor:pointer';
-  copyCatalogs.addEventListener('click', () => void navigator.clipboard.writeText(JSON.stringify({ balls: client.state.ballCatalog, shopItems: client.state.shopItems }, null, 2)));
+  copyCatalogs.addEventListener('click', () => void navigator.clipboard.writeText(JSON.stringify({ balls: client.state.ballCatalog, shopItems: client.state.shopItems, extraItems: client.state.extraItems }, null, 2)));
   box.append(title, list, copy, copyCatalogs);
   document.documentElement.append(box);
 

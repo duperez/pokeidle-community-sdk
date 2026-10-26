@@ -1,6 +1,6 @@
 import { ballInfo, itemInfo } from './catalog/index.js';
 import type { Packet } from './packets.js';
-import type { PlayerStateWire, ShopItemWire, BallCatalogEntryWire } from './protocol/wire.js';
+import type { PlayerStateWire, ShopItemWire, BallCatalogEntryWire, ExtraItemWire } from './protocol/wire.js';
 
 /** The player's state after applying the welcome packet and every update since. Field names are the game's own. */
 export type PlayerState = PlayerStateWire & { pokemons: Array<{ id?: number | string; [key: string]: unknown }> };
@@ -14,6 +14,15 @@ export interface BallEntry {
   buyable: boolean;
 }
 
+/** An item that belongs to this game and is not in the public items catalog, as the server describes it in the welcome packet. */
+export interface ExtraItemEntry {
+  id: number;
+  name: string;
+  category: string;
+  rare: boolean;
+  npcPrice: number | null;
+}
+
 /** An item the shop sells, as the server describes it in the welcome packet. */
 export interface ShopEntry {
   itemId: number;
@@ -21,7 +30,7 @@ export interface ShopEntry {
   price: number | null;
 }
 
-const MAX_LIST = 500;
+const MAX_LIST = 2000;
 /** Keys that must never be copied from server data into our objects (they would change an object's prototype). */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const idKey = (id: unknown): string => String(id);
@@ -54,6 +63,7 @@ export class GameState {
   private pokemonById = new Map<string, { id?: number | string; [key: string]: unknown }>();
   private balls: BallEntry[] = [];
   private shop: ShopEntry[] = [];
+  private extra: ExtraItemEntry[] = [];
   private readonly listeners = new Set<() => void>();
   private full = false;
 
@@ -69,6 +79,11 @@ export class GameState {
   /** The ball catalog from the last welcome packet. */
   get ballCatalog(): readonly BallEntry[] {
     return this.balls;
+  }
+
+  /** The game's own items (not in the public items catalog), from the last welcome packet. */
+  get extraItems(): readonly ExtraItemEntry[] {
+    return this.extra;
   }
 
   /** The items the shop sells, from the last welcome packet. */
@@ -104,7 +119,7 @@ export class GameState {
 
   /** Name of an item or ball id, from the server's catalogs and the SDK's own. */
   itemName(id: number): string | null {
-    return this.shop.find((s) => s.itemId === id)?.name ?? itemInfo(id)?.name ?? null;
+    return this.shop.find((s) => s.itemId === id)?.name ?? this.extra.find((e) => e.id === id)?.name ?? itemInfo(id)?.name ?? null;
   }
 
   ballName(id: number): string | null {
@@ -133,6 +148,14 @@ export class GameState {
       this.balls = balls.slice(0, MAX_LIST).filter(isObject).flatMap((b: BallCatalogEntryWire) => {
         const id = asNumber(b.id);
         return id === null ? [] : [{ id, name: asText(b.nome, 40) ?? `Ball ${id}`, catchRate: asNumber(b.catchRate), priceGold: asNumber(b.priceGold), buyable: b.compravel === true }];
+      });
+    }
+    const extra = packet['itensNossos'];
+    if (Array.isArray(extra)) {
+      this.extra = extra.slice(0, MAX_LIST).filter(isObject).flatMap((e: ExtraItemWire) => {
+        const id = asNumber(e.id);
+        const name = asText(e.name, 60);
+        return id === null || name === null ? [] : [{ id, name, category: asText(e.category, 30) ?? 'unknown', rare: e.rare === true, npcPrice: asNumber(e.npcPrice) }];
       });
     }
     const shop = packet['itensCompraveis'];

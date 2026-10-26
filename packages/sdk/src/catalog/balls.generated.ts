@@ -5,6 +5,8 @@ export const Ball = {
   PokeBall: 1,
   GreatBall: 2,
   SuperBall: 3,
+  UltraBall: 4,
+  BeastBall: 5,
 } as const;
 
 export type BallId = (typeof Ball)[keyof typeof Ball];
@@ -22,4 +24,6 @@ export const BALL_CATALOG: readonly BallInfo[] = [
   { id: 1, name: "Poke Ball", catchRate: 1, priceGold: 5, buyable: true },
   { id: 2, name: "Great Ball", catchRate: 2, priceGold: 20, buyable: true },
   { id: 3, name: "Super Ball", catchRate: 3, priceGold: 50, buyable: true },
+  { id: 4, name: "Ultra Ball", catchRate: 4, priceGold: 130, buyable: true },
+  { id: 5, name: "Beast Ball", catchRate: 8, priceGold: null, buyable: false },
 ];

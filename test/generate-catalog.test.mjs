@@ -23,3 +23,9 @@ test('uniqueIdentifiers keeps the clean key on the lowest id and suffixes the re
 test('a name with no letters or digits is rejected instead of producing a broken key', () => {
   assert.throws(() => uniqueIdentifiers([{ id: 1, name: '???' }]), /cannot build an identifier/);
 });
+
+test('mergeItems adds the game\'s own items and lets the public catalog win on a shared id', async () => {
+  const { mergeItems } = await import('../scripts/generate-catalog.mjs');
+  const merged = mergeItems([{ id: 1, name: 'Public' }], [{ id: 1, name: 'Duplicate' }, { id: 70000, name: 'Own' }]);
+  assert.deepEqual(merged.map((i) => [i.id, i.name]), [[1, 'Public'], [70000, 'Own']]);
+});

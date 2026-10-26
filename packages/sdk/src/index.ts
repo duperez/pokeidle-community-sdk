@@ -5,5 +5,5 @@ export { PageTransport, type PageLike } from './page-transport.js';
 export { REDACTED, TEXT_MASK, cleanText, redact, type RedactOptions } from './redact.js';
 export type { Transport, TransportHandlers } from './transport.js';
 export { Ball, BALL_CATALOG, Item, ITEM_CATALOG, ballInfo, itemInfo, itemsInCategory, type BallId, type BallInfo, type ItemCategory, type ItemId, type ItemInfo } from './catalog/index.js';
-export { GameState, type BallEntry, type PlayerState, type ShopEntry } from './state.js';
-export type { AutomationWire, BallCatalogEntryWire, HuntWire, PacketMap, PlayerStateWire, ShopItemWire, StatePacket, WelcomePacket } from './protocol/wire.js';
+export { GameState, type BallEntry, type ExtraItemEntry, type PlayerState, type ShopEntry } from './state.js';
+export type { AutomationWire, BallCatalogEntryWire, ExtraItemWire, HuntWire, PacketMap, PlayerStateWire, ShopItemWire, StatePacket, WelcomePacket } from './protocol/wire.js';

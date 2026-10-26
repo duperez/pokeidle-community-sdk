@@ -18,6 +18,16 @@ export interface ShopItemWire {
   nome?: string;
 }
 
+/** An item that belongs to this game and is not in the public items catalog (boss tokens, eggs, fragments, mega stones...). */
+export interface ExtraItemWire {
+  id?: number;
+  name?: string;
+  icon?: string;
+  category?: string;
+  rare?: boolean;
+  npcPrice?: number;
+}
+
 export interface HuntWire {
   slug?: string;
   nome?: string;
@@ -70,6 +80,7 @@ export interface WelcomePacket extends Packet {
   readonly hunts?: HuntWire[];
   readonly catalogoBolas?: BallCatalogEntryWire[];
   readonly itensCompraveis?: ShopItemWire[];
+  readonly itensNossos?: ExtraItemWire[];
 }
 
 export interface StatePacket extends Packet {

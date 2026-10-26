@@ -8,12 +8,15 @@ test('well-known ids are reachable by name', () => {
   assert.equal(Item.MaxRevive, 206);
   assert.equal(Ball.PokeBall, 1);
   assert.equal(Ball.GreatBall, 2);
+  assert.equal(Ball.UltraBall, 4);
+  assert.equal(Ball.BeastBall, 5);
 });
 
 test('itemInfo and ballInfo describe known ids and return undefined for unknown ones', () => {
   assert.deepEqual(itemInfo(Item.SmallPotion), { id: 200, name: 'Small Potion', category: 'heal', rare: false, npcPrice: itemInfo(200)?.npcPrice ?? null });
   assert.equal(itemInfo(999_999_999), undefined);
   assert.equal(ballInfo(Ball.GreatBall)?.name, 'Great Ball');
+  assert.deepEqual(ballInfo(Ball.BeastBall), { id: 5, name: 'Beast Ball', catchRate: 8, priceGold: null, buyable: false }); // not sold in the market
   assert.equal(ballInfo(-1), undefined);
 });
 

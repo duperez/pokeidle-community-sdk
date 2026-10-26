@@ -21,6 +21,8 @@ export interface RedactOptions {
   maxDepth?: number;
   /** Longest string kept. Default 120. */
   maxStringLength?: number;
+  /** How many keys of an object are kept (the rest becomes a count). Some packets hold maps with thousands of keys. Default 40. */
+  maxObjectKeys?: number;
   /** Replace every string value with `[text]`, keeping only the structure. For content written by other people. */
   maskStrings?: boolean;
 }
@@ -33,7 +35,7 @@ export function cleanText(value: unknown, maxLength = 120): string {
 
 /** A safe, small copy of any value: sensitive keys replaced, text cleaned, arrays and depth limited. Never mutates its input. */
 export function redact(value: unknown, options: RedactOptions = {}, depth = 0): unknown {
-  const { maxArrayItems = 3, maxDepth = 5, maxStringLength = 120, maskStrings = false } = options;
+  const { maxArrayItems = 3, maxDepth = 5, maxStringLength = 120, maxObjectKeys = 40, maskStrings = false } = options;
   if (value === null || typeof value !== 'object') {
     if (typeof value !== 'string') return value;
     return maskStrings ? TEXT_MASK : cleanText(value, maxStringLength);
@@ -45,8 +47,10 @@ export function redact(value: unknown, options: RedactOptions = {}, depth = 0): 
     return items;
   }
   const out: Record<string, unknown> = {};
-  for (const [key, inner] of Object.entries(value)) {
+  const entries = Object.entries(value);
+  for (const [key, inner] of entries.slice(0, maxObjectKeys)) {
     out[key] = SENSITIVE_KEY.test(key) ? REDACTED : redact(inner, options, depth + 1);
   }
+  if (entries.length > maxObjectKeys) out['(more keys)'] = entries.length - maxObjectKeys;
   return out;
 }
