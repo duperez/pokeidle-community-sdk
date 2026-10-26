@@ -40,8 +40,8 @@ client.onPacket((packet) => { /* every packet, typed as a plain Packet */ });
 console.log(client.inspector?.dump()); // counts and redacted samples, safe to share
 ```
 
-Items and balls are named by enums generated from the game's own catalogs: `Item.SmallPotion`, `Item.MaxRevive`,
-`Ball.GreatBall`... `itemInfo(id)` gives name, category and price; `itemsInCategory('heal')` lists a category.
+Items and balls are named by enums generated from the game's own catalogs (682 items and 5 balls today):
+`Item.SmallPotion`, `Item.MaxRevive`, `Item.BronzeBossToken`, `Item.ShinyVenusaurite`, `Ball.UltraBall`, `Ball.BeastBall`... `itemInfo(id)` gives name, category and price; `itemsInCategory('heal')` lists a category.
 `npm run catalog` regenerates them from the game's public data, and `npm run catalog:check` tells if they are stale.
 
 It has to run in the page's own world, before the game opens its socket. In a Chrome extension (Manifest V3):

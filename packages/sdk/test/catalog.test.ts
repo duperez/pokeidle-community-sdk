@@ -41,3 +41,26 @@ test('items that share a name keep the clean key on the lowest id and the others
   assert.equal(Item.BandAid_59248, 59248);
   assert.equal(Item._10000CaratEmerald, 27304);
 });
+
+test('the game\'s own items (not in the public catalog) are part of Item, with their categories', () => {
+  assert.equal(Item.BronzeBossToken, 70000); // from the public catalog
+  assert.equal(Item.EscapeRope, 70010); // from the game's own list
+  assert.equal(Item.MysteryEggP2, 70091);
+  assert.equal(Item.Venusaurite, 71003);
+  assert.equal(Item.ShinyVenusaurite, 72003);
+  assert.equal(Item.CharizarditeX, 74006);
+  assert.equal(itemInfo(Item.CommonHouse)?.category, 'casa');
+  assert.equal(itemInfo(Item.FounderBox)?.category, 'caixa');
+  assert.equal(itemInfo(Item.VenusaurHalloweenSkin)?.category, 'skin');
+  assert.equal(itemInfo(Item.GoldenPotion)?.npcPrice, 2500);
+  assert.equal(itemsInCategory('bicicleta').length, 5);
+});
+
+test('every shiny mega stone is its normal stone plus 1000 in id, with the "Shiny" prefix', () => {
+  const stones = ITEM_CATALOG.filter((i) => i.category === 'stone' && i.id >= 71000 && i.id < 72000);
+  assert.ok(stones.length >= 88);
+  for (const stone of stones) {
+    const shiny = itemInfo(stone.id + 1000);
+    assert.equal(shiny?.name, `Shiny ${stone.name}`, stone.name);
+  }
+});
