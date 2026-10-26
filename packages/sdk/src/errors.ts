@@ -10,11 +10,20 @@ export const defaultErrorHandler: ErrorHandler = (error) => {
   console.error('[pokeidle-community-sdk]', error);
 };
 
-/** Runs `fn`; if it throws, the error goes to `onError` and `fn`'s caller carries on. Used wherever one failure must not stop the rest. */
+/** Hands `error` to `onError`. If the handler itself throws, the default handler gets the original error instead: reporting never throws. */
+export function report(onError: ErrorHandler, error: unknown): void {
+  try {
+    onError(error);
+  } catch {
+    defaultErrorHandler(error);
+  }
+}
+
+/** Runs `fn`; if it throws, the error is reported and `fn`'s caller carries on. Used wherever one failure must not stop the rest. */
 export function guarded(onError: ErrorHandler, fn: () => void): void {
   try {
     fn();
   } catch (error) {
-    onError(error);
+    report(onError, error);
   }
 }

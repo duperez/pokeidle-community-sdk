@@ -1,6 +1,6 @@
 import { Actions } from './actions.js';
 import type { ActionsOptions } from './actions-types.js';
-import { defaultErrorHandler, type ErrorHandler } from './errors.js';
+import { defaultErrorHandler, report, type ErrorHandler } from './errors.js';
 import type { PacketListener, Unsubscribe } from './listeners.js';
 import { Inspector } from './inspector.js';
 import { DEFAULT_MAX_PACKET_BYTES, readFrame, type Packet } from './packets.js';
@@ -53,9 +53,9 @@ export class PokeIdleClient {
     this.transport = options.transport;
     this.inspector = options.inspector === false ? null : (options.inspector ?? new Inspector());
     this.maxBytes = options.maxPacketBytes ?? DEFAULT_MAX_PACKET_BYTES;
-    this.actions = new Actions(this, options.actions);
     this.onError = options.onError ?? defaultErrorHandler;
     this.state = new GameState({ onError: this.onError });
+    this.actions = new Actions(this, options.actions); // after `state`: the host it reads from must be complete
   }
 
   /** Starts listening. Safe to call more than once. */
@@ -196,7 +196,7 @@ export class PokeIdleClient {
       try {
         listener(connected);
       } catch (error) {
-        this.onError(error);
+        report(this.onError, error);
       }
     }
   }
@@ -205,7 +205,7 @@ export class PokeIdleClient {
     try {
       fn();
     } catch (error) {
-      this.onError(error);
+      report(this.onError, error);
     }
   }
 
@@ -215,7 +215,7 @@ export class PokeIdleClient {
       try {
         listener(packet);
       } catch (error) {
-        this.onError(error);
+        report(this.onError, error);
       }
     }
   }

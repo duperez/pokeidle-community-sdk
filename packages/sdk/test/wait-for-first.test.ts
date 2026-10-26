@@ -72,3 +72,40 @@ test('a cancelled waiter never times out', () => {
   scheduler.advance(5000);
   assert.equal(timedOut, false);
 });
+
+test('finish during setup: later registrations are cleaned at once and no timer is left', async () => {
+  const scheduler = new FakeScheduler();
+  let cleaned = 0;
+  const waiter = waitForFirst<string>(
+    scheduler,
+    1000,
+    (finish, onCleanup) => {
+      onCleanup(() => (cleaned += 1));
+      finish('now');
+      onCleanup(() => (cleaned += 1));
+    },
+    () => 'timeout',
+  );
+  assert.equal(await waiter.result, 'now');
+  assert.equal(cleaned, 2);
+  assert.equal(scheduler.pending, 0);
+});
+
+test('a throwing cleanup does not stop the others or leak the timer', () => {
+  const scheduler = new FakeScheduler();
+  let ran = false;
+  const waiter = waitForFirst<string>(
+    scheduler,
+    1000,
+    (_finish, onCleanup) => {
+      onCleanup(() => {
+        throw new Error('off failed');
+      });
+      onCleanup(() => (ran = true));
+    },
+    () => 'timeout',
+  );
+  assert.throws(() => waiter.cancel(), /off failed/);
+  assert.equal(ran, true);
+  assert.equal(scheduler.pending, 0);
+});

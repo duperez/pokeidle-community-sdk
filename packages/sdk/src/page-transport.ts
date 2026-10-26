@@ -1,4 +1,4 @@
-import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
+import { defaultErrorHandler, guarded } from './errors.js';
 import type { Transport, TransportHandlers } from './transport.js';
 
 /** Minimal view of the page the transport needs. Tests pass a fake; in a real page it is `window`. */
@@ -31,11 +31,7 @@ export class PageTransport implements Transport {
   private handlers: TransportHandlers | null = null;
   private subscription: TransportHandlers | null = null;
 
-  /** @param options.onError used when whoever starts the transport does not hand over its own error handler */
-  constructor(
-    private readonly page: PageLike = globalThis,
-    private readonly options: { onError?: ErrorHandler } = {},
-  ) {}
+  constructor(private readonly page: PageLike = globalThis) {}
 
   get readyState(): number {
     return this.hook?.socket?.readyState ?? -1;
@@ -46,7 +42,7 @@ export class PageTransport implements Transport {
     this.handlers = handlers;
     this.hook = installHook(this.page);
     // Each subscriber is guarded with ITS error handler: one that throws reaches its owner and never the other subscribers.
-    const onError = handlers.onError ?? this.options.onError ?? defaultErrorHandler;
+    const onError = handlers.onError ?? defaultErrorHandler;
     this.subscription = {
       onMessage: (text) => guarded(onError, () => handlers.onMessage(text)),
       onOutgoing: (text) => guarded(onError, () => handlers.onOutgoing?.(text)),

@@ -90,3 +90,28 @@ test('the library writes to the console in exactly one place', () => {
     .filter((f) => /\bconsole\.(log|error|warn|info|debug)\b/.test(readFileSync(dir + f, 'utf8')));
   assert.deepEqual(offenders, []);
 });
+
+test('an onError that throws never escapes: the default handler gets the original error', () => {
+  const spy = mock.method(console, 'error', () => undefined);
+  try {
+    const original = new Error('original');
+    const state = new GameState({
+      onError: () => {
+        throw new Error('handler bug');
+      },
+    });
+    let later = false;
+    state.onChange(() => {
+      throw original;
+    });
+    state.onChange(() => {
+      later = true;
+    });
+    state.applyPacket(welcome());
+    assert.equal(later, true);
+    assert.equal(spy.mock.callCount(), 1);
+    assert.equal(spy.mock.calls[0]?.arguments[1], original);
+  } finally {
+    spy.mock.restore();
+  }
+});

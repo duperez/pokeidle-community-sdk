@@ -22,11 +22,22 @@ export function waitForFirst<R>(
   const cleanups: Array<() => void> = [];
   let done = false;
   let timer: unknown;
+  // Every cleanup runs even if an earlier one throws; the first error is rethrown afterwards.
+  const runAll = (fns: Array<() => void>): void => {
+    let failure: { error: unknown } | null = null;
+    for (const fn of fns) {
+      try {
+        fn();
+      } catch (error) {
+        failure ??= { error };
+      }
+    }
+    if (failure) throw failure.error;
+  };
   const cleanup = (): void => {
     if (done) return;
     done = true;
-    for (const fn of cleanups) fn();
-    if (timer !== undefined) scheduler.clearTimeout(timer);
+    runAll([...cleanups, () => timer !== undefined && scheduler.clearTimeout(timer)].map((fn) => () => void fn()));
   };
   let settle: (result: R) => void = () => {};
   const result = new Promise<R>((resolve) => {
@@ -36,7 +47,11 @@ export function waitForFirst<R>(
     cleanup(); // idempotent; settling an already settled promise is a no-op, so a late `finish` changes nothing
     settle(value);
   };
-  setup(finish, (fn) => cleanups.push(fn));
-  timer = scheduler.setTimeout(() => finish(onTimeout()), timeoutMs);
+  setup(finish, (fn) => {
+    if (done)
+      fn(); // `finish` already ran inside `setup`: whatever registers afterwards is cleaned up at once
+    else cleanups.push(fn);
+  });
+  if (!done) timer = scheduler.setTimeout(() => finish(onTimeout()), timeoutMs);
   return { result, cancel: cleanup };
 }
