@@ -13,7 +13,7 @@
     "typecheck": "npm run typecheck -w pokeidle-community-sdk && npm run typecheck -w pokeidle-test-extension",
     "test": "npm run test:sdk && npm run test:repo",
     "test:sdk": "npm run test -w pokeidle-community-sdk",
-    "test:repo": "node --test test/",
+    "test:repo": "node --test test/*.test.mjs",
     "catalog": "node scripts/generate-catalog.mjs",
     "catalog:check": "node scripts/generate-catalog.mjs --check",
     "protocol": "node scripts/generate-protocol.mjs",
