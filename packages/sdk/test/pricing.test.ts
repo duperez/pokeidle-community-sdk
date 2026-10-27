@@ -26,6 +26,14 @@ test('items: the shop offer wins; an offer with no price is refused', () => {
   assert.match(priceOf(state({ shopItems: [{ itemId: 5, name: 'X', price: null }] }), 'item', 5).reason ?? '', /no price/);
 });
 
+test('items: a shop offer priced 0 or negative is refused, not treated as free', () => {
+  for (const price of [0, -5]) {
+    const result = priceOf(state({ shopItems: [{ itemId: 5, name: 'X', price }] }), 'item', 5);
+    assert.equal(result.unit, null);
+    assert.match(result.reason ?? '', /no price/);
+  }
+});
+
 test('items: potions fall back to the catalog NPC price; unknown items say so', () => {
   const potion = priceOf(state(), 'item', Item.SmallPotion);
   assert.ok(potion.unit !== null && potion.unit > 0, JSON.stringify(potion));

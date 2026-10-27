@@ -19,7 +19,9 @@
     "protocol:check": "node scripts/generate-protocol.mjs --check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "npm run build && eslint ."
+    "lint": "npm run build && eslint .",
+    "coverage": "node scripts/check-coverage.mjs",
+    "mutation": "node scripts/mutation.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

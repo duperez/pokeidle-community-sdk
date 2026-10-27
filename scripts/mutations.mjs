@@ -1,0 +1,70 @@
+// The mutations `npm run mutation` tries: each changes ONE thing in a safety-relevant file and the unit tests must fail.
+// `from` must appear in the file exactly as written (the script fails if it does not: a mutation that is not applied
+// proves nothing). Keep this list in step with the code it guards.
+
+export const MUTATIONS = [
+  // rate limiter
+  { file: 'rate-limiter.ts', from: 'now < this.blockedUntil', to: 'now > this.blockedUntil' },
+  { file: 'rate-limiter.ts', from: 'now - this.lastSentAt < minInterval', to: 'now - this.lastSentAt > minInterval' },
+  { file: 'rate-limiter.ts', from: 'recent.length >= perMinute', to: 'recent.length > perMinute' },
+  {
+    file: 'rate-limiter.ts',
+    from: 'if (limit === false) return null;',
+    to: 'if (limit === false) return { status: "rate-limited", reason: "interval", retryInMs: 1 };',
+  },
+  { file: 'rate-limiter.ts', from: 'now + (this.options.unconfirmedCooldownMs', to: 'now - (this.options.unconfirmedCooldownMs' },
+  // spend ledger
+  { file: 'spend-ledger.ts', from: 'e.at > since', to: 'e.at >= since' },
+  { file: 'spend-ledger.ts', from: 'sum + e.gold', to: 'sum - e.gold' },
+  // waiter
+  { file: 'wait-for-first.ts', from: 'if (done) return;\n    done = true;', to: 'done = true;' },
+  { file: 'wait-for-first.ts', from: '    if (done)\n', to: '    if (false)\n' },
+  { file: 'wait-for-first.ts', from: 'if (!done) timer =', to: 'if (true) timer =' },
+  // sale rules (fail closed)
+  { file: 'sale-rules.ts', from: 'if (active === null)', to: 'if (active === undefined)' },
+  { file: 'sale-rules.ts', from: 'if (inTeam === null)', to: 'if (inTeam === undefined)' },
+  { file: 'sale-rules.ts', from: 'if (inTeam) return', to: 'if (!inTeam) return' },
+  { file: 'sale-rules.ts', from: 'if (inCollection === null)', to: 'if (inCollection === undefined)' },
+  { file: 'sale-rules.ts', from: 'if (holdsExpShare === null)', to: 'if (holdsExpShare === undefined)' },
+  // pokémon and state queries
+  { file: 'pokemon.ts', from: 'wire.slot !== undefined && wire.slot !== null', to: 'typeof wire.slot === "number"' },
+  { file: 'pokemon.ts', from: 'asId(wire.heldItemId) !== null,', to: 'true,' },
+  { file: 'state.ts', from: 'return active === null ? null : active === id;', to: 'return active === null ? false : active === id;' },
+  { file: 'state.ts', from: 'return this.pokemon(id)?.inTeam ?? null;', to: 'return this.pokemon(id)?.inTeam ?? false;' },
+  { file: 'state.ts', from: ': null;\n  }\n\n  /** Does this pokémon hold', to: ': false;\n  }\n\n  /** Does this pokémon hold' },
+  { file: 'state.ts', from: '|| !pokemon.heldItemKnown) return null;', to: ') return null;' },
+  { file: 'state.ts', from: 'pokemon.heldItemId === this.xpShareId', to: 'pokemon.heldItemId !== this.xpShareId' },
+  { file: 'state.ts', from: '    this.pokemonCache = null;\n', to: '' },
+  { file: 'state.ts', from: '    this.playerCache = null;\n', to: '' },
+  // pricing
+  { file: 'pricing.ts', from: 'ball.priceGold <= 0', to: 'ball.priceGold < 0' },
+  { file: 'pricing.ts', from: 'offered.price <= 0', to: 'offered.price < 0' },
+  // confirmations
+  { file: 'confirmations.ts', from: 'after - before >= request.quantity', to: 'after - before > 0' },
+  { file: 'confirmations.ts', from: "event['qtd'] !== request.quantity", to: "event['qtd'] === request.quantity" },
+  { file: 'confirmations.ts', from: "sameKind === 1 ? 'certain'", to: "sameKind >= 1 ? 'certain'" },
+  { file: 'confirmations.ts', from: 'if (graceMs <= 0)', to: 'if (graceMs < 0)' },
+  { file: 'confirmations.ts', from: 'sold.name !== wanted', to: 'sold.name === wanted' },
+  { file: 'confirmations.ts', from: 'p.level === request.level', to: 'p.level !== request.level' },
+  {
+    file: 'confirmations.ts',
+    from: 'state.pokemon(request.pokemonId) !== undefined',
+    to: 'state.pokemon(request.pokemonId) === undefined',
+  },
+  // actions orchestration
+  { file: 'actions.ts', from: 'this.limiter.recordSend(spec.now);', to: '' },
+  { file: 'actions.ts', from: 'this.ledger.record(spec.now, spec.spendGold)', to: 'void 0' },
+  { file: 'actions.ts', from: "result.status === 'unconfirmed' || result.status === 'rejected'", to: "result.status === 'unconfirmed'" },
+  { file: 'actions.ts', from: 'spent + request.totalPrice > cap', to: 'spent + request.totalPrice >= cap' },
+  { file: 'actions.ts', from: 'gold < request.totalPrice', to: 'gold <= request.totalPrice' },
+  { file: 'actions.ts', from: 'options.confirmIrreversible !== true', to: 'options.confirmIrreversible === false' },
+  { file: 'actions-options.ts', from: 'value >= 0', to: 'value > 0' },
+  // errors
+  { file: 'errors.ts', from: 'defaultErrorHandler(error);\n  }\n}', to: 'throw error;\n  }\n}' },
+];
+
+/**
+ * Mutations the tests are EXPECTED to survive, with the reason. Empty today: add one only when you have proven the mutated
+ * code is equivalent to the original (not when a test is merely missing).
+ */
+export const EXPECTED_SURVIVORS = [];

@@ -21,7 +21,12 @@ npm test
 ```
 
 Node 20 or newer. The checks CI runs, in this order: `npm run format:check`, `npm run build`, `npm run lint`,
-`npm run typecheck`, `npm test`. Run `npm run format` to fix formatting.
+`npm run typecheck`, `npm test`, `npm run coverage` (a floor, see `scripts/check-coverage.mjs`). Run `npm run format` to fix
+formatting.
+
+`npm run mutation` (about two minutes; also run weekly by CI) breaks the safety-relevant code on purpose, one change at a
+time, and fails if the tests do not notice. If you change code listed in `scripts/mutations.mjs`, keep that list in step
+(a test fails when an entry no longer applies).
 
 ## How the code is organized
 
