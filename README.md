@@ -248,6 +248,45 @@ The library redacts tokens, e-mails, your own nick and account id, and everythin
 no recordings and no credentials, and a test fails if something of the kind is added. Please never paste raw packet
 recordings in issues: use the redacted dump.
 
+### Automatic diagnostics and shadow collection
+
+Use the opt-in counts-only inspector for automatic local collection, not the default sampled dump:
+
+```ts
+const inspector = new Inspector({ mode: 'counts-only', maxTypes: 256 });
+let sdkErrors = 0;
+const client = new PokeIdleClient({
+  transport,
+  inspector,
+  onError: () => {
+    sdkErrors += 1;
+  },
+});
+```
+
+In this mode `inspector.dump()` retains the existing shape, but `samples` and `battleEventSamples` are always empty,
+regardless of sample/redaction options. Counter keys must exactly match the appropriate packet, command or battle-event
+registry; unrecognized names become `(unknown)`, never arbitrary server text. Each of `received`, `sent` and `battleEvents`
+has at most `maxTypes + 1` entries (257 with this configuration), including an `(other)` overflow bucket. Each `unknown*`
+list is empty or `['(unknown)']`; overflow can absorb that marker, so always inspect `(other)` too. `ignored` only contains
+`oversized`, `not-a-packet` or `(unknown)`, at most three entries. No packet fields are traversed or retained.
+
+The default mode remains `redacted-samples`, with 200 types and three samples per type. Effective limits must be
+non-negative safe integers; invalid modes/limits throw. `maxSamplesPerType` is ignored in counts-only mode.
+`dump()` is cumulative until `reset()`, which preserves the mode. Let the host own collection cadence, durable append,
+bounded rotation, restrictive local permissions and any reset after persistence; do not silently discard failed writes.
+
+Track connection/generation locally with `onConnectionChange`, completeness with `state.complete`, and known/unknown
+quality through normalized getters. Log only allowlisted field identifiers, validated catalog ids and aggregate parity
+counts, not the compared values. Never serialize player snapshots, packet callbacks, error messages/stacks or page-console
+contents into the collection. Counts-only protects Inspector retention, not other application logging or the live state.
+The host owns run identifiers, the log-envelope schema and source SDK revision.
+
+`sent` counts observed commands from the **game's own client**, not SDK sends; `ignored` counts dropped incoming frames.
+These counters do not prove that the SDK sent nothing. Read-only shadow operation requires a separate host-side send
+block and disabled automation, independent of copied preferences. Do not send collected files to external services or
+commit them to Git; analysis should use only explicitly approved local data or synthetic summaries.
+
 ## License
 
 [MIT](LICENSE), for the code in this repository only. It does not cover the game, its assets or other people's extensions.

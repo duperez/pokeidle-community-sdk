@@ -77,6 +77,10 @@ The SDK reads a game that changes without notice. A change in the game's packets
 
 ### Added
 
+- Opt-in `InspectorOptions.mode: 'counts-only'` for automatic local diagnostics: no payloads/samples or unknown names
+  are retained, even through packet types, event kinds or ignored reasons. Known names use their exact registry;
+  unknown/overflow buckets are fixed markers. The existing dump shape and default sampled mode remain compatible.
+  Invalid modes and effective non-integer/negative/unsafe limits now fail explicitly.
 - Reproducible CommonJS bundle (`dist/index.cjs`) and portable CommonJS declarations (`dist/cjs/`) alongside the ESM build.
   Conditional package exports select the matching declarations. An external-consumer test checks relocated ESM/CJS
   execution and TypeScript usage without access to this source checkout.

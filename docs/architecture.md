@@ -185,6 +185,23 @@ account id (`estado.id`) is masked by path. The events inside a `batalha` packet
 masking as `battleEventSamples`, so text that one masks is not readable in the other. The redaction is a safety net, not a guarantee: read a dump before sharing it. Raw recordings
 must never be committed (`recordings/` is ignored); only sanitized fixtures belong in the repository.
 
+For automatic diagnostics, use `Inspector({ mode: 'counts-only', maxTypes: 256 })`. It skips payload traversal and
+sampling entirely, and canonicalizes names before retaining them: exact names from each direction's registry survive,
+unknown names are a single `(unknown)` bucket. This also covers battle-event kinds and invalid/future ignored reasons;
+turning off samples alone would still retain arbitrary server-controlled names in keys and unknown-name lists.
+The three type/event counter maps retain at most `maxTypes + 1` series each, including `(other)` overflow; the ignored
+map has only two known reasons plus `(unknown)`. Unknown-name lists contain only the fixed marker when retained.
+Effective limits are validated as non-negative safe integers and an invalid mode fails before recording starts.
+`reset()` clears counters without changing privacy mode. Sampled redaction remains the default for deliberate debugging,
+but a sampled dump needs human review and is not an anonymity guarantee.
+
+The host owns the versioned log envelope, connection generation, known/unknown quality flags derived from normalized
+getters, parity counters, collection cadence, local permissions and bounded file rotation. Do not persist packet
+listeners, raw error messages/stacks, player snapshots or page-console output. Inspector counters observe incoming
+packets and the game client's outgoing commands, not the SDK's own sends; they cannot establish read-only operation.
+The host must enforce a separate send block and turn automation off. SDK diagnostics add neither account metadata
+nor filesystem/network persistence, and do not send collected data anywhere.
+
 ## Public API and checks
 
 `src/index.ts` is an explicit export list, not `export *`, so adding a file never widens the API by accident. A test

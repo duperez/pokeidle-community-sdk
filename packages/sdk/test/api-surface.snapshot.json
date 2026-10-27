@@ -437,6 +437,7 @@
   ],
   "InspectorOptions": [
     "type: InspectorOptions",
+    "  mode?: \"redacted-samples\" | \"counts-only\" | undefined",
     "  maxTypes?: number | undefined",
     "  maxSamplesPerType?: number | undefined",
     "  redact?: RedactOptions | undefined",

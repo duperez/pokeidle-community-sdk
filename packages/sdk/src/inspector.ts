@@ -3,6 +3,8 @@ import { BATTLE_EVENT_KINDS, CLIENT_COMMAND_TYPES } from './protocol/registry.ge
 import { REDACTED, redact, type RedactOptions } from './redact.js';
 
 export interface InspectorOptions {
+  /** Default `redacted-samples`. `counts-only` never retains payloads or unknown names, even when sample/redaction options say otherwise. */
+  mode?: 'redacted-samples' | 'counts-only';
   /** How many distinct packet types are tracked (the server decides the names, so the map must not grow forever). Default 200. */
   maxTypes?: number;
   /** Samples kept per packet type. Default 3. */
@@ -24,7 +26,7 @@ export interface InspectorDump {
   sent: Record<string, number>;
   /** Types that are not in `KNOWN_PACKET_TYPES`: the ones worth investigating. */
   unknownTypes: string[];
-  /** A few redacted examples per type, oldest first. Safe to share. */
+  /** A few redacted examples per type, oldest first. Review before sharing; always empty in `counts-only` mode. */
   samples: Record<string, unknown[]>;
   /** Types the game's own client sent that the SDK does not know (commands added by the game). */
   unknownSentTypes: string[];
@@ -66,6 +68,7 @@ const GAME_ONLY_EVENTS = new Set([
 ]);
 
 const OTHER = '(other)';
+const UNKNOWN = '(unknown)';
 /** Commands of the game's modules that are not in the main client script (the Mini Games). */
 const MODULE_COMMANDS = ['mg.entrar', 'mg.sair', 'mg.palpite'];
 const KNOWN_COMMANDS = new Set<string>([...CLIENT_COMMAND_TYPES, ...MODULE_COMMANDS]);
@@ -91,13 +94,14 @@ const DEFAULT_SOCIAL_PREFIXES = [
 
 /**
  * Keeps counts and a few redacted samples of the packets that go by, so a developer can see what the game actually sends
- * (and share it) without leaking account data. Samples are redacted when they are recorded, never later.
+ * with reduced exposure of account data. Samples are redacted when recorded, never later, but need review before sharing.
+ * Use `counts-only` for automatic diagnostics: no payloads or unrecognized server-controlled names are retained.
  */
 export class Inspector {
   private readonly received = new Map<string, number>();
   private readonly sent = new Map<string, number>();
   private readonly samples = new Map<string, unknown[]>();
-  private readonly ignored = new Map<IgnoredReason, number>();
+  private readonly ignored = new Map<IgnoredReason | typeof UNKNOWN, number>();
   private readonly battleEvents = new Map<string, number>();
   private readonly battleSamples = new Map<string, unknown[]>();
   private readonly maxTypes: number;
@@ -105,10 +109,21 @@ export class Inspector {
   private readonly redactOptions: RedactOptions;
   private readonly socialPrefixes: readonly string[];
   private readonly maskedPaths: readonly string[];
+  private readonly countsOnly: boolean;
 
   constructor(options: InspectorOptions = {}) {
-    this.maxTypes = options.maxTypes ?? 200;
-    this.maxSamples = options.maxSamplesPerType ?? 3;
+    const mode = options.mode === undefined ? 'redacted-samples' : options.mode;
+    if (mode !== 'redacted-samples' && mode !== 'counts-only')
+      throw new TypeError('Inspector mode must be "redacted-samples" or "counts-only"');
+    this.countsOnly = mode === 'counts-only';
+    this.maxTypes = options.maxTypes === undefined ? 200 : options.maxTypes;
+    this.maxSamples = this.countsOnly ? 0 : options.maxSamplesPerType === undefined ? 3 : options.maxSamplesPerType;
+    for (const [name, value] of [
+      ['maxTypes', this.maxTypes],
+      ['maxSamplesPerType', this.maxSamples],
+    ] as const) {
+      if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`Inspector ${name} must be a non-negative safe integer`);
+    }
     this.redactOptions = options.redact ?? {};
     this.socialPrefixes = options.socialTypePrefixes ?? DEFAULT_SOCIAL_PREFIXES;
     this.maskedPaths = options.maskedPaths ?? DEFAULT_MASKED_PATHS;
@@ -124,10 +139,10 @@ export class Inspector {
 
   /** One battle event (`ev[].k` of a `batalha` packet). */
   recordBattleEvent(rawKind: string, event?: unknown): void {
-    const kind = rawKind.slice(0, 60); // the name comes from the server: keep it short
+    const kind = this.countsOnly ? (KNOWN_EVENTS.has(rawKind) ? rawKind : UNKNOWN) : rawKind.slice(0, 60);
     const key = this.battleEvents.has(kind) || this.battleEvents.size < this.maxTypes ? kind : OTHER;
     this.battleEvents.set(key, (this.battleEvents.get(key) ?? 0) + 1);
-    if (event === undefined || key === OTHER) return;
+    if (this.countsOnly || event === undefined || key === OTHER) return;
     const kept = this.battleSamples.get(key) ?? [];
     if (kept.length < this.maxSamples) {
       kept.push(redact(event, this.optionsForEvent(key)));
@@ -158,13 +173,17 @@ export class Inspector {
   }
 
   recordIgnored(reason: IgnoredReason): void {
-    this.ignored.set(reason, (this.ignored.get(reason) ?? 0) + 1);
+    const key = this.countsOnly && reason !== 'oversized' && reason !== 'not-a-packet' ? UNKNOWN : reason;
+    this.ignored.set(key, (this.ignored.get(key) ?? 0) + 1);
   }
 
   private record(counts: Map<string, number>, packet: Packet, keepSample: boolean): void {
-    const key = counts.has(packet.t) || counts.size < this.maxTypes ? packet.t : OTHER;
+    const rawType = packet.t;
+    const known = keepSample ? isKnownPacketType(rawType) : KNOWN_COMMANDS.has(rawType);
+    const type = this.countsOnly && !known ? UNKNOWN : rawType;
+    const key = counts.has(type) || counts.size < this.maxTypes ? type : OTHER;
     counts.set(key, (counts.get(key) ?? 0) + 1);
-    if (!keepSample || key === OTHER) return;
+    if (this.countsOnly || !keepSample || key === OTHER) return;
     const kept = this.samples.get(key) ?? [];
     if (kept.length < this.maxSamples) {
       const social = this.socialPrefixes.some((prefix) => key.startsWith(prefix));
