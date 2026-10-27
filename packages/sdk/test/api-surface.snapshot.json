@@ -359,6 +359,7 @@
     "  isInCollection: (id: number) => boolean | null",
     "  holdsExpShare: (id: number) => boolean | null",
     "  extraItems: readonly ExtraItemEntry[]",
+    "  huntName: (slug: string) => string | null",
     "  shopItems: readonly ShopEntry[]",
     "  player: PlayerState | null",
     "  pokemonCount: number",

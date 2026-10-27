@@ -40,6 +40,7 @@ The SDK reads a game that changes without notice. A change in the game's packets
 ### Added (hardening)
 
 - `GameState.markStale()`.
+- `GameState.huntName(slug)`: the display name of a hunt from the `welcome` packet's hunt list (`null` when unknown).
 - `npcShopPrice(itemId)`: what the NPC shop charges for a potion or revive, `null` for anything it is not known to sell. Narrower
   than `itemInfo(id).npcPrice` (rare items such as Max Revive and Golden Potion have an `npcPrice` but no shop sells them);
   it is the table the SDK's own purchases use.

@@ -83,6 +83,7 @@ export class GameState {
   private playerCache: PlayerState | null = null;
   private balls: BallEntry[] = [];
   private shop: ShopEntry[] = [];
+  private huntNames = new Map<string, string>();
   private extra: ExtraItemEntry[] = [];
   private xpShareId: number | null = null;
   private readonly listeners = new Set<() => void>();
@@ -167,6 +168,11 @@ export class GameState {
   /** The game's own items (not in the public items catalog), from the last welcome packet. */
   get extraItems(): readonly ExtraItemEntry[] {
     return this.extra;
+  }
+
+  /** The display name of a hunt from the last welcome packet's hunt list, or `null` (unknown slug, or no list yet). */
+  huntName(slug: string): string | null {
+    return this.huntNames.get(slug) ?? null;
   }
 
   /** The items the shop sells, from the last welcome packet. */
@@ -291,6 +297,16 @@ export class GameState {
             ? []
             : [{ id, name, category: asText(e.category, 30) ?? 'unknown', rare: e.rare === true, npcPrice: asNumber(e.npcPrice) }];
         });
+    }
+    const hunts = packet['hunts'];
+    if (Array.isArray(hunts)) {
+      const names = new Map<string, string>();
+      for (const h of hunts.slice(0, MAX_LIST).filter(isObject) as Array<{ slug?: unknown; nome?: unknown }>) {
+        const slug = asText(h.slug, 80);
+        const name = asText(h.nome, 80);
+        if (slug !== null && name !== null) names.set(slug, name);
+      }
+      this.huntNames = names;
     }
     const shop = packet['itensCompraveis'];
     if (Array.isArray(shop)) {

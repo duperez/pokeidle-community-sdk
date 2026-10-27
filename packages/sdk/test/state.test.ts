@@ -236,3 +236,31 @@ test('a failure while merging leaves the state stale, never half-applied and com
   assert.throws(() => state.applyPacket({ t: 'estado', estado: { automation: deep } }), RangeError);
   assert.equal(state.complete, false);
 });
+
+test('huntName: the display name from the welcome hunt list, null for an unknown slug or before any list', () => {
+  const state = new GameState();
+  assert.equal(state.huntName('some-hunt'), null);
+  state.applyPacket(
+    welcome({
+      hunts: [
+        { slug: 'some-hunt', nome: 'Some Hunt', area: 'x', nivel: 5 },
+        { slug: 'other', nome: 'Other' },
+      ],
+    }),
+  );
+  assert.equal(state.huntName('some-hunt'), 'Some Hunt');
+  assert.equal(state.huntName('other'), 'Other');
+  assert.equal(state.huntName('missing'), null);
+});
+
+test('huntName ignores malformed hunt entries and a later welcome replaces the list', () => {
+  const state = new GameState();
+  state.applyPacket(welcome({ hunts: [null, 5, {}, { slug: 'a' }, { nome: 'no slug' }, { slug: 'ok', nome: 'Ok' }] }));
+  assert.equal(state.huntName('a'), null);
+  assert.equal(state.huntName('ok'), 'Ok');
+  state.applyPacket(welcome({ hunts: [{ slug: 'new', nome: 'New' }] }));
+  assert.equal(state.huntName('ok'), null);
+  assert.equal(state.huntName('new'), 'New');
+  state.applyPacket(welcome()); // a welcome without a list keeps the last one
+  assert.equal(state.huntName('new'), 'New');
+});
