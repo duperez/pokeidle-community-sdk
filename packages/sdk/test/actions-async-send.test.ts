@@ -29,11 +29,16 @@ class AsyncTransport implements Transport<Promise<boolean>> {
 function setupAsync(options: ConstructorParameters<typeof PokeIdleClient>[0]['actions'] = {}) {
   const transport = new AsyncTransport();
   const scheduler = new FakeScheduler();
-  const client = new PokeIdleClient({ transport, actions: { confirmGraceMs: 0, ...options, scheduler } });
+  const errors: unknown[] = [];
+  const client = new PokeIdleClient({
+    transport,
+    actions: { confirmGraceMs: 0, ...options, scheduler },
+    onError: (error) => errors.push(error),
+  });
   client.start();
   const feed = (...packets: object[]) => packets.forEach((p) => transport.handlers?.onMessage(JSON.stringify(p)));
   feed(welcome());
-  return { transport, scheduler, client, feed, actions: client.actions };
+  return { transport, scheduler, client, feed, errors, actions: client.actions };
 }
 
 test('an asynchronous transport: the purchase is sent, awaited and confirmed by the game', async () => {
@@ -68,19 +73,35 @@ test('an asynchronous transport that resolves `false`: not-connected, nothing ch
 });
 
 test('a REJECTED send is treated as "maybe sent": the budget is charged and the order ends unconfirmed with a cooldown', async () => {
-  const { transport, actions, scheduler } = setupAsync({ maxGoldPerHour: 1300 });
+  const { transport, actions, scheduler, errors } = setupAsync({ maxGoldPerHour: 1300 });
   transport.mode = 'reject';
   const pending = actions.buyBall(Ball.UltraBall, 10);
   await tick();
   await tick();
   scheduler.advance(10_000);
   const result = await pending;
+  assert.equal(errors.length, 1);
+  assert.match(String(errors[0]), /ipc failed/);
   assert.equal(result.status, 'unconfirmed');
   // the spending cap now counts the maybe-sent order, so a second one is refused for the cap (and the cooldown holds it too)
   transport.mode = 'accept';
   const second = await actions.buyBall(Ball.UltraBall, 10);
   assert.notEqual(second.status, 'confirmed');
   assert.equal(transport.sent.length, 0);
+});
+
+test('a delayed send is budgeted when it settles, not at an expired attempt timestamp', async () => {
+  const { transport, actions, scheduler } = setupAsync({ rateLimit: false, maxGoldPerHour: 1300 });
+  let accept: (sent: boolean) => void = () => {};
+  transport.send = () =>
+    new Promise<boolean>((resolve) => {
+      accept = resolve;
+    });
+  const pending = actions.buyBall(Ball.UltraBall, 10);
+  scheduler.advance(3_600_001);
+  accept(true);
+  assert.equal((await pending).status, 'unconfirmed');
+  assert.equal(actions.spentLastHour, 1300);
 });
 
 test('only one order at a time, also while an asynchronous send is in flight', async () => {

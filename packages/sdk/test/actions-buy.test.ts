@@ -233,3 +233,40 @@ test('the overall timeout during the grace still answers confirmed, not unconfir
   scheduler.advance(300); // the timeout (1500) comes before the end of the grace (2200)
   assert.equal((await done).status, 'confirmed');
 });
+
+test('inventory arriving after purchase A grace expired cannot be reused as purchase B evidence', async () => {
+  const { actions, feed, scheduler } = setup({ confirmGraceMs: 1000 });
+  const a = actions.buyBall(Ball.UltraBall, 10);
+  feed(compra);
+  scheduler.advance(1000);
+  assert.equal((await a).status, 'confirmed');
+  scheduler.advance(2000);
+  const b = actions.buyBall(Ball.UltraBall, 10);
+  feed(balls(82)); // the delayed inventory of A, not B
+  let settled = false;
+  void b.then(() => (settled = true));
+  await tick();
+  assert.equal(settled, false);
+  feed(balls(92));
+  const result = await b;
+  assert.equal(result.status, 'confirmed');
+  assert.equal(result.status === 'confirmed' && result.confirmedBy, 'inventory');
+});
+
+test('a new connection discards purchase inventory floors from the old session', async () => {
+  const { actions, client, transport, feed, scheduler } = setup({ confirmGraceMs: 0 });
+  const a = actions.buyBall(Ball.UltraBall, 10);
+  feed(compra);
+  await a;
+  transport.handlers?.onOpen?.();
+  feed({
+    t: 'welcome',
+    estado: { cheio: true, gold: 10000, balls: { '4': 1 } },
+    catalogoBolas: [{ id: 4, nome: 'Ultra Ball', priceGold: 130, compravel: true }],
+  });
+  assert.equal(client.state.complete, true);
+  scheduler.advance(3000);
+  const b = actions.buyBall(Ball.UltraBall, 10);
+  feed(balls(11));
+  assert.equal((await b).status, 'confirmed');
+});

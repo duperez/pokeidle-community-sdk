@@ -6,6 +6,7 @@ import { priceOf } from './pricing.js';
 import { RateLimiter } from './rate-limiter.js';
 import { whyNotSellable } from './sale-rules.js';
 import { SpendLedger } from './spend-ledger.js';
+import { defaultErrorHandler, report, type ErrorHandler } from './errors.js';
 import { isIrreversibleCommand, type SendableCommand } from './protocol/commands.js';
 import { CommandRefusedError } from './protocol/send-guard.js';
 
@@ -27,15 +28,23 @@ export class Actions {
   private readonly limiter: RateLimiter;
   private readonly ledger = new SpendLedger();
   private inFlight = false;
+  private connectionGeneration = 0;
+  private readonly inventoryFloors = new Map<string, number>();
 
   constructor(
     private readonly host: ActionsHost,
     options: ActionsOptions = {},
+    private readonly onError: ErrorHandler = defaultErrorHandler,
   ) {
     validateOptions(options);
     this.options = options;
     this.scheduler = options.scheduler ?? realScheduler;
     this.limiter = new RateLimiter(options);
+    // This subscription belongs to the host's lifetime; per-order listeners are owned by the confirmation waiter.
+    host.onConnectionChange(() => {
+      this.connectionGeneration += 1;
+      this.inventoryFloors.clear();
+    });
   }
 
   /** Buys balls from the NPC shop. Use the `Ball` enum for the id. */
@@ -94,12 +103,17 @@ export class Actions {
     if (dryRun) return { status: 'dry-run', request, command: { ...command } };
 
     const before = kind === 'ball' ? state.ballCount(id) : state.itemCount(id);
+    const key = `${kind}:${id}`;
+    const generation = this.connectionGeneration;
+    const inventoryBefore = Math.max(before, this.inventoryFloors.get(key) ?? before);
     return this.dispatch({
       command: { ...command },
       confirmIrreversible: false,
-      now,
       spendGold: request.totalPrice,
-      wait: () => waitForPurchase(this.confirmationDeps, request, before),
+      onSent: () => {
+        if (generation === this.connectionGeneration) this.inventoryFloors.set(key, inventoryBefore + quantity);
+      },
+      wait: () => waitForPurchase(this.confirmationDeps, request, before, inventoryBefore),
     });
   }
 
@@ -140,7 +154,6 @@ export class Actions {
     return this.dispatch({
       command: { ...command },
       confirmIrreversible: true,
-      now,
       spendGold: null,
       wait: () => waitForSale(this.confirmationDeps, request),
     });
@@ -157,39 +170,34 @@ export class Actions {
   private async dispatch<R extends { status: string }>(spec: {
     command: SendableCommand;
     confirmIrreversible: boolean;
-    now: number;
     spendGold: number | null;
+    onSent?: () => void;
     wait: () => { result: Promise<R>; cancel: () => void };
   }): Promise<R | { status: 'not-connected' }> {
     this.inFlight = true;
     try {
       const confirmation = spec.wait();
-      let answer: boolean | Promise<boolean>;
-      try {
-        answer = this.host.sendCommand(spec.command, { confirmIrreversible: spec.confirmIrreversible });
-      } catch (error) {
-        confirmation.cancel(); // a guard refused it (CommandRefusedError): nothing was sent
-        throw error;
-      }
-      // A synchronous host answers right away (and keeps the exact timing it always had); an asynchronous one is awaited.
       let sent: boolean;
-      if (typeof answer === 'boolean') {
-        sent = answer;
-      } else {
-        try {
-          sent = await answer;
-        } catch {
-          // The transport's promise REJECTED: we cannot know whether the frame left. Fail closed for the money: treat it as
-          // sent (charge the budgets, wait for the game) and let it end `unconfirmed`, which also starts the cooldown.
-          sent = true;
+      try {
+        const answer = this.host.sendCommand(spec.command, { confirmIrreversible: spec.confirmIrreversible });
+        sent = typeof answer === 'boolean' ? answer : await answer;
+      } catch (error) {
+        if (error instanceof CommandRefusedError) {
+          confirmation.cancel();
+          throw error;
         }
+        // A transport failure can happen after writing the frame. Only an explicit false means definitely not sent.
+        report(this.onError, error);
+        sent = true;
       }
       if (!sent) {
         confirmation.cancel();
         return { status: 'not-connected' };
       }
-      this.limiter.recordSend(spec.now);
-      if (spec.spendGold !== null) this.ledger.record(spec.now, spec.spendGold);
+      spec.onSent?.();
+      const sentAt = this.scheduler.now();
+      this.limiter.recordSend(sentAt);
+      if (spec.spendGold !== null) this.ledger.record(sentAt, spec.spendGold);
       const result = await confirmation.result;
       if (result.status === 'unconfirmed' || result.status === 'rejected') this.limiter.startCooldown(this.scheduler.now());
       return result;

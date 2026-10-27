@@ -15,7 +15,16 @@ test('npm pack contains the built library and nothing it should not', { skip: bu
   const out = execFileSync('npm', ['pack', '--dry-run', '--json', '-w', 'pokeidle-community-sdk'], { cwd: ROOT, encoding: 'utf8' });
   const [pack] = JSON.parse(out);
   const files = pack.files.map((f) => f.path);
-  for (const required of ['package.json', 'LICENSE', 'README.md', 'dist/index.js', 'dist/index.d.ts'])
+  for (const required of [
+    'package.json',
+    'LICENSE',
+    'README.md',
+    'dist/index.js',
+    'dist/index.d.ts',
+    'dist/index.cjs',
+    'dist/cjs/index.d.ts',
+    'dist/cjs/package.json',
+  ])
     assert.ok(files.includes(required), `missing ${required}`);
   const allowed = (f) => f === 'package.json' || f === 'LICENSE' || f === 'README.md' || f.startsWith('dist/');
   assert.deepEqual(

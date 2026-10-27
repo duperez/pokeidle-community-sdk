@@ -101,6 +101,28 @@ test('start is idempotent, stop detaches, sendRaw goes through the transport', (
   assert.equal(transport.handlers, null);
 });
 
+test('a failed start detaches partial handlers and can be retried', () => {
+  const transport = new FakeTransport();
+  const start = transport.start.bind(transport);
+  let first = true;
+  transport.start = (handlers) => {
+    start(handlers);
+    if (first) {
+      first = false;
+      handlers.onMessage('{"t":"welcome","estado":{"gold":1}}');
+      throw new Error('startup failed');
+    }
+  };
+  const client = new PokeIdleClient({ transport });
+  assert.throws(() => client.start(), /startup failed/);
+  assert.equal(transport.handlers, null);
+  assert.equal(client.connected, false);
+  assert.equal(client.state.complete, false);
+  client.start();
+  assert.equal(client.connected, true);
+  assert.equal(transport.starts, 2);
+});
+
 test('the inspector can be turned off', () => {
   const client = new PokeIdleClient({ transport: new FakeTransport(), inspector: false });
   assert.equal(client.inspector, null);

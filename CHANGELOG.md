@@ -17,6 +17,16 @@ The SDK reads a game that changes without notice. A change in the game's packets
 
 ### Fixed
 
+- Stopping a client now invalidates completeness, notifies observers and ends pending orders conservatively; callbacks
+  retained from a previous run cannot feed a restarted client. Failed starts detach partial subscriptions and can be retried.
+- All nested state data, normalized lists and server catalogs are privately owned and frozen, not just decision fields.
+  A new `welcome` clears catalogs/protection metadata omitted by the new session.
+- Purchases reserve expected inventory across orders, preventing a delayed update from confirming another purchase even
+  after `confirmGraceMs` expires. Connection boundaries reset those expectations.
+- Uncertain send failures are reported through `onError` and counted conservatively, including synchronous transport
+  failures. Budgets start when the send result settles rather than at an attempt timestamp that may already have expired.
+- Aggregate battle samples preserve truncation and mask malformed events instead of retaining their free text.
+
 - A new connection no longer reuses the old session's state: `state.complete` turns `false` when the socket closes or a new
   one opens, so actions answer `no-state` until the next `welcome`. An order waiting for the game when the connection
   drops ends as `unconfirmed` (and the next action waits).
@@ -66,6 +76,10 @@ The SDK reads a game that changes without notice. A change in the game's packets
   catalog in a bundle that does not use it.
 
 ### Added
+
+- Reproducible CommonJS bundle (`dist/index.cjs`) and portable CommonJS declarations (`dist/cjs/`) alongside the ESM build.
+  Conditional package exports select the matching declarations. An external-consumer test checks relocated ESM/CJS
+  execution and TypeScript usage without access to this source checkout.
 
 - `Pokemon` and `normalizePokemon`; `GameState.pokemon(id)`, `.pokemons`, `.pokemonCount`, `.isActive`, `.isInTeam`,
   `.holdsExpShare` (three-valued: `null` = unknown).

@@ -48,12 +48,14 @@ listeners run. The full state arrives only once, in `welcome` right after login:
 example an extension reloaded with the game already open) only sees updates, and `state.complete` is `false` until the
 page reloads.
 
-A new connection invalidates the state. `PokeIdleClient` calls `GameState.markStale()` when the socket opens and when it
-closes: `complete` turns `false` and stays so until the next `welcome`. Nothing is erased (the last values stay readable),
+A new connection invalidates the state. `PokeIdleClient` calls `GameState.markStale()` when the socket opens, closes or the
+client stops: `complete` turns `false` and stays so until the next full state. State observers are notified when completeness
+is invalidated. Nothing is erased (the last values stay readable),
 but actions answer `no-state`. A merge that throws also leaves the state stale, so a half-applied update never looks
-complete. The data the SDK's decisions rest on (`items`, `balls`, `automation` and every pokémon row) are frozen private
-copies: writes throw a `TypeError`, and the packet a listener holds never aliases them. The rest of `state.player` is
-shared with the packet and read-only only by contract.
+complete. All nested state data, normalized lists and server catalogs are frozen private copies: writes throw a `TypeError`,
+and the packet a listener holds never aliases them. New `welcome` packets replace catalogs, including clearing omitted
+catalogs and protection metadata. A client/transport belongs to one account; routing across accounts belongs to the host.
+Callbacks from a stopped or older client run are ignored, even after restart.
 
 ## The protocol registry
 
@@ -75,7 +77,8 @@ One path for everything the SDK cannot throw to anyone (`errors.ts`). `ClientOpt
 (`PageTransport` guards its handlers), to `GameState` (change callbacks) and to the client's listener dispatch, so a
 throwing listener never stops the others or the state update. Without `onError` the default handler writes to the
 console, the only `console` call in the library. If `onError` itself throws, the original error goes to the default
-handler: reporting never throws.
+handler: reporting never throws. Actions also report uncertain transport-send failures through this path rather than
+silently converting them to success or a definite refusal.
 
 ## Actions
 
@@ -91,8 +94,11 @@ first of: the game's `compra` event (same quantity and, when known, same name), 
 the timeout. The inventory alone is a weak signal (balls used in the hunt at the same time can hide a small purchase),
 so the event is preferred. It was verified in real traffic: the `compra` event is emitted for NPC-shop purchases, with
 `nome`, `qtd` and `gasto`, and arrives before the `estado` update. The purchase is already confirmed at that point, but the
-answer waits up to `confirmGraceMs` (default 1 s, shared with sales) for the inventory update, so that late update cannot
-be taken for the evidence of the next purchase of the same item. `confirmedBy` records
+answer waits up to `confirmGraceMs` (default 1 s, shared with sales) for the inventory update. `Actions` also reserves an
+inventory floor per item for every sent or possibly sent order, so an update delayed beyond that grace cannot confirm a
+later order. These floors are conservative when items are consumed or an order is rejected; matching events remain usable.
+One host-lifetime connection subscription resets the floors between sessions; waiters own and release per-order subscriptions.
+`confirmedBy` records
 which signal confirmed. A timeout, or a connection that drops or is replaced while waiting (`ActionsHost.onConnectionChange`), is `unconfirmed`, not a failure: the order may be late, so the next
 one waits (default 30 s), the same rule the Companion app uses after more than 57 000 real purchases.
 
@@ -109,6 +115,12 @@ from the page script, so a dry run does not estimate it: the gold comes back in 
 
 The prices of purchases come from the catalogs: balls from the server's ball catalog (`priceGold`), shop items from the welcome packet,
 and potions and revives from a small generated table (`catalog/npc-shop.generated.ts`, from the item catalog's `npcPrice`, checked against real purchases).
+
+A transport may return a boolean or a promise of one; the client preserves that type through its existing generic.
+`false` means definitely not sent, `true` only acceptance, and transport failures have an uncertain outcome. Actions reserve
+one in-flight slot before sending, listen before the send, and count budgets at settlement so a delayed acknowledgement
+cannot expire its own limits. There is no launcher-specific projection, account model or dependency-injection container in
+the SDK.
 
 ## Sending commands
 

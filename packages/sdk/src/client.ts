@@ -1,6 +1,6 @@
 import { Actions } from './actions.js';
 import type { ActionsOptions } from './actions-types.js';
-import { defaultErrorHandler, report, type ErrorHandler } from './errors.js';
+import { defaultErrorHandler, guarded, report, type ErrorHandler } from './errors.js';
 import type { PacketListener, Unsubscribe } from './listeners.js';
 import { Inspector } from './inspector.js';
 import { DEFAULT_MAX_PACKET_BYTES, readFrame, type Packet } from './packets.js';
@@ -22,8 +22,8 @@ export interface ClientOptions<S extends SendResult = boolean> {
   actions?: ActionsOptions;
   /**
    * Called when something the SDK cannot throw to you fails: one of your listeners, a state callback or a transport
-   * handler threw. It never breaks the other listeners. Default: logs to the console. The same handler is given to the
-   * transport and to `client.state`.
+   * handler threw, or an action's transport send failed with an uncertain outcome. It never breaks the other listeners.
+   * Default: logs to the console. The same handler is given to the transport and to `client.state`.
    */
   onError?: ErrorHandler;
 }
@@ -48,6 +48,7 @@ export class PokeIdleClient<S extends SendResult = boolean> {
   private readonly anyBattle = new Set<(event: BattleEvent) => void>();
   private readonly connection = new Set<(connected: boolean) => void>();
   private started = false;
+  private run = 0;
 
   constructor(options: ClientOptions<S>) {
     this.transport = options.transport;
@@ -55,7 +56,7 @@ export class PokeIdleClient<S extends SendResult = boolean> {
     this.maxBytes = options.maxPacketBytes ?? DEFAULT_MAX_PACKET_BYTES;
     this.onError = options.onError ?? defaultErrorHandler;
     this.state = new GameState({ onError: this.onError });
-    this.actions = new Actions(this, options.actions); // after `state`: the host it reads from must be complete
+    this.actions = new Actions(this, options.actions, this.onError); // after `state`: the host it reads from must be complete
   }
 
   /**
@@ -65,31 +66,52 @@ export class PokeIdleClient<S extends SendResult = boolean> {
   start(): void {
     if (this.started) return;
     this.started = true;
-    this.transport.start({
-      onMessage: (text) => this.handleIncoming(text),
-      onOutgoing: (text) => this.handleOutgoing(text),
-      // A new socket means a new session: until its `welcome` arrives, what the state holds is old (and actions refuse).
-      onOpen: () => {
-        this.state.markStale();
-        this.emitConnection(true);
-      },
-      onClose: () => {
-        this.state.markStale();
-        this.emitConnection(false);
-      },
-      onError: this.onError,
-    });
+    const run = ++this.run;
+    const current = (): boolean => this.started && this.run === run;
+    try {
+      this.transport.start({
+        onMessage: (text) => {
+          if (current()) this.handleIncoming(text);
+        },
+        onOutgoing: (text) => {
+          if (current()) this.handleOutgoing(text);
+        },
+        // A new socket means a new session: until its `welcome` arrives, what the state holds is old (and actions refuse).
+        onOpen: () => {
+          if (!current()) return;
+          this.state.markStale();
+          this.emitConnection(true);
+        },
+        onClose: () => {
+          if (!current()) return;
+          this.state.markStale();
+          this.emitConnection(false);
+        },
+        onError: this.onError,
+      });
+    } catch (error) {
+      this.started = false;
+      guarded(this.onError, () => this.transport.stop());
+      this.state.markStale();
+      this.emitConnection(false);
+      throw error;
+    }
   }
 
   stop(): void {
     if (!this.started) return;
     this.started = false;
-    this.transport.stop();
+    try {
+      this.transport.stop();
+    } finally {
+      this.state.markStale();
+      this.emitConnection(false);
+    }
   }
 
   /** Is the game's socket open right now? */
   get connected(): boolean {
-    return this.transport.readyState === 1;
+    return this.started && this.transport.readyState === 1;
   }
 
   /**

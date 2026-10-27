@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Actions } from '../src/actions.js';
 import { Ball } from '../src/index.js';
+import { CommandRefusedError } from '../src/protocol/send-guard.js';
 import type { ActionsOptions } from '../src/index.js';
 import { FakeHost } from './helpers/fake-host.js';
 import { FakeScheduler } from './helpers/fake-scheduler.js';
@@ -51,19 +52,19 @@ test('no subscription is left behind on any path of a purchase: event, inventory
   assert.ok(host.subscriptions > 0, 'listening while it waits');
   host.feed(purchased);
   assert.equal((await pending).status, 'confirmed');
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1); // the host-lifetime connection subscription
   pending = actions.buyBall(Ball.UltraBall, 10);
   host.feed({ t: 'estado', estado: { balls: { '1': 100, '4': 200, '5': 0 } } });
   assert.equal((await pending).status, 'confirmed');
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1);
   pending = actions.buyBall(Ball.UltraBall, 10);
   host.feed({ t: 'erro', chave: 'x' });
   assert.equal((await pending).status, 'rejected');
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1);
   pending = actions.buyBall(Ball.UltraBall, 10);
   scheduler.advance(10_000);
   assert.equal((await pending).status, 'unconfirmed');
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1);
   assert.equal(scheduler.pending, 0);
 });
 
@@ -84,11 +85,11 @@ test('no subscription is left behind on any path of a sale, and a refused send l
   pending = actions.sellPokemon(8, SELL);
   scheduler.advance(10_000);
   assert.equal((await pending).status, 'unconfirmed');
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1);
   assert.equal(scheduler.pending, 0);
   host.sendResult = false;
   assert.deepEqual(await actions.sellPokemon(9, SELL), { status: 'not-connected' });
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1);
   host.sendResult = true;
   const again = actions.sellPokemon(9, SELL); // not busy: the refused send left nothing in flight
   assert.equal(host.sent.length, 6);
@@ -100,7 +101,7 @@ test('when the host refuses the frame nothing is left in flight, listening or co
   const { host, scheduler, actions } = make();
   host.sendResult = false;
   assert.deepEqual(await actions.buyBall(Ball.UltraBall, 10), { status: 'not-connected' });
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1);
   assert.equal(scheduler.pending, 0);
   host.sendResult = true;
   const next = actions.buyBall(Ball.UltraBall, 10); // not busy, not rate limited: the failed send counted for nothing
@@ -109,11 +110,11 @@ test('when the host refuses the frame nothing is left in flight, listening or co
   await next;
 });
 
-test('when sending throws, the error reaches the caller and nothing is left in flight, listening or counted', async () => {
+test('when a guard refuses, the error reaches the caller and nothing is left in flight, listening or counted', async () => {
   const { host, scheduler, actions } = make();
-  host.sendError = new Error('boom');
+  host.sendError = new CommandRefusedError('shop.buy', 'boom');
   await assert.rejects(actions.buyBall(Ball.UltraBall, 10), /boom/);
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1);
   assert.equal(scheduler.pending, 0);
   host.sendError = null;
   const next = actions.buyBall(Ball.UltraBall, 10);
@@ -126,7 +127,7 @@ test('an answer that arrives from inside the send is not missed', async () => {
   const { host, actions } = make();
   host.onSent = () => host.feed(purchased);
   assert.equal((await actions.buyBall(Ball.UltraBall, 10)).status, 'confirmed');
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1);
 });
 
 test('a host that is not connected sends nothing', async () => {
@@ -143,6 +144,22 @@ test('the grace window leaves no timer and no subscription behind when the event
   assert.equal(scheduler.pending, 2); // the timeout and the window
   scheduler.advance(1000);
   assert.equal((await pending).status, 'confirmed');
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1);
   assert.equal(scheduler.pending, 0);
+});
+
+test('a synchronous transport failure is reported and counted as possibly sent', async () => {
+  const host = new FakeHost();
+  const scheduler = new FakeScheduler();
+  const errors: unknown[] = [];
+  const actions = new Actions(host, { scheduler, maxGoldPerHour: 1300 }, (error) => errors.push(error));
+  host.feed(welcome());
+  const failure = new Error('socket failed after write');
+  host.sendError = failure;
+  const pending = actions.buyBall(Ball.UltraBall, 10);
+  assert.deepEqual(errors, [failure]);
+  assert.equal(actions.spentLastHour, 1300);
+  scheduler.advance(10_000);
+  assert.equal((await pending).status, 'unconfirmed');
+  assert.equal(host.subscriptions, 1);
 });

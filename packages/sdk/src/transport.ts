@@ -1,6 +1,9 @@
 import type { ErrorHandler } from './errors.js';
 
-/** What a transport tells the client. All handlers receive the raw text frame, exactly as the game sent it. */
+/**
+ * What a transport tells one account's client. Frames are raw, exactly as the game sent them.
+ * The transport must ignore events from replaced sockets/webviews and detach on stop; onOpen denotes a new connection.
+ */
 export interface TransportHandlers {
   /** A frame arrived from the server. */
   onMessage(text: string): void;
@@ -27,8 +30,9 @@ export interface Transport<S extends SendResult = boolean> {
   start(handlers: TransportHandlers): void;
   stop(): void;
   /**
-   * Sends a text frame through the game's socket. `false` if there is no open socket. An asynchronous transport should
-   * resolve `false` rather than reject when it cannot send; a rejection is treated as "maybe sent" (see `Actions`).
+   * Sends a text frame through the game's socket. `true` means accepted, not applied by the game. Return/resolve `false`
+   * only when definitely not sent. A throw or rejection has an uncertain outcome (except CommandRefusedError, which is a
+   * pre-send guard); Actions reports it and counts it conservatively. A promised result must eventually settle.
    */
   send(text: string): S;
   /** WebSocket ready state of the game's socket (0 connecting, 1 open, 2 closing, 3 closed), or -1 if none was seen yet. */

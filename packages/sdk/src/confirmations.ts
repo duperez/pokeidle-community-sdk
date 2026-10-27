@@ -25,7 +25,12 @@ export function errorOf(packet: Record<string, unknown>): { chave?: string; msg?
 }
 
 /** Resolves with the first of: the game's `compra` event, the inventory growing, an error, or the timeout. */
-export function waitForPurchase({ host, scheduler, options }: Deps, request: BuyRequest, before: number): Waiter<BuyResult> {
+export function waitForPurchase(
+  { host, scheduler, options }: Deps,
+  request: BuyRequest,
+  before: number,
+  inventoryBefore = before,
+): Waiter<BuyResult> {
   const startedAt = scheduler.now();
   const state = host.state;
   const count = (): number => (request.kind === 'ball' ? state.ballCount(request.id) : state.itemCount(request.id));
@@ -60,16 +65,17 @@ export function waitForPurchase({ host, scheduler, options }: Deps, request: Buy
           byEvent = confirmed();
           // The `estado` update with the new count usually comes right after the event. If we answered now, that late update
           // could be taken for the evidence of the NEXT purchase of the same item: wait for it (a short grace) first.
-          if (graceMs <= 0 || count() - before >= request.quantity) return finish(confirmed());
+          if (graceMs <= 0 || count() - inventoryBefore >= request.quantity) return finish(confirmed());
           graceTimer = scheduler.setTimeout(() => finish(confirmed()), graceMs);
         }),
       );
       // the inventory grew (balls used in the hunt can hide a small purchase: that is why the event comes first)
       onCleanup(
         state.onChange(() => {
+          if (!state.complete) return;
           const after = count();
           // At least the quantity ordered: a drop or a purchase made elsewhere that adds a little must not confirm this order.
-          if (after - before < request.quantity) return;
+          if (after - inventoryBefore < request.quantity) return;
           if (byEvent !== null)
             return finish({
               status: 'confirmed',
@@ -141,6 +147,7 @@ export function waitForSale({ host, scheduler, options }: Deps, request: SellReq
       );
       onCleanup(
         state.onChange(() => {
+          if (!state.complete) return;
           if (state.pokemon(request.pokemonId) !== undefined || graceTimer !== undefined) return;
           const byState: SellResult = { status: 'confirmed', request, confirmedBy: 'state', confidence: 'probable', gained: null };
           if (graceMs <= 0) return finish(byState);

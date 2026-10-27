@@ -195,6 +195,48 @@ test('changing the packet or the returned snapshot afterwards does not change th
   assert.equal(state.itemCount(Item.SmallPotion), 5);
 });
 
+test('all nested snapshots and catalogs are owned, frozen and stable across updates', () => {
+  const state = new GameState();
+  const pokedex = { '1': { k: 3 } };
+  const loja = { boosts: { xp: 2 } };
+  state.applyPacket(welcome({ estado: { pokedex, loja, pokemons: [{ id: 1, nome: 'TestMon' }] } }));
+  const player = state.player;
+  assert.ok(player);
+  pokedex['1'].k = 999;
+  loja.boosts.xp = 999;
+  assert.equal(player.pokedex?.['1']?.k, 3);
+  assert.equal(player.loja?.boosts?.['xp'], 2);
+  assert.throws(() => {
+    player.pokedex!['1']!.k = 7;
+  }, TypeError);
+  assert.throws(() => {
+    player.loja!.boosts!['xp'] = 7;
+  }, TypeError);
+  assert.throws(() => {
+    state.pokemons[0]!.name = 'Changed';
+  }, TypeError);
+  assert.throws(() => {
+    state.ballCatalog[0]!.priceGold = 1;
+  }, TypeError);
+  assert.throws(() => {
+    state.shopItems[0]!.price = 1;
+  }, TypeError);
+  state.applyPacket(delta({ dexMud: { '1': { k: 4 } } }));
+  assert.equal(player.pokedex?.['1']?.k, 3);
+  assert.equal(state.player?.pokedex?.['1']?.k, 4);
+});
+
+test('a new welcome never inherits catalogs or sale protections omitted by the new session', () => {
+  const state = new GameState();
+  state.applyPacket(welcome({ xpShareHeld: { itemId: 70050 }, hunts: [{ slug: 'test', nome: 'Test Hunt' }] }));
+  state.applyPacket({ t: 'welcome', estado: { gold: 2 } });
+  assert.equal(state.complete, true);
+  assert.equal(state.xpShareItemId, null);
+  assert.equal(state.huntName('test'), null);
+  assert.deepEqual(state.ballCatalog, []);
+  assert.deepEqual(state.shopItems, []);
+});
+
 test('complete is false until a full state arrives, so late listeners can tell their data is partial', () => {
   const state = new GameState();
   assert.equal(state.complete, false);
@@ -261,6 +303,6 @@ test('huntName ignores malformed hunt entries and a later welcome replaces the l
   state.applyPacket(welcome({ hunts: [{ slug: 'new', nome: 'New' }] }));
   assert.equal(state.huntName('ok'), null);
   assert.equal(state.huntName('new'), 'New');
-  state.applyPacket(welcome()); // a welcome without a list keeps the last one
-  assert.equal(state.huntName('new'), 'New');
+  state.applyPacket(welcome()); // a new session cannot inherit a catalog omitted by its welcome
+  assert.equal(state.huntName('new'), null);
 });

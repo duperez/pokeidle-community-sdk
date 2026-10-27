@@ -30,12 +30,41 @@ test('a purchase or sale waiting for the game when the connection drops ends as 
   const sale = actions.sellPokemon(5, SELL);
   host.disconnect();
   assert.equal((await sale).status, 'unconfirmed');
-  assert.equal(host.subscriptions, 0);
+  assert.equal(host.subscriptions, 1); // Actions' host-lifetime connection subscription
   host.connected = true;
   host.feed(sellWelcome([pokemon(5)]));
   const next = await actions.sellPokemon(5, { dryRun: true });
   assert.equal(next.status, 'rate-limited'); // an unconfirmed order may have gone through: wait
   assert.equal(next.status === 'rate-limited' && next.reason, 'unconfirmed-cooldown');
+});
+
+test('stop invalidates completeness, notifies observers and finishes pending orders as unconfirmed', async () => {
+  const { client, actions } = setupSell();
+  const readiness: boolean[] = [];
+  client.state.onChange(() => readiness.push(client.state.complete));
+  const pending = actions.sellPokemon(5, SELL);
+  client.stop();
+  assert.equal(client.connected, false);
+  assert.equal(client.state.complete, false);
+  assert.deepEqual(readiness, [false]);
+  assert.equal((await pending).status, 'unconfirmed');
+  client.stop();
+  assert.deepEqual(readiness, [false]);
+});
+
+test('callbacks retained by an old transport run are ignored after stop and restart', () => {
+  const { client, transport, feed } = setupSell();
+  const old = transport.handlers;
+  client.stop();
+  old?.onMessage(JSON.stringify(sellWelcome([pokemon(99)])));
+  assert.equal(client.state.complete, false);
+  client.start();
+  feed(sellWelcome([pokemon(5)]));
+  old?.onMessage(JSON.stringify(sellWelcome([pokemon(99)])));
+  old?.onClose?.();
+  assert.equal(client.state.complete, true);
+  assert.equal(client.state.pokemon(99), undefined);
+  assert.equal(client.state.pokemon(5)?.id, 5);
 });
 
 test('a replaced socket is silent, so the OPEN of its successor is what makes the old state stale', async () => {

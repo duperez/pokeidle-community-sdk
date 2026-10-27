@@ -78,6 +78,11 @@ reload starts them over):
 - One action in flight at a time. Invalid quantities throw a `RangeError`.
 - A new connection invalidates the state: `state.complete` turns `false` when a socket opens or closes and stays so until the next `welcome`, and actions answer `no-state` meanwhile. An order still waiting when the connection drops ends as `unconfirmed`.
 
+The inventory fallback never reuses quantities already expected from earlier sent or possibly sent purchases of the same
+item, even when their update arrives after the grace window. This is deliberately conservative: simultaneous consumption
+or a rejected order can make inventory-only confirmation unavailable; the matching `compra` event still confirms it.
+These expectations are reset at a connection boundary.
+
 `sellPokemon(id, { confirmIrreversible: true })` sells ONE pokémon from your Depot to the NPC shop and cannot be undone, so
 it needs the explicit confirmation (not for a dry run). It refuses, with the reason, what the game's own client refuses to
 sell (the state answers `isActive`, `isInTeam`, `isInCollection` and `holdsExpShare` with `true`, `false` or `null` for
@@ -134,9 +139,28 @@ It has to run in the page's own world, before the game opens its socket. In a Ch
 
 ### Public API
 
+Use one client/transport per account. `stop()` detaches the transport, makes `connected` and `state.complete` false, and
+notifies connection/state observers; the last known values remain readable. A restarted client ignores callbacks retained
+from its previous run and needs a new full state. `state.player`, wire rows, normalized lists and server catalogs are deeply
+frozen, owned snapshots: never mutate them. A new `welcome` clears catalogs/protections omitted by that session.
+
 Everything public is listed by name in `packages/sdk/src/index.ts`. A test snapshots the exported names and signatures
 (`packages/sdk/test/api-surface.snapshot.json`), so the API cannot change by accident; after an intended change run
 `UPDATE_API_SNAPSHOT=1 npm test` in `packages/sdk` and record it in the [CHANGELOG](CHANGELOG.md).
+
+### Integrating a launcher or another IPC host
+
+Implement `Transport<Promise<boolean>>` and construct `PokeIdleClient` with it; `sendRaw`/`sendCommand` then return
+`Promise<boolean>`. `true` is acceptance for sending, **not** confirmation of an effect. Return `false` only if nothing was
+sent; reject on an uncertain IPC/socket failure. Guards still throw synchronously before sending. Actions report uncertain
+send errors through `onError`, charge their budgets conservatively when the send settles and wait for game evidence.
+Never forward callbacks from another account or a replaced webview to the same handlers.
+
+`npm run build -w pokeidle-community-sdk` produces ESM (`dist/index.js`), a self-contained CommonJS bundle
+(`dist/index.cjs`), and declarations for both. Package `import`/`require` exports select matching declarations automatically.
+For vendoring, copy the CJS bundle plus the entire `dist/cjs/` declaration tree, including its `package.json`, preserving
+relative paths. Import types from that tree's `index.js` path (TypeScript resolves `index.d.ts`), not from an untyped `.cjs`
+file. Keep the upstream commit identifier alongside the copied artifacts.
 
 ## Repository layout
 

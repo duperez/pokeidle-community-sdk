@@ -145,13 +145,15 @@ export class Inspector {
    * the very text that one side masks stays readable in the other. `sample` is the already redacted copy and is fixed in place.
    */
   private applyEventPolicy(packet: Packet, sample: unknown): void {
+    if (packet.t !== 'batalha' || sample === null || typeof sample !== 'object') return;
     const events = packet['ev'];
     const kept = (sample as { ev?: unknown }).ev;
-    if (packet.t !== 'batalha' || !Array.isArray(events) || !Array.isArray(kept)) return;
-    for (let i = 0; i < kept.length && i < events.length; i++) {
+    if (!Array.isArray(events) || !Array.isArray(kept)) return;
+    const limit = this.redactOptions.maxArrayItems ?? 3;
+    for (let i = 0; i < Math.min(kept.length, events.length, limit); i++) {
       const event: unknown = events[i];
       const kind = typeof event === 'object' && event !== null ? (event as { k?: unknown }).k : undefined;
-      if (typeof kind === 'string') kept[i] = redact(event, this.optionsForEvent(kind.slice(0, 60)), 2);
+      kept[i] = redact(event, typeof kind === 'string' ? this.optionsForEvent(kind) : { ...this.redactOptions, maskStrings: true }, 2);
     }
   }
 

@@ -91,6 +91,15 @@ test('battle events are sampled: game-only kinds keep their text, kinds that can
   assert.deepEqual(battleEventSamples.amigoPedidoRecebido, [{ k: '[text]', de: '[text]', nick: '[redacted]', n: 3 }]);
 });
 
+test('aggregate event policy preserves truncation and masks malformed event text', () => {
+  const inspector = new Inspector({ redact: { maxArrayItems: 1 } });
+  inspector.recordReceived({ t: 'batalha', ev: [{ texto: 'PrivateWords' }, { k: 'guildCriada', nome: 'PrivateGuild' }] });
+  const sample = inspector.dump().samples.batalha?.[0] as { ev: unknown[] };
+  assert.deepEqual(sample.ev, [{ texto: '[text]' }, '…+1']);
+  const shallow = new Inspector({ redact: { maxDepth: 0 } });
+  assert.doesNotThrow(() => shallow.recordReceived({ t: 'batalha', ev: [] }));
+});
+
 test('the same per-event masking applies inside the batalha sample as in battleEventSamples', () => {
   const inspector = new Inspector();
   const packet = {

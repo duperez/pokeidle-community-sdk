@@ -56,15 +56,6 @@ function deepFreeze<T>(value: T): T {
 /** A private, frozen copy: neither a listener that holds the packet nor whoever reads `state.player` can change it. */
 const frozenCopy = <T>(value: T): T => deepFreeze(structuredClone(value));
 
-/**
- * The parts of the state that the SDK's own decisions rest on are private, frozen copies: the inventory (`items`,
- * `balls`) and the Collection (`automation`). The packet's objects and the snapshot given to callers never alias them.
- */
-const ownDecisionData = (fields: Record<string, unknown>): Record<string, unknown> => {
-  for (const key of ['items', 'balls']) if (isObject(fields[key])) fields[key] = deepFreeze(safeCopy(fields[key]));
-  if (isObject(fields['automation'])) fields['automation'] = frozenCopy(fields['automation']);
-  return fields;
-};
 const rowsWithId = (v: unknown): PokemonWire[] =>
   Array.isArray(v) ? v.filter((k): k is PokemonWire => isObject(k) && asId(k['id']) !== null) : [];
 
@@ -81,10 +72,10 @@ export class GameState {
   private pokemonById = new Map<string, PokemonWire>();
   private pokemonCache: readonly Pokemon[] | null = null;
   private playerCache: PlayerState | null = null;
-  private balls: BallEntry[] = [];
-  private shop: ShopEntry[] = [];
+  private balls: readonly BallEntry[] = Object.freeze([]);
+  private shop: readonly ShopEntry[] = Object.freeze([]);
   private huntNames = new Map<string, string>();
-  private extra: ExtraItemEntry[] = [];
+  private extra: readonly ExtraItemEntry[] = Object.freeze([]);
   private xpShareId: number | null = null;
   private readonly listeners = new Set<() => void>();
   private full = false;
@@ -103,7 +94,9 @@ export class GameState {
    * current, so `complete` turns `false` until the next `welcome`. Nothing is erased: you can still read the last values.
    */
   markStale(): void {
+    if (!this.full) return;
     this.full = false;
+    this.notify();
   }
 
   /** The ball catalog from the last welcome packet. */
@@ -134,7 +127,7 @@ export class GameState {
 
   /** All the player's pokémon, normalized (rows without a usable id are left out). The same array until something changes. */
   get pokemons(): readonly Pokemon[] {
-    this.pokemonCache ??= [...this.pokemonById.values()].flatMap((wire) => normalizePokemon(wire) ?? []);
+    this.pokemonCache ??= deepFreeze([...this.pokemonById.values()].flatMap((wire) => normalizePokemon(wire) ?? []));
     return this.pokemonCache;
   }
 
@@ -182,9 +175,8 @@ export class GameState {
 
   /**
    * Everything known about the player, or `null` before the first welcome. Treat it as read-only: it is a snapshot, the
-   * same object until the next update. The parts the SDK's decisions rest on (the inventory, the Collection, every pokémon
-   * row) are frozen private copies, so they cannot be changed from here; the rest is shared with the game's packet and is
-   * only read-only by contract.
+   * same object until the next update. All nested data is privately owned and frozen, including the wire rows and
+   * arbitrary server fields: changing a packet or a reader cannot mutate the SDK's state.
    */
   get player(): PlayerState | null {
     if (!this.fields) return null;
@@ -255,6 +247,7 @@ export class GameState {
   /** Feed it every incoming packet: it picks the ones it understands. */
   applyPacket(packet: Packet): void {
     if (packet.t === 'welcome') {
+      this.markStale();
       this.readCatalogs(packet);
       this.merge(packet['estado'], true);
     } else if (packet.t === 'estado') {
@@ -263,40 +256,49 @@ export class GameState {
   }
 
   private readCatalogs(packet: Packet): void {
+    this.balls = Object.freeze([]);
+    this.shop = Object.freeze([]);
+    this.extra = Object.freeze([]);
+    this.huntNames = new Map();
+    this.xpShareId = null;
     const balls = packet['catalogoBolas'];
     if (Array.isArray(balls)) {
-      this.balls = balls
-        .slice(0, MAX_LIST)
-        .filter(isObject)
-        .flatMap((b: BallCatalogEntryWire) => {
-          const id = asNumber(b.id);
-          return id === null
-            ? []
-            : [
-                {
-                  id,
-                  name: asText(b.nome, 40) ?? `Ball ${id}`,
-                  catchRate: asNumber(b.catchRate),
-                  priceGold: asNumber(b.priceGold),
-                  buyable: b.compravel === true,
-                },
-              ];
-        });
+      this.balls = deepFreeze(
+        balls
+          .slice(0, MAX_LIST)
+          .filter(isObject)
+          .flatMap((b: BallCatalogEntryWire) => {
+            const id = asNumber(b.id);
+            return id === null
+              ? []
+              : [
+                  {
+                    id,
+                    name: asText(b.nome, 40) ?? `Ball ${id}`,
+                    catchRate: asNumber(b.catchRate),
+                    priceGold: asNumber(b.priceGold),
+                    buyable: b.compravel === true,
+                  },
+                ];
+          }),
+      );
     }
     const xpShare = packet['xpShareHeld'];
     if (isObject(xpShare)) this.xpShareId = asId(xpShare['itemId']);
     const extra = packet['itensNossos'];
     if (Array.isArray(extra)) {
-      this.extra = extra
-        .slice(0, MAX_LIST)
-        .filter(isObject)
-        .flatMap((e: ExtraItemWire) => {
-          const id = asNumber(e.id);
-          const name = asText(e.name, 60);
-          return id === null || name === null
-            ? []
-            : [{ id, name, category: asText(e.category, 30) ?? 'unknown', rare: e.rare === true, npcPrice: asNumber(e.npcPrice) }];
-        });
+      this.extra = deepFreeze(
+        extra
+          .slice(0, MAX_LIST)
+          .filter(isObject)
+          .flatMap((e: ExtraItemWire) => {
+            const id = asNumber(e.id);
+            const name = asText(e.name, 60);
+            return id === null || name === null
+              ? []
+              : [{ id, name, category: asText(e.category, 30) ?? 'unknown', rare: e.rare === true, npcPrice: asNumber(e.npcPrice) }];
+          }),
+      );
     }
     const hunts = packet['hunts'];
     if (Array.isArray(hunts)) {
@@ -310,13 +312,15 @@ export class GameState {
     }
     const shop = packet['itensCompraveis'];
     if (Array.isArray(shop)) {
-      this.shop = shop
-        .slice(0, MAX_LIST)
-        .filter(isObject)
-        .flatMap((s: ShopItemWire) => {
-          const itemId = asNumber(s.itemId);
-          return itemId === null ? [] : [{ itemId, name: asText(s.nome, 60) ?? `Item ${itemId}`, price: asNumber(s.preco) }];
-        });
+      this.shop = deepFreeze(
+        shop
+          .slice(0, MAX_LIST)
+          .filter(isObject)
+          .flatMap((s: ShopItemWire) => {
+            const itemId = asNumber(s.itemId);
+            return itemId === null ? [] : [{ itemId, name: asText(s.nome, 60) ?? `Item ${itemId}`, price: asNumber(s.preco) }];
+          }),
+      );
     }
   }
 
@@ -339,14 +343,14 @@ export class GameState {
     if (!isObject(partial)) return;
     this.pokemonCache = null;
     this.playerCache = null;
-    const { cheio, pokemons, pkMud, pkFora, dexMud, dexFora, ...rest } = safeCopy(partial);
-    const known = (list: unknown): Array<[string, PokemonWire]> => rowsWithId(list).map((k) => [idKey(k.id), frozenCopy(k)]);
+    const { cheio, pokemons, pkMud, pkFora, dexMud, dexFora, ...rest } = frozenCopy(safeCopy(partial));
+    const known = (list: unknown): Array<[string, PokemonWire]> => rowsWithId(list).map((k) => [idKey(k.id), k]);
     if (full || cheio === true || !this.fields) {
-      this.fields = ownDecisionData({ ...rest });
+      this.fields = { ...rest };
       if (full || cheio === true) this.full = true; // a delta that arrives first becomes the base but is not a complete state
       this.pokemonById = new Map(known(pokemons));
     } else {
-      Object.assign(this.fields, ownDecisionData(rest)); // `rest` has no unsafe keys, so no setter can run
+      Object.assign(this.fields, rest); // `rest` has no unsafe keys, so no setter can run
       // A complete list outside a full state replaces the collection instead of adding to it.
       if (Array.isArray(pokemons)) this.pokemonById = new Map(known(pokemons));
     }
@@ -358,8 +362,12 @@ export class GameState {
         ...safeCopy(isObject(dexMud) ? dexMud : {}),
       };
       if (Array.isArray(dexFora)) for (const key of dexFora) delete dex[String(key)];
-      this.fields['pokedex'] = dex;
+      this.fields['pokedex'] = Object.freeze(dex);
     }
+    this.notify();
+  }
+
+  private notify(): void {
     const onError = this.options.onError ?? defaultErrorHandler;
     for (const listener of [...this.listeners]) guarded(onError, listener);
   }
