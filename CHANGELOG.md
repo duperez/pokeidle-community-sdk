@@ -40,12 +40,16 @@ The SDK reads a game that changes without notice. A change in the game's packets
 ### Added (hardening)
 
 - `GameState.markStale()`.
+- `npcShopPrice(itemId)`: what the NPC shop charges for a potion or revive, `null` for anything it is not known to sell. Narrower
+  than `itemInfo(id).npcPrice` (rare items such as Max Revive and Golden Potion have an `npcPrice` but no shop sells them);
+  it is the table the SDK's own purchases use.
 - Asynchronous transports: `Transport<S>` and `PokeIdleClient<S>` are generic over what `send` returns
   (`SendResult` = `boolean | Promise<boolean>`, default `boolean`, so existing code and `PageTransport` are unchanged).
   `client.sendRaw`/`sendCommand` return the transport's own type; `Actions` awaits a promise. The guards still throw
   synchronously before anything is sent. If the transport's promise **rejects**, the order is treated as "maybe sent": the
   rate and spending budgets are charged and, if the game never answers, it ends `unconfirmed` (which also starts the
-  cooldown). A transport should resolve `false`, not reject, when it knows nothing was sent.
+  cooldown). A transport should resolve `false`, not reject, when it knows nothing was sent. A send promise must eventually
+  settle: one that never does keeps that `Actions` instance busy (every later action answers `busy`).
 
 ### Changed
 

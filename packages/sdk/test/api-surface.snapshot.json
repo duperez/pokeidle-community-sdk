@@ -589,6 +589,9 @@
   "normalizePokemon": [
     "value: (wire: PokemonWire) => Pokemon | null"
   ],
+  "npcShopPrice": [
+    "value: (id: number) => number | null"
+  ],
   "Packet": [
     "type: Packet",
     "  t: string"

@@ -33,6 +33,7 @@ export {
   ballInfo,
   itemInfo,
   itemsInCategory,
+  npcShopPrice,
   type BallId,
   type BallInfo,
   type ItemCategory,

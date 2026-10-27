@@ -99,3 +99,31 @@ test('a guard that refuses still throws synchronously, before anything is sent',
   assert.ok(answer instanceof Promise, 'sendCommand returns the transport promise');
   assert.equal(await answer, true);
 });
+
+test('a REJECTED send charges BOTH budgets: the cap alone (no cooldown, no rate limit) refuses the next order', async () => {
+  const { transport, actions, scheduler } = setupAsync({ maxGoldPerHour: 1300, unconfirmedCooldownMs: 0, rateLimit: false });
+  transport.mode = 'reject';
+  const first = actions.buyBall(Ball.UltraBall, 10);
+  await tick();
+  await tick();
+  scheduler.advance(10_000);
+  assert.equal((await first).status, 'unconfirmed');
+  transport.mode = 'accept';
+  const second = await actions.buyBall(Ball.UltraBall, 10);
+  assert.equal(second.status, 'spend-cap', 'the maybe-sent order spent the whole cap');
+  assert.equal(transport.sent.length, 0);
+});
+
+test('a send that never settles keeps the instance busy (documented), and the confirmation listeners are still released', async () => {
+  const transport = new AsyncTransport();
+  transport.send = () => new Promise<boolean>(() => {}); // never settles
+  const scheduler = new FakeScheduler();
+  const client = new PokeIdleClient({ transport, actions: { confirmGraceMs: 0, scheduler } });
+  client.start();
+  transport.handlers?.onMessage(JSON.stringify(welcome()));
+  void client.actions.buyBall(Ball.UltraBall, 10);
+  await tick();
+  assert.equal((await client.actions.buyBall(Ball.UltraBall, 10)).status, 'busy');
+  scheduler.advance(60_000);
+  assert.equal((await client.actions.buyBall(Ball.UltraBall, 10)).status, 'busy');
+});
