@@ -118,7 +118,10 @@ function installHook(page: WithHook): SharedHook {
   // Backup for a socket created before the hook existed: it is adopted the first time the game sends something.
   Original.prototype.send = function (this: WebSocket, data: Parameters<WebSocket['send']>[0]) {
     if (isGameSocket(this)) {
-      if (!adopted.has(this)) {
+      // A socket never seen before is adopted when it first sends, unless the transport already follows a live one: an old
+      // socket that keeps talking must not take it back from its successor.
+      const followsLiveSocket = hook.socket !== null && hook.socket !== this && hook.socket.readyState <= 1;
+      if (!adopted.has(this) && !followsLiveSocket) {
         adopt(this);
         if (this.readyState === 1) each((h) => h.onOpen?.()); // adopted late: it was already open
       }

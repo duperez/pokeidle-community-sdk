@@ -310,6 +310,16 @@ export class GameState {
    * game's own client has always read them (not verified against every packet the server can send).
    */
   private merge(partial: unknown, full: boolean): void {
+    try {
+      this.mergeInto(partial, full);
+    } catch (error) {
+      // Half applied (new fields, old pokémon): never leave that looking complete. Actions refuse until the next welcome.
+      this.markStale();
+      throw error;
+    }
+  }
+
+  private mergeInto(partial: unknown, full: boolean): void {
     if (!isObject(partial)) return;
     this.pokemonCache = null;
     this.playerCache = null;

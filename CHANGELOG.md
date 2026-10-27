@@ -28,6 +28,15 @@ The SDK reads a game that changes without notice. A change in the game's packets
   holds the packet nor a caller can change what the SDK decides on.
 - `Inspector.dump().samples.batalha` applies the same per-event masking as `battleEventSamples` (a guild name stayed readable).
 
+- If applying a packet to the state fails half way, the state turns stale (`complete` is `false`) instead of staying complete
+  with mixed data. A socket the hook never saw cannot take the transport from a live successor by sending.
+
+### Breaking (hardening)
+
+- The inventory, the Collection and the pokémon rows in `state.player` are frozen: a write from your code now throws
+  `TypeError` (in strict mode) instead of silently changing what the SDK reads. `client.stop()` followed by `client.start()`
+  on an open socket leaves `state.complete` false until the next `welcome` (a page reload).
+
 ### Added (hardening)
 
 - `GameState.markStale()`.

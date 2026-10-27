@@ -58,7 +58,10 @@ export class PokeIdleClient {
     this.actions = new Actions(this, options.actions); // after `state`: the host it reads from must be complete
   }
 
-  /** Starts listening. Safe to call more than once. */
+  /**
+   * Starts listening. Safe to call more than once. Starting again on a socket that is already open (after `stop()`) leaves
+   * `state.complete` false: the packets missed meanwhile are lost, so actions wait for the next `welcome` (a page reload).
+   */
   start(): void {
     if (this.started) return;
     this.started = true;

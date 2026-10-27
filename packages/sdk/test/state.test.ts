@@ -226,3 +226,13 @@ test('itemName knows the server names and the NPC shop items, not the whole cata
   assert.equal(state.itemName(Item.SmallPotion), 'Small Potion');
   assert.equal(state.itemName(Item.AirTank), null);
 });
+
+test('a failure while merging leaves the state stale, never half-applied and complete', () => {
+  const state = new GameState();
+  state.applyPacket(welcome());
+  assert.equal(state.complete, true);
+  let deep: Record<string, unknown> = {};
+  for (let i = 0; i < 200_000; i++) deep = { a: deep };
+  assert.throws(() => state.applyPacket({ t: 'estado', estado: { automation: deep } }), RangeError);
+  assert.equal(state.complete, false);
+});

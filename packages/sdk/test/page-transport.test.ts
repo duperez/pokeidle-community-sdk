@@ -173,3 +173,22 @@ test('a replaced socket that sends does not take the transport back, and is not 
   newSocket.close();
   assert.deepEqual(log, ['close']); // the transport is still bound to the new socket
 });
+
+test("a replaced socket's late open stays silent, and an old socket the hook never saw cannot take the transport back", () => {
+  const page = newPage();
+  const preHook = new page.WebSocket('wss://game.example/') as unknown as FakeWebSocket; // created before start(): never adopted
+  const transport = new PageTransport(page);
+  const { log, handlers } = handlersLog();
+  transport.start(handlers);
+  const replaced = new page.WebSocket('wss://game.example/') as unknown as FakeWebSocket;
+  const current = new page.WebSocket('wss://game.example/') as unknown as FakeWebSocket;
+  current.open();
+  log.length = 0;
+  replaced.open(); // its open comes after being replaced
+  assert.deepEqual(log, []);
+  preHook.readyState = 1;
+  preHook.send('{"t":"heartbeat"}');
+  assert.deepEqual(log, []);
+  current.receive('{"t":"x"}');
+  assert.deepEqual(log, ['in:{"t":"x"}']); // still bound to the current socket
+});
