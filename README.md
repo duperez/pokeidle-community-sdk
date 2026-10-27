@@ -44,6 +44,8 @@ client.onPacket((packet) => {
 console.log(client.inspector?.dump()); // counts and redacted samples, safe to share
 ```
 
+The data the SDK's own decisions rest on (`items`, `balls`, the Collection in `automation`, every pokémon row) is held as frozen private copies: writing to it throws a `TypeError`. The rest of `state.player` is shared with the game's packet and is read-only only by contract.
+
 Nothing a listener throws can break the SDK or another listener. Every error the SDK has to swallow (a listener, a state
 callback, a transport handler) goes to one place: `new PokeIdleClient({ transport, onError: (error) => ... })`. Without
 `onError` it is logged with `console.error`, and if your handler throws too, the error falls back to the console.
@@ -63,7 +65,7 @@ if (result.status === 'confirmed') console.log(result.confirmedBy, result.before
 `buyBall`, `buyItem` (potions, revives) and `sellPokemon` exist today. The result says what happened, and `unconfirmed` means _sent but
 not confirmed in time_: it may still have happened, so the SDK waits 30 s before allowing another purchase instead of
 risking paying twice (the same wait follows a `rejected`: the game's errors carry no request id, so an error can be about
-something else). A purchase is confirmed by the game's own `compra` event (verified in real traffic: `nome`, `qtd` and `gasto`; same quantity and name: `confidence: 'certain'`; it arrives before the inventory update, so `after` can still equal `before`)
+something else). A purchase is confirmed by the game's own `compra` event (verified in real traffic: `nome`, `qtd` and `gasto`; same quantity and name: `confidence: 'certain'`; it arrives before the inventory update, so the SDK waits `confirmGraceMs` (default 1 s) for that update before answering and `after` reflects it when it comes)
 or by the inventory growing by at least the quantity (`'probable'`), whichever comes first. Safety nets, all configurable
 and none of them stops you from turning it off (`new PokeIdleClient({ actions: { ... } })`; they live in memory, so a page
 reload starts them over):
@@ -74,6 +76,7 @@ reload starts them over):
 - `maxGoldPerHour`: a spending cap, counted when the order is sent (an order whose price is unknown is refused while a cap is set).
 - Checks before sending: not for sale, not enough gold (`checks: false`, or `{ notForSale, gold, sellable }` one by one, lets the game decide).
 - One action in flight at a time. Invalid quantities throw a `RangeError`.
+- A new connection invalidates the state: `state.complete` turns `false` when a socket opens or closes and stays so until the next `welcome`, and actions answer `no-state` meanwhile. An order still waiting when the connection drops ends as `unconfirmed`.
 
 `sellPokemon(id, { confirmIrreversible: true })` sells ONE pokémon from your Depot to the NPC shop and cannot be undone, so
 it needs the explicit confirmation (not for a dry run). It refuses, with the reason, what the game's own client refuses to

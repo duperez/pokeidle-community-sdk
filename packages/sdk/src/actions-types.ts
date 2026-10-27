@@ -17,8 +17,11 @@ export interface ActionsOptions {
   /** How long to wait for the game to confirm. Default 10000. */
   confirmTimeoutMs?: number;
   /**
-   * A sale is confirmed as soon as the pokémon leaves your list, but the game's `venda` event (which carries the gold)
-   * can arrive a moment later: this is how long to wait for it before answering. Default 1000; 0 answers at once.
+   * The game confirms an order in two steps that can arrive a moment apart. A sale is confirmed as soon as the pokémon
+   * leaves your list, but the `venda` event (which carries the gold) can come later; a purchase is confirmed by the
+   * `compra` event, but the inventory update can come later. This is how long to wait for the second one before answering
+   * (for a purchase it also keeps that late update from being taken as the evidence of the next purchase).
+   * Default 1000; 0 answers at once.
    */
   confirmGraceMs?: number;
   /**
@@ -89,7 +92,7 @@ export type BuyResult =
       error: { chave?: string; msg?: string; params?: Record<string, unknown> };
     }
   | { status: 'not-connected' }
-  /** The full state (the `welcome` packet) has not arrived: see `GameState.complete`. */
+  /** The full state is not current: the `welcome` packet has not arrived, or the connection changed since (see `GameState.complete`). */
   | { status: 'no-state' }
   | { status: 'not-for-sale'; request: BuyRequest; reason: string }
   | { status: 'insufficient-gold'; request: BuyRequest; needed: number; have: number }
@@ -122,6 +125,7 @@ export type SellResult =
       error: { chave?: string; msg?: string; params?: Record<string, unknown> };
     }
   | { status: 'not-connected' }
+  /** See `BuyResult`: no current full state (no `welcome` yet, or the connection changed since). */
   | { status: 'no-state' }
   /** The pokémon is not in your list (the state may be partial, or it was already sold). */
   | { status: 'not-found'; pokemonId: number }

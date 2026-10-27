@@ -18,7 +18,10 @@ from. Today there is one implementation:
 - **`PageTransport`** patches `window.WebSocket` inside the page. It must run in the page's own JavaScript world and
   before the game opens its socket: a Manifest V3 content script with `"world": "MAIN"` and `"run_at": "document_start"`.
   The patch is shared through a global symbol, so several extensions can bundle the SDK and the page is patched once.
-  The game's socket is the one on the page's own host with the path `/`; other sockets are left alone.
+  The game's socket is the one on the page's own host with the path `/`; other sockets are left alone. Only the current
+  socket speaks: when the game opens a new one, the old one is silent (its messages, open and close are not reported) and
+  cannot take the transport back by sending. A socket created before the hook is adopted when it first sends, unless the
+  transport already follows a live one.
 
 Other hosts (for example an app that reads the socket from outside the page) can implement the same interface.
 
@@ -44,6 +47,13 @@ and callers that do something irreversible treat `null` as "no". The state is up
 listeners run. The full state arrives only once, in `welcome` right after login: code that starts listening later (for
 example an extension reloaded with the game already open) only sees updates, and `state.complete` is `false` until the
 page reloads.
+
+A new connection invalidates the state. `PokeIdleClient` calls `GameState.markStale()` when the socket opens and when it
+closes: `complete` turns `false` and stays so until the next `welcome`. Nothing is erased (the last values stay readable),
+but actions answer `no-state`. A merge that throws also leaves the state stale, so a half-applied update never looks
+complete. The data the SDK's decisions rest on (`items`, `balls`, `automation` and every pokémon row) are frozen private
+copies: writes throw a `TypeError`, and the packet a listener holds never aliases them. The rest of `state.player` is
+shared with the packet and read-only only by contract.
 
 ## The protocol registry
 
@@ -80,8 +90,10 @@ the rate limit, then the send. It listens for the answer BEFORE sending (the ans
 first of: the game's `compra` event (same quantity and, when known, same name), the inventory growing, an `erro` packet or
 the timeout. The inventory alone is a weak signal (balls used in the hunt at the same time can hide a small purchase),
 so the event is preferred. It was verified in real traffic: the `compra` event is emitted for NPC-shop purchases, with
-`nome`, `qtd` and `gasto`, and arrives before the `estado` update (so `after` can equal `before`). `confirmedBy` records
-which signal confirmed. A timeout is `unconfirmed`, not a failure: the order may be late, so the next
+`nome`, `qtd` and `gasto`, and arrives before the `estado` update. The purchase is already confirmed at that point, but the
+answer waits up to `confirmGraceMs` (default 1 s, shared with sales) for the inventory update, so that late update cannot
+be taken for the evidence of the next purchase of the same item. `confirmedBy` records
+which signal confirmed. A timeout, or a connection that drops or is replaced while waiting (`ActionsHost.onConnectionChange`), is `unconfirmed`, not a failure: the order may be late, so the next
 one waits (default 30 s), the same rule the Companion app uses after more than 57 000 real purchases.
 
 Selling (`sellPokemon`) goes through the same `dispatch` (one in flight, rate limit, waiting after an unconfirmed or
@@ -121,7 +133,8 @@ and `PageTransport` (about 30 KB minified) and fails above 40 KB or if catalog d
 Packets contain session tokens, e-mails and player names. Everything the SDK records (`Inspector`) is redacted when it is
 recorded, never later: sensitive keys are replaced, free text is cleaned and arrays and depth are limited. Samples of
 packets with content written by other people (chat, friends, rankings, guilds...) keep only their structure, and the
-account id (`estado.id`) is masked by path. The redaction is a safety net, not a guarantee: read a dump before sharing it. Raw recordings
+account id (`estado.id`) is masked by path. The events inside a `batalha` packet (`samples.batalha`) get the same per-event
+masking as `battleEventSamples`, so text that one masks is not readable in the other. The redaction is a safety net, not a guarantee: read a dump before sharing it. Raw recordings
 must never be committed (`recordings/` is ignored); only sanitized fixtures belong in the repository.
 
 ## Public API and checks
