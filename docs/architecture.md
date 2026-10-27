@@ -1,6 +1,6 @@
 # Architecture
 
-The SDK is built so that extension authors only think about two things: **reading** what the game sends and, later,
+The SDK is built so that extension authors only think about two things: **reading** what the game sends and
 **sending** actions. How frames travel is hidden behind a transport.
 
 ```
@@ -34,7 +34,13 @@ Only packet types verified against real traffic get a typed shape (`welcome`, `e
 types keep the game's own field names and make every field optional, because the server can omit or change anything. For
 everyday use read `client.state` (`GameState`) instead: it applies the full state from `welcome` and every `estado` update
 (including pokémon and pokédex deltas, as the game sends them), exposes English getters (`gold`, `level`,
-`itemCount(id)`, `ballCount(id)`) and ignores malformed data instead of throwing. The state is updated _before_ your packet
+`itemCount(id)`, `ballCount(id)`) and ignores malformed data instead of throwing.
+
+Pokémon rows are normalized in one place (`pokemon.ts`, with the small total conversions of `coerce.ts`): `state.pokemon(id)`
+and `state.pokemons` return a `Pokemon` with English names and `null` where the server said nothing usable (ids that
+arrive as text are understood). Questions with a safety consequence are three-valued: `isActive`, `isInTeam`,
+`isInCollection` and `holdsExpShare` return `true`, `false` or `null` for "unknown" (partial state, unreadable held item),
+and callers that do something irreversible treat `null` as "no". The state is updated _before_ your packet
 listeners run. The full state arrives only once, in `welcome` right after login: code that starts listening later (for
 example an extension reloaded with the game already open) only sees updates, and `state.complete` is `false` until the
 page reloads.
@@ -53,9 +59,22 @@ without a typed shape. A few commands are deliberately left name-only so the SDK
 accident (for example the one that withdraws orbs as real cryptocurrency). `PACKET_COVERAGE` is exhaustive at compile
 time, so a packet type the game adds cannot go unclassified.
 
+## Errors
+
+One path for everything the SDK cannot throw to anyone (`errors.ts`). `ClientOptions.onError` is handed to the transport
+(`PageTransport` guards its handlers), to `GameState` (change callbacks) and to the client's listener dispatch, so a
+throwing listener never stops the others or the state update. Without `onError` the default handler writes to the
+console, the only `console` call in the library. If `onError` itself throws, the original error goes to the default
+handler: reporting never throws.
+
 ## Actions
 
-`Actions` (`actions.ts`) sits on top of `sendCommand`. A purchase goes through: input validation (throws), one-in-flight,
+`Actions` (`actions.ts`) sits on top of `sendCommand` and depends on the `ActionsHost` interface (`actions-host.ts`: the
+connection, a narrow slice of the state, listening and sending), not on the client class; `PokeIdleClient` implements it
+and a test double can too. The rest lives in small modules: `actions-types.ts` (requests, results, options),
+`actions-options.ts` (defaults), `rate-limiter.ts`, `spend-ledger.ts` (the hourly cap), `pricing.ts` (what the shop
+charges), `wait-for-first.ts` (wait for the first of several signals and clean up listeners and timers),
+`confirmations.ts` (what counts as a confirmed purchase or sale) and `sale-rules.ts` (what the Depot may sell). A purchase goes through: input validation (throws), one-in-flight,
 connection and full-state checks, price and gold checks from the catalogs the server sent, the optional spending cap and
 the rate limit, then the send. It listens for the answer BEFORE sending (the answer can be instant) and resolves with the
 first of: the game's `compra` event (same quantity and, when known, same name), the inventory growing, an `erro` packet or
@@ -66,19 +85,18 @@ which signal confirmed. A timeout is `unconfirmed`, not a failure: the order may
 one waits (default 30 s), the same rule the Companion app uses after more than 57 000 real purchases.
 
 Selling (`sellPokemon`) goes through the same `dispatch` (one in flight, rate limit, waiting after an unconfirmed or
-rejected order). Before sending it applies the game's own rules for the Depot, read from the client: not the active pokémon
-(`activeId`), not in the team (`slot` is set), not in the Collection (`automation.pokemonTravado`), not holding the Exp.
-Share (`xpShareHeld.itemId`). The sale is confirmed by the `venda` event or by the pokémon leaving the list. The event
+rejected order). Before sending it applies the game's own rules for the Depot, read from the client (`sale-rules.ts`, through the state's
+three-valued queries): not the active pokémon, not in the team, not in the Collection, not holding the Exp. Share. The sale is confirmed by the `venda` event or by the pokémon leaving the list. The event
 (verified in real traffic: `{ k: 'venda', nome: 'Charmander Nv 20', ganho: 4573, qtd: 1 }`) names the pokémon WITH its level, and
 nothing else, so it is matched on name and level and counts as `certain` only when no other pokémon of yours has that same
 name and level (otherwise `probable`); a shiny mark in the name is ignored;
 when the list arrives first the SDK waits a short grace window (`confirmGraceMs`) so the gold is not lost to packet order.
-It fails closed: when the active pokémon, the Collection list or the Exp. Share item cannot
-be read (a partial state, ids that arrive as text are understood), the answer is "not sellable". The sale price comes from a function the client shares with the server and is not readable
+It fails closed: when any of those queries answers `null` (a partial state, an unreadable held item), the answer is
+"not sellable". The sale price comes from a function the client shares with the server and is not readable
 from the page script, so a dry run does not estimate it: the gold comes back in the `venda` event.
 
 The prices of purchases come from the catalogs: balls from the server's ball catalog (`priceGold`), shop items from the welcome packet,
-and potions and revives from the item catalog's `npcPrice` (checked against real purchases).
+and potions and revives from a small generated table (`catalog/npc-shop.generated.ts`, from the item catalog's `npcPrice`, checked against real purchases).
 
 ## Sending commands
 
@@ -93,7 +111,10 @@ renamed command cannot silently protect nothing.
 `Item` and `Ball` map names to ids. Items come from the game's public items catalog; balls are not in that file (the server
 sends them in `welcome`), so they come from a small snapshot in `packages/sdk/data/balls.json`, which the test extension can
 copy for you. `npm run catalog` regenerates `src/catalog/*.generated.ts`; `npm run catalog:check` reports drift. When two
-items share a name the lowest id keeps the clean key and the others get `_<id>`.
+items share a name the lowest id keeps the clean key and the others get `_<id>`. The full catalogs are large, so the
+client does not depend on them: `GameState.itemName` uses only what the server sent plus the generated NPC-shop table
+(`npc-shop.generated.ts`, potions and revives). Importing `Item`, `itemInfo` and friends is what brings the catalog in. A test bundles the client
+and `PageTransport` (about 30 KB minified) and fails above 40 KB or if catalog data sneaks in.
 
 ## Redaction
 
@@ -102,6 +123,14 @@ recorded, never later: sensitive keys are replaced, free text is cleaned and arr
 packets with content written by other people (chat, friends, rankings, guilds...) keep only their structure, and the
 account id (`estado.id`) is masked by path. The redaction is a safety net, not a guarantee: read a dump before sharing it. Raw recordings
 must never be committed (`recordings/` is ignored); only sanitized fixtures belong in the repository.
+
+## Public API and checks
+
+`src/index.ts` is an explicit export list, not `export *`, so adding a file never widens the API by accident. A test
+snapshots every exported name and signature (`UPDATE_API_SNAPSHOT=1` rewrites it after an intended change). Beyond the
+unit tests: `npm run coverage` enforces a coverage floor and `npm run mutation` applies deliberate bugs to the safety code
+and demands that the tests fail. CI runs them with lint and typecheck; a weekly workflow checks game drift
+(`catalog:check`, `protocol:check`) and runs the mutation check, with CodeQL and Dependabot alongside.
 
 ## Compatibility
 

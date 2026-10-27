@@ -4,7 +4,7 @@
 > mentioned only to say which game this library is for. Use it at your own risk and follow the game's rules.
 
 A TypeScript library that makes it easier to build extensions for [PokeIdle](https://pokeidle.io): you handle **reading**
-what the game sends (and, in later versions, **sending** actions); the SDK handles the connection, the packet parsing, item
+what the game sends and the actions you take (buying, selling); the SDK handles the connection, the packet parsing, item
 names and logs.
 
 **Status: early and experimental (v0.0.x).** The API will change. Today it can attach to the game's WebSocket from a
@@ -44,6 +44,11 @@ client.onPacket((packet) => {
 console.log(client.inspector?.dump()); // counts and redacted samples, safe to share
 ```
 
+Nothing a listener throws can break the SDK or another listener. Every error the SDK has to swallow (a listener, a state
+callback, a transport handler) goes to one place: `new PokeIdleClient({ transport, onError: (error) => ... })`. Without
+`onError` it is logged with `console.error`, and if your handler throws too, the error falls back to the console.
+`client.onAnyBattleEvent(listener)` delivers every battle event; `client.onBattleEvent(kind, listener)` one kind.
+
 ### Actions
 
 Actions are the things you do in the game, as functions that tell you what happened. They check what they can before
@@ -72,7 +77,8 @@ reload starts them over):
 
 `sellPokemon(id, { confirmIrreversible: true })` sells ONE pokémon from your Depot to the NPC shop and cannot be undone, so
 it needs the explicit confirmation (not for a dry run). It refuses, with the reason, what the game's own client refuses to
-sell: your active pokémon, your team, the Collection (locked) and one holding the Exp. Share. Selling is irreversible, so
+sell (the state answers `isActive`, `isInTeam`, `isInCollection` and `holdsExpShare` with `true`, `false` or `null` for
+"unknown"): your active pokémon, your team, the Collection (locked) and one holding the Exp. Share. Selling is irreversible, so
 it fails closed: if the state is partial and a protection cannot be read, it refuses. It is confirmed by the game's
 `venda` event (verified in real traffic: `{ nome: 'Charmander Nv 20', ganho: 4573, qtd: 1 }`; it carries the gold and the
 pokémon's name with its level, so it is `certain` when no other pokémon of yours has that name and level, `probable` otherwise) or by the pokémon leaving your list (strong evidence, not
@@ -113,6 +119,8 @@ the game fails the build until someone classifies it.
 
 Items and balls are named by enums generated from the game's own catalogs (682 items and 5 balls today):
 `Item.SmallPotion`, `Item.MaxRevive`, `Item.BronzeBossToken`, `Item.ShinyVenusaurite`, `Ball.UltraBall`, `Ball.BeastBall`... `itemInfo(id)` gives name, category and price; `itemsInCategory('heal')` lists a category.
+`client.state.itemName(id)` does not pull that full catalog in: it uses what the server sent plus a small generated table of the NPC shop's potions and revives.
+The client plus `PageTransport` bundle is about 30 KB minified, and a test fails above 40 KB, so the catalogs only ship if you import them.
 `npm run catalog` regenerates them from the game's public data, and `npm run catalog:check` tells if they are stale.
 
 It has to run in the page's own world, before the game opens its socket. In a Chrome extension (Manifest V3):
@@ -121,6 +129,12 @@ It has to run in the page's own world, before the game opens its socket. In a Ch
 "content_scripts": [{ "matches": ["https://pokeidle.io/*"], "js": ["dist/main-world.js"], "run_at": "document_start", "world": "MAIN" }]
 ```
 
+### Public API
+
+Everything public is listed by name in `packages/sdk/src/index.ts`. A test snapshots the exported names and signatures
+(`packages/sdk/test/api-surface.snapshot.json`), so the API cannot change by accident; after an intended change run
+`UPDATE_API_SNAPSHOT=1 npm test` in `packages/sdk` and record it in the [CHANGELOG](CHANGELOG.md).
+
 ## Repository layout
 
 | Path                      | What it is                                                                             |
@@ -128,6 +142,7 @@ It has to run in the page's own world, before the game opens its socket. In a Ch
 | `packages/sdk`            | the library (`pokeidle-community-sdk`)                                                 |
 | `examples/test-extension` | a Chrome extension that uses the library as a package, to try it against the real game |
 | `docs`                    | architecture notes                                                                     |
+| `scripts`                 | generators (catalog, protocol), coverage floor and mutation check                      |
 | `test`                    | repository-level checks (nothing personal or sensitive is tracked)                     |
 
 ## Try it
@@ -136,7 +151,13 @@ It has to run in the page's own world, before the game opens its socket. In a Ch
 npm install
 npm run build        # builds the SDK, then the test extension
 npm test
+npm run coverage     # unit tests with a coverage floor
+npm run mutation     # applies deliberate bugs to the safety code; the tests must catch each one
 ```
+
+CI runs formatting, build, lint, typecheck, tests and coverage on every push. A weekly workflow checks whether the game
+drifted (`catalog:check`, `protocol:check`) and runs the mutation check; CodeQL and Dependabot are on too. See
+[CONTRIBUTING](CONTRIBUTING.md), [SECURITY](SECURITY.md), [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) and the [CHANGELOG](CHANGELOG.md).
 
 Then load `examples/test-extension` as an unpacked extension in Chrome (`chrome://extensions` → Developer mode → Load
 unpacked) and open the game. A small panel shows which packet types arrive. The button copies a **redacted** dump.
