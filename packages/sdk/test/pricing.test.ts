@@ -29,5 +29,5 @@ test('items: the shop offer wins; an offer with no price is refused', () => {
 test('items: potions fall back to the catalog NPC price; unknown items say so', () => {
   const potion = priceOf(state(), 'item', Item.SmallPotion);
   assert.ok(potion.unit !== null && potion.unit > 0, JSON.stringify(potion));
-  assert.match(priceOf(state(), 'item', 999_999_999).reason ?? '', /not in the catalog/);
+  assert.match(priceOf(state(), 'item', 999_999_999).reason ?? '', /not an item the NPC shop is known to sell/);
 });

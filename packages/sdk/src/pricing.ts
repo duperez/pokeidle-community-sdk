@@ -1,5 +1,5 @@
 import type { ActionsState } from './actions-host.js';
-import { itemInfo } from './catalog/index.js';
+import { NPC_SHOP_ITEMS } from './catalog/npc-shop.generated.js';
 
 /** What the NPC shop charges per unit, or `null` with the reason when the SDK cannot say it sells this. */
 export function priceOf(state: ActionsState, kind: 'ball' | 'item', id: number): { unit: number | null; reason?: string } {
@@ -14,8 +14,6 @@ export function priceOf(state: ActionsState, kind: 'ball' | 'item', id: number):
   if (offered)
     return offered.price === null || offered.price <= 0 ? { unit: null, reason: `${offered.name} has no price` } : { unit: offered.price };
   // Potions and revives: the NPC shop sells them at the catalog's `npcPrice` (checked against real purchases).
-  const info = itemInfo(id);
-  if (info && (info.category === 'heal' || info.category === 'revive') && !info.rare && info.npcPrice !== null && info.npcPrice > 0)
-    return { unit: info.npcPrice };
-  return { unit: null, reason: info ? `${info.name} is not an item the NPC shop is known to sell` : `item ${id} is not in the catalog` };
+  const npc = NPC_SHOP_ITEMS.find((i) => i.id === id);
+  return npc ? { unit: npc.price } : { unit: null, reason: `item ${id} is not an item the NPC shop is known to sell` };
 }

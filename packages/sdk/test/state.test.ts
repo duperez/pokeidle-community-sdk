@@ -220,3 +220,9 @@ test("the game's own items (not in the public catalog) are read from the welcome
   assert.deepEqual(state.extraItems, [{ id: 70000, name: 'Bronze Boss Token', category: 'key-item', rare: false, npcPrice: 0 }]);
   assert.equal(state.itemName(70000), 'Bronze Boss Token');
 });
+
+test('itemName knows the server names and the NPC shop items, not the whole catalog (use itemInfo for that)', () => {
+  const state = new GameState();
+  assert.equal(state.itemName(Item.SmallPotion), 'Small Potion');
+  assert.equal(state.itemName(Item.AirTank), null);
+});

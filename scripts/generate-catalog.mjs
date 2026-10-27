@@ -20,6 +20,7 @@ const BALLS_SNAPSHOT = path.join(SDK, 'data/balls.json');
 const EXTRA_ITEMS_SNAPSHOT = path.join(SDK, 'data/extra-items.json');
 const OUT_ITEMS = path.join(SDK, 'src/catalog/items.generated.ts');
 const OUT_BALLS = path.join(SDK, 'src/catalog/balls.generated.ts');
+const OUT_NPC_SHOP = path.join(SDK, 'src/catalog/npc-shop.generated.ts');
 
 const args = new Set(process.argv.slice(2));
 const check = args.has('--check');
@@ -114,6 +115,22 @@ function renderItems(items) {
   return lines.join('\n');
 }
 
+/** The potions and revives the NPC shop sells: not rare, with a price (checked against real purchases). */
+export function npcShopItems(items) {
+  return items.filter((i) => (i.category === 'heal' || i.category === 'revive') && !i.rare && i.npcPrice !== null && i.npcPrice > 0);
+}
+
+function renderNpcShop(items) {
+  const lines = [
+    HEADER("the game's public items catalog"),
+    '/** What the NPC shop sells besides balls (potions and revives), with its price per unit. Small on purpose: the full catalog is separate. */',
+    'export const NPC_SHOP_ITEMS: readonly { readonly id: number; readonly name: string; readonly price: number }[] = [',
+  ];
+  for (const i of npcShopItems(items)) lines.push(`  { id: ${i.id}, name: ${str(i.name)}, price: ${i.npcPrice} },`);
+  lines.push('];', '');
+  return lines.join('\n');
+}
+
 function renderBalls(balls) {
   const keyed = uniqueIdentifiers(balls);
   const lines = [
@@ -162,6 +179,7 @@ const main = async () => {
   const outputs = [
     [OUT_ITEMS, renderItems(items)],
     [OUT_BALLS, renderBalls(balls)],
+    [OUT_NPC_SHOP, renderNpcShop(items)],
   ];
   if (check) {
     const stale = outputs

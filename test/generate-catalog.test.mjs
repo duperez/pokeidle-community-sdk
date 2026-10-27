@@ -45,3 +45,20 @@ test("mergeItems adds the game's own items and lets the public catalog win on a 
     ],
   );
 });
+
+test('npcShopItems keeps only common, priced potions and revives', async () => {
+  const { npcShopItems } = await import('../scripts/generate-catalog.mjs');
+  const item = (id, category, rare, npcPrice) => ({ id, name: `I${id}`, category, rare, npcPrice });
+  const kept = npcShopItems([
+    item(1, 'heal', false, 100),
+    item(2, 'revive', false, 500),
+    item(3, 'heal', true, 100), // rare
+    item(4, 'heal', false, 0), // no price
+    item(5, 'heal', false, null),
+    item(6, 'loot', false, 100), // not a potion
+  ]);
+  assert.deepEqual(
+    kept.map((i) => i.id),
+    [1, 2],
+  );
+});

@@ -22,6 +22,11 @@ The SDK reads a game that changes without notice. A change in the game's packets
 - `ClientOptions.onError` now also receives errors from state listeners and transport handlers, and a handler that throws
   falls back to the default (console) handler instead of escaping.
 - `export *` from the protocol modules is now an explicit list.
+- `GameState.itemName(id)` no longer consults the full items catalog (it knows the server's names and the NPC shop's potions
+  and revives); use `itemInfo(id)?.name` for any item. In exchange the client + page transport bundle shrank from about
+  133 KB to 30 KB minified, and a test keeps it under 40 KB.
+- The catalog lookups (`itemInfo`, `ballInfo`) build their index on first use, so importing the package no longer keeps the
+  catalog in a bundle that does not use it.
 
 ### Added
 

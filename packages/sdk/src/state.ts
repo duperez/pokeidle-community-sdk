@@ -1,4 +1,5 @@
-import { ballInfo, itemInfo } from './catalog/index.js';
+import { BALL_CATALOG } from './catalog/balls.generated.js';
+import { NPC_SHOP_ITEMS } from './catalog/npc-shop.generated.js';
 import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
 import { asId, asNumber, asText, isObject } from './coerce.js';
 import type { Packet } from './packets.js';
@@ -197,13 +198,21 @@ export class GameState {
     return count(this.fields?.['balls'], id);
   }
 
-  /** Name of an item or ball id, from the server's catalogs and the SDK's own. */
+  /**
+   * Name of an item id from what the server told us (its shop and its own items) and from the NPC shop table. It does NOT
+   * consult the full items catalog (that is 70 KB you may not want): for any item, use `itemInfo(id)?.name`.
+   */
   itemName(id: number): string | null {
-    return this.shop.find((s) => s.itemId === id)?.name ?? this.extra.find((e) => e.id === id)?.name ?? itemInfo(id)?.name ?? null;
+    return (
+      this.shop.find((s) => s.itemId === id)?.name ??
+      this.extra.find((e) => e.id === id)?.name ??
+      NPC_SHOP_ITEMS.find((i) => i.id === id)?.name ??
+      null
+    );
   }
 
   ballName(id: number): string | null {
-    return this.balls.find((b) => b.id === id)?.name ?? ballInfo(id)?.name ?? null;
+    return this.balls.find((b) => b.id === id)?.name ?? BALL_CATALOG.find((b) => b.id === id)?.name ?? null;
   }
 
   /** Called after every change. Returns a function that stops listening. */
