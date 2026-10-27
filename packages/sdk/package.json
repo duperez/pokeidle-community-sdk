@@ -41,7 +41,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node ../../scripts/build-cjs.mjs",
+    "build": "tsc -p tsconfig.build.json && node ../../scripts/build-bundles.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "test:coverage": "node --import tsx --test --experimental-test-coverage test/*.test.ts"

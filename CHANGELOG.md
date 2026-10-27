@@ -80,6 +80,15 @@ The SDK reads a game that changes without notice. A change in the game's packets
 - Reproducible CommonJS bundle (`dist/index.cjs`) and portable CommonJS declarations (`dist/cjs/`) alongside the ESM build.
   Conditional package exports select the matching declarations. An external-consumer test checks relocated ESM/CJS
   execution and TypeScript usage without access to this source checkout.
+- `GameState.itemQuantity(id)` / `.ballQuantity(id)` preserve unknown inventory as `null` instead of conflating it with
+  zero; the existing count helpers remain compatible. Frozen normalized `automation` / `twitch` snapshots, three-valued
+  `inCenter`, and public `AutomationState`, `TwitchState`, `TwitchChannel` types remove wire coercion from consumers.
+  Twitch retains reported field names, handles numeric text and both watching-channel shapes, without UI truncation.
+- Per-call `ActionCallOptions.onSend` and `SendOutcome` expose dispatch acceptance (`accepted`, `not-sent`, `uncertain`)
+  before an action's terminal result, without replacing game-evidence reconciliation or changing `BuyResult`/`SellResult`.
+  The original error accompanies uncertain sends; observer failures use `onError` and cannot cancel the order.
+- Official browser IIFE `dist/pokeidle-sdk.iife.js`, exposing `globalThis.PokeIdleSDK` without starting interception
+  automatically. The same build produces ESM/CJS/types; a loader-free distribution test exercises market receive/send.
 
 - `Pokemon` and `normalizePokemon`; `GameState.pokemon(id)`, `.pokemons`, `.pokemonCount`, `.isActive`, `.isInTeam`,
   `.holdsExpShare` (three-valued: `null` = unknown).

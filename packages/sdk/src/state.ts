@@ -4,6 +4,7 @@ import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
 import { asId, asNumber, asText, isObject } from './coerce.js';
 import type { Packet } from './packets.js';
 import { normalizePokemon, type Pokemon } from './pokemon.js';
+import { normalizeAutomation, normalizeTwitch, type AutomationState, type TwitchState } from './player-details.js';
 import type { PlayerStateWire, PokemonWire, ShopItemWire, BallCatalogEntryWire, ExtraItemWire } from './protocol/wire.js';
 
 /** The player's state after applying the welcome packet and every update since. Field names are the game's own. */
@@ -72,6 +73,8 @@ export class GameState {
   private pokemonById = new Map<string, PokemonWire>();
   private pokemonCache: readonly Pokemon[] | null = null;
   private playerCache: PlayerState | null = null;
+  private automationCache: AutomationState | null = null;
+  private twitchCache: TwitchState | null = null;
   private balls: readonly BallEntry[] = Object.freeze([]);
   private shop: readonly ShopEntry[] = Object.freeze([]);
   private huntNames = new Map<string, string>();
@@ -211,6 +214,34 @@ export class GameState {
     return asText(this.fields?.['huntSlug']);
   }
 
+  /** Whether the player is in the Pokemon Center, or `null` when the server has not supplied a boolean. */
+  get inCenter(): boolean | null {
+    const value = this.fields?.['noCentro'];
+    return typeof value === 'boolean' ? value : null;
+  }
+
+  /** Selected automation consumables, normalized and frozen. Invalid ids are omitted; unknown lists stay `null`. */
+  get automation(): AutomationState | null {
+    this.automationCache ??= normalizeAutomation(this.fields?.['automation']);
+    return this.automationCache;
+  }
+
+  /** Twitch facts without UI limits or inferred live/watching status. Missing or malformed values stay `null`. */
+  get twitch(): TwitchState | null {
+    this.twitchCache ??= normalizeTwitch(this.fields?.['twitch']);
+    return this.twitchCache;
+  }
+
+  /** Known quantity, including zero for an absent id in a known map; `null` for an unknown map or invalid value/id. Last-known like other getters. */
+  itemQuantity(id: number): number | null {
+    return quantity(this.fields?.['items'], id);
+  }
+
+  /** Known ball quantity, with the same unknown/zero distinction as `itemQuantity`. */
+  ballQuantity(id: number): number | null {
+    return quantity(this.fields?.['balls'], id);
+  }
+
   /** How many of an item the player has (0 if none or unknown). Use the `Item` enum for the id. */
   itemCount(id: number): number {
     return count(this.fields?.['items'], id);
@@ -343,6 +374,8 @@ export class GameState {
     if (!isObject(partial)) return;
     this.pokemonCache = null;
     this.playerCache = null;
+    this.automationCache = null;
+    this.twitchCache = null;
     const { cheio, pokemons, pkMud, pkFora, dexMud, dexFora, ...rest } = frozenCopy(safeCopy(partial));
     const known = (list: unknown): Array<[string, PokemonWire]> => rowsWithId(list).map((k) => [idKey(k.id), k]);
     if (full || cheio === true || !this.fields) {
@@ -371,6 +404,13 @@ export class GameState {
     const onError = this.options.onError ?? defaultErrorHandler;
     for (const listener of [...this.listeners]) guarded(onError, listener);
   }
+}
+
+function quantity(map: unknown, id: number): number | null {
+  if (!Number.isSafeInteger(id) || id < 0 || !isObject(map)) return null;
+  if (!Object.hasOwn(map, String(id))) return 0;
+  const value = asNumber(map[String(id)]);
+  return value !== null && value >= 0 ? value : null;
 }
 
 function count(map: unknown, id: number): number {

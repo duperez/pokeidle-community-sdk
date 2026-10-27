@@ -1,5 +1,6 @@
 export { type Actions } from './actions.js';
 export {
+  type ActionCallOptions,
   type ActionsOptions,
   type BuyRequest,
   type BuyResult,
@@ -8,6 +9,7 @@ export {
   type Scheduler,
   type SellRequest,
   type SellResult,
+  type SendOutcome,
 } from './actions-types.js';
 export { PokeIdleClient, type ClientOptions, type Unsubscribe } from './client.js';
 export { Inspector, type InspectorDump, type InspectorOptions } from './inspector.js';
@@ -41,6 +43,7 @@ export {
   type ItemInfo,
 } from './catalog/index.js';
 export { normalizePokemon, type Pokemon } from './pokemon.js';
+export type { AutomationState, TwitchChannel, TwitchState } from './player-details.js';
 export { GameState, type BallEntry, type ExtraItemEntry, type PlayerState, type ShopEntry } from './state.js';
 export {
   type Currency,

@@ -1,11 +1,16 @@
 {
+  "ActionCallOptions": [
+    "type: ActionCallOptions",
+    "  dryRun?: boolean | undefined",
+    "  onSend?: ((outcome: SendOutcome) => void) | undefined"
+  ],
   "Actions": [
     "value: typeof Actions",
     "type: Actions",
-    "  buyBall: (ball: number, quantity: number, options?: { dryRun?: boolean | undefined; }) => Promise<BuyResult>",
-    "  buyItem: (item: number, quantity: number, options?: { dryRun?: boolean | undefined; }) => Promise<BuyResult>",
+    "  buyBall: (ball: number, quantity: number, options?: ActionCallOptions) => Promise<BuyResult>",
+    "  buyItem: (item: number, quantity: number, options?: ActionCallOptions) => Promise<BuyResult>",
     "  spentLastHour: number",
-    "  sellPokemon: (pokemonId: number, options?: { dryRun?: boolean | undefined; confirmIrreversible?: boolean | undefined; }) => Promise<SellResult>"
+    "  sellPokemon: (pokemonId: number, options?: ActionCallOptions & { confirmIrreversible?: boolean | undefined; }) => Promise<SellResult>"
   ],
   "ActionsOptions": [
     "type: ActionsOptions",
@@ -42,6 +47,12 @@
     "  stab?: boolean | undefined",
     "  hpAlvo?: number | undefined",
     "  aoe?: boolean | undefined"
+  ],
+  "AutomationState": [
+    "type: AutomationState",
+    "  ballIds: readonly number[] | null",
+    "  reviveIds: readonly number[] | null",
+    "  potionIds: readonly number[] | null"
   ],
   "AutomationWire": [
     "type: AutomationWire",
@@ -370,6 +381,11 @@
     "  diamonds: number | null",
     "  orbs: number | null",
     "  huntSlug: string | null",
+    "  inCenter: boolean | null",
+    "  automation: AutomationState | null",
+    "  twitch: TwitchState | null",
+    "  itemQuantity: (id: number) => number | null",
+    "  ballQuantity: (id: number) => number | null",
     "  itemCount: (id: number) => number",
     "  ballCount: (id: number) => number",
     "  itemName: (id: number) => string | null",
@@ -797,6 +813,9 @@
   "SendableCommand": [
     "type: { readonly t: \"shop.buy\"; readonly kind: \"ball\" | \"item\"; readonly id: num… [8952 chars, sha1 cd0664c487cc]"
   ],
+  "SendOutcome": [
+    "type: { readonly status: \"accepted\"; } | { readonly status: \"not-sent\"; } | { readonly status: \"uncertain\"; readonly error: unknown; }"
+  ],
   "SendResult": [
     "type: boolean | Promise<boolean>"
   ],
@@ -908,6 +927,27 @@
     "  onOpen?: (() => void) | undefined",
     "  onClose?: (() => void) | undefined",
     "  onError?: ErrorHandler | undefined"
+  ],
+  "TwitchChannel": [
+    "type: TwitchChannel",
+    "  login: string",
+    "  nome: string | null",
+    "  bonus: boolean | null",
+    "  espectadores: number | null"
+  ],
+  "TwitchState": [
+    "type: TwitchState",
+    "  login: string | null",
+    "  aoVivo: boolean | null",
+    "  assistindo: boolean | null",
+    "  emLives: number | null",
+    "  assistindoEm: readonly string[] | null",
+    "  pct: number | null",
+    "  extra: number | null",
+    "  pctAtual: number | null",
+    "  canal: string | null",
+    "  oficiais: readonly TwitchChannel[] | null",
+    "  lives: readonly TwitchChannel[] | null"
   ],
   "TypedCommands": [
     "type: TypedCommands",

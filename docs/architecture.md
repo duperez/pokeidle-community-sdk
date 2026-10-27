@@ -57,6 +57,13 @@ and the packet a listener holds never aliases them. New `welcome` packets replac
 catalogs and protection metadata. A client/transport belongs to one account; routing across accounts belongs to the host.
 Callbacks from a stopped or older client run are ignored, even after restart.
 
+`itemQuantity`/`ballQuantity` distinguish unknown (`null`, including malformed/negative quantities) from zero (an absent
+id in a known inventory map). The legacy `itemCount`/`ballCount` retain their existing contract. `player-details.ts`
+normalizes selected automation ids and Twitch facts; `GameState.automation` and `.twitch` cache frozen, privately owned
+snapshots until the next state update. `inCenter` preserves unknown as `null`. Twitch keeps the reported field names and
+does not infer live status, channel or live count from another field. Numeric text is understood, invalid booleans stay
+unknown, and UI-specific caps are intentionally absent.
+
 ## The protocol registry
 
 `protocol/registry.generated.ts` lists every packet type the game's client handles, every battle event kind and every
@@ -122,6 +129,35 @@ one in-flight slot before sending, listen before the send, and count budgets at 
 cannot expire its own limits. There is no launcher-specific projection, account model or dependency-injection container in
 the SDK.
 
+Per-call `ActionCallOptions.onSend` observes dispatch separately from reconciliation. `SendOutcome` distinguishes
+`accepted`, `not-sent` and `uncertain` (with the original `unknown` error). Internal floors and budgets are recorded before
+the observer runs; the action remains in flight while it runs, and the terminal result is delivered afterward. A guard
+inside dispatch reports `not-sent` before rejecting; preflight refusals and dry runs have no dispatch to observe.
+Observers use the standard guarded error path and cannot change the send outcome or abandon reconciliation.
+The hook is synchronous, not a transaction/persistence callback. A host that needs durable accounting owns persistence
+and recovery if that write fails. The later evidence may confirm an uncertain send; neither acceptance nor the matching
+event's `certain` classification proves request-id correlation, which this protocol does not provide.
+
+## Responsibility boundaries
+
+| SDK                                                               | Host / application                                                     |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Frame parsing, protocol shapes and game-state normalization       | Account/source selection, operational health timers and UI projections |
+| Shop facts and game eligibility rules                             | Feature selection, presentation categories, sorting and caps           |
+| One-shot action dispatch and conservative evidence reconciliation | Persistent account budgets, automation scheduling and retry policy     |
+| Transport contract and the page WebSocket hook                    | CDP/IPC routing, replaced-webview filtering and sandbox allowlists     |
+
+`Actions` safety defaults are optional per-instance protections, not an account persistence layer or automation runner.
+A host can turn off rate limits while retaining reconciliation and supply its own durable policy. Local JSON
+canonicalization and an application-specific command allowlist are legitimate sandbox checks, not a duplicate protocol
+implementation to move into the SDK.
+
+`state.player` and typed packet listeners are supported low-level APIs, not access to private state. Prefer normalized
+getters for common facts so features do not each reinterpret wire fields. Keep protocol access in an adapter when a
+normalized projection is unavailable. A page extension should use `PageTransport`, `on('market')` and `sendCommand`
+instead of installing its own WebSocket proxy and JSON parser. DOM access, client-adjusted page data and consumer
+calculations remain local adapters unless a reusable, verified game contract justifies an SDK API.
+
 ## Sending commands
 
 `sendCommand` is the low-level sender. Its guards (`protocol/send-guard.ts`) are about accidents: a forbidden command is
@@ -162,3 +198,12 @@ and demands that the tests fail. CI runs them with lint and typecheck; a weekly 
 The game's protocol is private and can change at any time. The SDK is the single place to adapt: packets are read
 defensively, unknown types are reported by the inspector instead of failing, and fixtures from real traffic (sanitized)
 are used to catch format changes.
+
+## Distribution
+
+The official SDK build compiles ESM and declarations, then `scripts/build-bundles.mjs` emits self-contained CommonJS
+(`dist/index.cjs`), portable CJS declarations (`dist/cjs/`) and a minified browser IIFE (`dist/pokeidle-sdk.iife.js`,
+`globalThis.PokeIdleSDK`). Merely loading the browser script does not patch WebSocket: the consumer explicitly starts a
+client with `PageTransport`. It must load in the page's MAIN world at document start. All runtime exports/catalogs are
+present in the IIFE; ESM consumers can still tree-shake unused catalogs. Distribution tests execute the browser
+market receive/send path without a module loader and relocate ESM/CJS/types outside the checkout.

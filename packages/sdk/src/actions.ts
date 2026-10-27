@@ -1,12 +1,21 @@
 import type { ActionsHost } from './actions-host.js';
 import { realScheduler, resolveChecks, validateOptions } from './actions-options.js';
-import type { ActionsOptions, BuyRequest, BuyResult, Scheduler, SellRequest, SellResult } from './actions-types.js';
+import type {
+  ActionCallOptions,
+  ActionsOptions,
+  BuyRequest,
+  BuyResult,
+  Scheduler,
+  SellRequest,
+  SellResult,
+  SendOutcome,
+} from './actions-types.js';
 import { waitForPurchase, waitForSale } from './confirmations.js';
 import { priceOf } from './pricing.js';
 import { RateLimiter } from './rate-limiter.js';
 import { whyNotSellable } from './sale-rules.js';
 import { SpendLedger } from './spend-ledger.js';
-import { defaultErrorHandler, report, type ErrorHandler } from './errors.js';
+import { defaultErrorHandler, guarded, report, type ErrorHandler } from './errors.js';
 import { isIrreversibleCommand, type SendableCommand } from './protocol/commands.js';
 import { CommandRefusedError } from './protocol/send-guard.js';
 
@@ -48,12 +57,12 @@ export class Actions {
   }
 
   /** Buys balls from the NPC shop. Use the `Ball` enum for the id. */
-  buyBall(ball: number, quantity: number, options: { dryRun?: boolean } = {}): Promise<BuyResult> {
+  buyBall(ball: number, quantity: number, options: ActionCallOptions = {}): Promise<BuyResult> {
     return this.buy('ball', ball, quantity, options);
   }
 
   /** Buys items (potions, revives) from the NPC shop. Use the `Item` enum for the id. */
-  buyItem(item: number, quantity: number, options: { dryRun?: boolean } = {}): Promise<BuyResult> {
+  buyItem(item: number, quantity: number, options: ActionCallOptions = {}): Promise<BuyResult> {
     return this.buy('item', item, quantity, options);
   }
 
@@ -62,7 +71,7 @@ export class Actions {
     return this.ledger.spentLastHour(this.scheduler.now());
   }
 
-  private async buy(kind: 'ball' | 'item', id: number, quantity: number, options: { dryRun?: boolean }): Promise<BuyResult> {
+  private async buy(kind: 'ball' | 'item', id: number, quantity: number, options: ActionCallOptions): Promise<BuyResult> {
     if (!Number.isInteger(id) || id < 0) throw new RangeError(`the ${kind} id must be a non-negative integer, got ${String(id)}`);
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_PER_ORDER)
       throw new RangeError(`the quantity must be an integer from 1 to ${MAX_PER_ORDER}, got ${String(quantity)}`);
@@ -110,6 +119,7 @@ export class Actions {
       command: { ...command },
       confirmIrreversible: false,
       spendGold: request.totalPrice,
+      onSend: options.onSend,
       onSent: () => {
         if (generation === this.connectionGeneration) this.inventoryFloors.set(key, inventoryBefore + quantity);
       },
@@ -122,7 +132,7 @@ export class Actions {
    * dry run). It refuses what the game's own client refuses (your active pokémon, your team, the Collection, one holding
    * the Exp. Share) and waits for the game's `venda` event or for the pokémon to leave your list.
    */
-  async sellPokemon(pokemonId: number, options: { dryRun?: boolean; confirmIrreversible?: boolean } = {}): Promise<SellResult> {
+  async sellPokemon(pokemonId: number, options: ActionCallOptions & { confirmIrreversible?: boolean } = {}): Promise<SellResult> {
     if (!Number.isInteger(pokemonId) || pokemonId < 0)
       throw new RangeError(`the pokémon id must be a non-negative integer, got ${String(pokemonId)}`);
     const dryRun = options.dryRun ?? this.options.dryRun ?? false;
@@ -155,6 +165,7 @@ export class Actions {
       command: { ...command },
       confirmIrreversible: true,
       spendGold: null,
+      onSend: options.onSend,
       wait: () => waitForSale(this.confirmationDeps, request),
     });
   }
@@ -171,33 +182,41 @@ export class Actions {
     command: SendableCommand;
     confirmIrreversible: boolean;
     spendGold: number | null;
+    onSend: ActionCallOptions['onSend'];
     onSent?: () => void;
     wait: () => { result: Promise<R>; cancel: () => void };
   }): Promise<R | { status: 'not-connected' }> {
     this.inFlight = true;
     try {
       const confirmation = spec.wait();
+      const notify = (outcome: SendOutcome): void => guarded(this.onError, () => spec.onSend?.(Object.freeze(outcome)));
       let sent: boolean;
+      let outcome: SendOutcome;
       try {
         const answer = this.host.sendCommand(spec.command, { confirmIrreversible: spec.confirmIrreversible });
         sent = typeof answer === 'boolean' ? answer : await answer;
+        outcome = sent ? { status: 'accepted' } : { status: 'not-sent' };
       } catch (error) {
         if (error instanceof CommandRefusedError) {
           confirmation.cancel();
+          notify({ status: 'not-sent' });
           throw error;
         }
         // A transport failure can happen after writing the frame. Only an explicit false means definitely not sent.
         report(this.onError, error);
         sent = true;
+        outcome = { status: 'uncertain', error };
       }
       if (!sent) {
         confirmation.cancel();
+        notify(outcome);
         return { status: 'not-connected' };
       }
       spec.onSent?.();
       const sentAt = this.scheduler.now();
       this.limiter.recordSend(sentAt);
       if (spec.spendGold !== null) this.ledger.record(sentAt, spec.spendGold);
+      notify(outcome);
       const result = await confirmation.result;
       if (result.status === 'unconfirmed' || result.status === 'rejected') this.limiter.startCooldown(this.scheduler.now());
       return result;

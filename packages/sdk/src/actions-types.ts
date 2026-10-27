@@ -7,6 +7,20 @@ export interface RateLimit {
   maxPerMinute?: number;
 }
 
+/** Dispatch acceptance, independent of evidence that the game applied the action. */
+export type SendOutcome =
+  { readonly status: 'accepted' } | { readonly status: 'not-sent' } | { readonly status: 'uncertain'; readonly error: unknown };
+
+export interface ActionCallOptions {
+  dryRun?: boolean;
+  /**
+   * Synchronous observer of the send result, called once before the terminal action result. No call for preflight
+   * refusals or dry runs. A dispatch guard reports `not-sent` before rejecting; transport failures are `uncertain`.
+   * Throws are reported through `onError`, never used to cancel an already sent order.
+   */
+  onSend?: (outcome: SendOutcome) => void;
+}
+
 export interface ActionsOptions {
   /** Report what would be sent and send nothing. Default false. Can also be set per call. */
   dryRun?: boolean;

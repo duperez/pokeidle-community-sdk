@@ -4,11 +4,53 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const SDK = fileURLToPath(new URL('../packages/sdk/', import.meta.url));
 const built = fs.existsSync(path.join(SDK, 'dist/index.cjs'));
+
+test('the browser bundle runs without a module loader and delivers market packets through PageTransport', { skip: !built }, () => {
+  const context = vm.createContext({ URL, structuredClone, EventTarget, Event, MessageEvent });
+  vm.runInContext(
+    `class Socket extends EventTarget {
+       constructor(url) { super(); this.url = url; this.readyState = 1; this.sent = []; }
+       send(text) { this.sent.push(text); }
+     }
+     globalThis.WebSocket = Socket;
+     globalThis.location = {host:'game.test', href:'https://game.test/'};
+    `,
+    context,
+  );
+  const original = context.WebSocket;
+  const bundle = fs.readFileSync(path.join(SDK, 'dist/pokeidle-sdk.iife.js'), 'utf8');
+  vm.runInContext(bundle, context);
+  assert.equal(context.WebSocket, original, 'loading exports alone does not install a hook');
+  const actual = vm.runInContext(
+    `(() => {
+       const {PokeIdleClient, PageTransport} = PokeIdleSDK;
+       const client = new PokeIdleClient({transport:new PageTransport(globalThis)});
+       let market;
+       client.on('market', packet => { market = packet; });
+       client.start();
+       const socket = new WebSocket('wss://game.test/');
+       socket.dispatchEvent(new Event('open'));
+       socket.dispatchEvent(new MessageEvent('message', {data:'{"t":"market","medias":{"1":42},"resumo":[]}' }));
+       const accepted = client.sendCommand({t:'market.itens'});
+       const result = JSON.stringify({market, accepted, sent:socket.sent, connected:client.connected});
+       client.stop();
+       return result;
+     })()`,
+    context,
+  );
+  assert.deepEqual(JSON.parse(actual), {
+    market: { t: 'market', medias: { 1: 42 }, resumo: [] },
+    accepted: true,
+    sent: ['{"t":"market.itens"}'],
+    connected: true,
+  });
+});
 
 test(
   'a relocated distribution runs and typechecks as both ESM and CommonJS without the source checkout',
@@ -48,9 +90,17 @@ test(
         const accepted: Promise<boolean> = client.sendCommand({t:'shop.buy',kind:'ball',id:1,qty:1});
         const full: boolean = client.state.complete;
         const name: string | null = client.state.huntName('test');
+        const quantity: number | null = client.state.itemQuantity(200);
+        const automation: sdk.AutomationState | null = client.state.automation;
+        const twitch: sdk.TwitchState | null = client.state.twitch;
+        const inCenter: boolean | null = client.state.inCenter;
+        const sendOptions: sdk.ActionCallOptions = {onSend(outcome: sdk.SendOutcome) {
+          if (outcome.status === 'uncertain') { const error: unknown = outcome.error; void error; }
+        }};
+        const purchase: Promise<sdk.BuyResult> = client.actions.buyBall(1,1,sendOptions);
         // @ts-expect-error a real SDK declaration must reject invalid command fields
         client.sendCommand({t:'shop.buy',kind:'invalid',id:1,qty:1});
-        void [accepted, full, name, vendored, vendorAccepted];
+        void [accepted, full, name, vendored, vendorAccepted, quantity, automation, twitch, inCenter, purchase];
       `;
       const files = ['consumer.mts', 'consumer.cts'].map((name) => {
         const filename = path.join(root, name);

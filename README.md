@@ -44,7 +44,19 @@ client.onPacket((packet) => {
 console.log(client.inspector?.dump()); // counts and redacted samples, safe to share
 ```
 
-The data the SDK's own decisions rest on (`items`, `balls`, the Collection in `automation`, every pokémon row) is held as frozen private copies: writing to it throws a `TypeError`. The rest of `state.player` is shared with the game's packet and is read-only only by contract.
+All nested `state.player` data is held as frozen private copies: writing to it throws a `TypeError`.
+
+For decisions that need to distinguish unavailable inventory from zero, use `state.itemQuantity(id)` or
+`state.ballQuantity(id)`: an unavailable map or invalid value/id returns `null`; an absent id in a known map returns `0`.
+The older `itemCount`/`ballCount` helpers retain their zero-for-unknown behavior. All getters are last-known values;
+require `client.connected && state.complete` when current state is needed.
+
+`state.automation` exposes selected `ballIds`, `reviveIds` and `potionIds` as frozen arrays (positive integer ids, no
+duplicates; `null` for an unavailable list). `state.inCenter` is `boolean | null`. `state.twitch` normalizes numeric text,
+channel lists and `assistindoEm` entries (login strings or `{login}` objects), retains the server's field names, and leaves
+missing/malformed values `null`. Text fields accept only nonempty trimmed strings; booleans must be actual booleans.
+`emLives` and `canal` are reported facts, not inferred
+from other fields. It imposes no UI text/list caps; presentation limits belong to the consumer.
 
 Nothing a listener throws can break the SDK or another listener. Every error the SDK has to swallow (a listener, a state
 callback, a transport handler) goes to one place: `new PokeIdleClient({ transport, onError: (error) => ... })`. Without
@@ -82,6 +94,29 @@ The inventory fallback never reuses quantities already expected from earlier sen
 item, even when their update arrives after the grace window. This is deliberately conservative: simultaneous consumption
 or a rejected order can make inventory-only confirmation unavailable; the matching `compra` event still confirms it.
 These expectations are reset at a connection boundary.
+
+Every action accepts a per-call `onSend` observer, independent of the later `BuyResult`/`SellResult`:
+
+```ts
+const result = await client.actions.buyBall(Ball.UltraBall, 10, {
+  onSend(outcome) {
+    // accepted: transport returned true; not-sent: definitely no frame sent;
+    // uncertain: a transport failure, with the original error in outcome.error.
+    // Account for accepted/uncertain sends here, before waiting for game evidence.
+  },
+});
+```
+
+`onSend` runs synchronously once the send settles and before the terminal action result, even if game evidence arrived
+first. Preflight refusals and dry runs do not call it; a dispatch guard calls it with `not-sent` before the action rejects.
+An observer that throws is reported through `onError` but cannot undo the send or interrupt reconciliation. It is not an
+async persistence hook: the host must handle persistence failures and prevent unsafe retries itself. With a transport
+that never settles, neither the send hook nor the terminal result arrives.
+
+Acceptance and game evidence are separate: an uncertain send can later have matching game evidence. Even
+`confidence: 'certain'` means a matching event under the SDK's rules, not a transaction receipt or request-id correlation.
+Identical manual/concurrent commands can produce indistinguishable events. Keep account persistence, feature scheduling
+and application budgets in the host; the SDK's configurable in-memory limits are not a replacement for them.
 
 `sellPokemon(id, { confirmIrreversible: true })` sells ONE pokémon from your Depot to the NPC shop and cannot be undone, so
 it needs the explicit confirmation (not for a dry run). It refuses, with the reason, what the game's own client refuses to
@@ -157,10 +192,28 @@ send errors through `onError`, charge their budgets conservatively when the send
 Never forward callbacks from another account or a replaced webview to the same handlers.
 
 `npm run build -w pokeidle-community-sdk` produces ESM (`dist/index.js`), a self-contained CommonJS bundle
-(`dist/index.cjs`), and declarations for both. Package `import`/`require` exports select matching declarations automatically.
+(`dist/index.cjs`), a classic browser script (`dist/pokeidle-sdk.iife.js`), and ESM/CommonJS declarations.
+Package `import`/`require` exports select matching declarations automatically.
 For vendoring, copy the CJS bundle plus the entire `dist/cjs/` declaration tree, including its `package.json`, preserving
 relative paths. Import types from that tree's `index.js` path (TypeScript resolves `index.d.ts`), not from an untyped `.cjs`
 file. Keep the upstream commit identifier alongside the copied artifacts.
+
+For an extension without a bundler, vendor `dist/pokeidle-sdk.iife.js` and load it before your page adapter, in the page's
+MAIN world at `document_start`. It exposes `globalThis.PokeIdleSDK` and does not install a hook until a client starts:
+
+```js
+const { PokeIdleClient, PageTransport } = globalThis.PokeIdleSDK;
+const client = new PokeIdleClient({ transport: new PageTransport(window) });
+client.on('market', (packet) => {
+  /* consume packet.medias / packet.resumo */
+});
+client.start();
+// When your feature needs it: client.sendCommand({ t: 'market.itens' });
+```
+
+The IIFE includes all public runtime exports and catalogs, unlike a tree-shaken ESM integration. Use the SDK's transport
+and typed packet/command APIs rather than a second WebSocket proxy or protocol parser in the feature. DOM reads and
+application-specific calculations still belong in page adapters, not in the SDK or an Electron bridge.
 
 ## Repository layout
 

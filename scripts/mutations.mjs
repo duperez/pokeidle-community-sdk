@@ -58,6 +58,13 @@ export const MUTATIONS = [
   { file: 'actions.ts', from: "typeof answer === 'boolean'", to: "typeof answer !== 'boolean'" },
   { file: 'actions.ts', from: 'this.limiter.recordSend(sentAt);', to: '' },
   { file: 'actions.ts', from: 'this.ledger.record(sentAt, spec.spendGold)', to: 'void 0' },
+  { file: 'actions.ts', from: "outcome = { status: 'uncertain', error };", to: "outcome = { status: 'accepted' };" },
+  { file: 'actions.ts', from: "notify({ status: 'not-sent' });", to: '' },
+  {
+    file: 'actions.ts',
+    from: 'notify(outcome);\n      const result = await confirmation.result;',
+    to: 'const result = await confirmation.result;',
+  },
   { file: 'actions.ts', from: "result.status === 'unconfirmed' || result.status === 'rejected'", to: "result.status === 'unconfirmed'" },
   { file: 'actions.ts', from: 'spent + request.totalPrice > cap', to: 'spent + request.totalPrice >= cap' },
   { file: 'actions.ts', from: 'gold < request.totalPrice', to: 'gold <= request.totalPrice' },

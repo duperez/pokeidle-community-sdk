@@ -3,7 +3,7 @@ import test from 'node:test';
 import { tick } from './helpers/actions-setup.js';
 import { FakeScheduler } from './helpers/fake-scheduler.js';
 import { welcome } from './helpers/fixtures.js';
-import { Ball, PokeIdleClient, type Transport, type TransportHandlers } from '../src/index.js';
+import { Ball, PokeIdleClient, type SendOutcome, type Transport, type TransportHandlers } from '../src/index.js';
 
 // A transport whose `send` is asynchronous (a host where the write reaches the game's socket over IPC, like a launcher).
 
@@ -147,4 +147,29 @@ test('a send that never settles keeps the instance busy (documented), and the co
   assert.equal((await client.actions.buyBall(Ball.UltraBall, 10)).status, 'busy');
   scheduler.advance(60_000);
   assert.equal((await client.actions.buyBall(Ball.UltraBall, 10)).status, 'busy');
+});
+
+test('async sends report accepted, not-sent or uncertain before the terminal result, even if the answer arrived first', async () => {
+  for (const mode of ['accept', 'refuse', 'reject'] as const) {
+    const { transport, actions, feed } = setupAsync();
+    transport.mode = mode;
+    const order: string[] = [];
+    const outcomes: SendOutcome[] = [];
+    const pending = actions.buyBall(Ball.UltraBall, 10, {
+      onSend: (outcome) => {
+        outcomes.push(outcome);
+        order.push('send');
+      },
+    });
+    assert.equal(outcomes.length, 0, 'wait for the actual transport result');
+    feed({ t: 'batalha', ev: [{ k: 'compra', nome: 'Ultra Ball', qtd: 10, gasto: 1300 }] });
+    const result = await pending;
+    order.push('result');
+    assert.deepEqual(order, ['send', 'result']);
+    assert.equal(outcomes.length, 1);
+    assert.equal(outcomes[0]?.status, mode === 'accept' ? 'accepted' : mode === 'refuse' ? 'not-sent' : 'uncertain');
+    if (outcomes[0]?.status === 'uncertain') assert.match(String(outcomes[0].error), /ipc failed/);
+    assert.equal(result.status, mode === 'refuse' ? 'not-connected' : 'confirmed');
+    assert.equal(actions.spentLastHour, mode === 'refuse' ? 0 : 1300);
+  }
 });

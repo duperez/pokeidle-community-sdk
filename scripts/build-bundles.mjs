@@ -8,15 +8,24 @@ const SDK = fileURLToPath(new URL('../packages/sdk/', import.meta.url));
 const DIST = path.join(SDK, 'dist');
 const TYPES = path.join(DIST, 'cjs');
 
-await build({
+const common = {
   absWorkingDir: SDK,
   entryPoints: [path.join(SDK, 'src/index.ts')],
-  outfile: path.join(DIST, 'index.cjs'),
   bundle: true,
-  format: 'cjs',
   platform: 'browser',
   target: 'es2022',
-});
+};
+
+await Promise.all([
+  build({ ...common, outfile: path.join(DIST, 'index.cjs'), format: 'cjs' }),
+  build({
+    ...common,
+    outfile: path.join(DIST, 'pokeidle-sdk.iife.js'),
+    format: 'iife',
+    globalName: 'PokeIdleSDK',
+    minify: true,
+  }),
+]);
 
 // CJS declarations need their own package scope; their relative .js imports resolve to the adjacent .d.ts files.
 function copyDeclarations(directory, relative = '') {
