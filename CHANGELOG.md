@@ -15,6 +15,12 @@ The SDK reads a game that changes without notice. A change in the game's packets
 
 ## [Unreleased]
 
+### Distribution
+
+- Clean SDK builds remove obsolete output; reproducible tarballs include external revision/toolchain/file-hash manifests.
+- CI validates external package consumers on Linux, macOS and Windows and preserves verified workflow artifacts without
+  publishing to a registry. Node 22/npm 10.8.2 is the documented contribution environment.
+
 ### Fixed
 
 - Stopping a client now invalidates completeness, notifies observers and ends pending orders conservatively; callbacks

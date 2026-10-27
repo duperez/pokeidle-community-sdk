@@ -7,6 +7,7 @@
     "packages/*",
     "examples/*"
   ],
+  "packageManager": "npm@10.8.2",
   "scripts": {
     "build": "npm run build -w pokeidle-community-sdk && npm run build -w pokeidle-test-extension",
     "typecheck": "npm run typecheck -w pokeidle-community-sdk && npm run typecheck -w pokeidle-test-extension",
@@ -21,7 +22,9 @@
     "format:check": "prettier --check .",
     "lint": "npm run build && eslint .",
     "coverage": "node scripts/check-coverage.mjs",
-    "mutation": "node scripts/mutation.mjs"
+    "mutation": "node scripts/mutation.mjs",
+    "distribution": "node scripts/distribution.mjs",
+    "test:distribution": "node scripts/verify-distribution.mjs && node --test test/package-contents.test.mjs test/sdk-distribution.test.mjs test/distribution-manifest.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

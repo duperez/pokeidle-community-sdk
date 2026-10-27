@@ -198,6 +198,12 @@ For vendoring, copy the CJS bundle plus the entire `dist/cjs/` declaration tree,
 relative paths. Import types from that tree's `index.js` path (TypeScript resolves `index.d.ts`), not from an untyped `.cjs`
 file. Keep the upstream commit identifier alongside the copied artifacts.
 
+For a reproducible, verified package, run `npm ci`, `npm run distribution -- --require-clean`, then
+`npm run test:distribution`. CI retains the `.tgz`, revision/toolchain manifest and SHA-256 checksums as a workflow
+artifact; nothing is published to a registry. Use one artifact's CJS, types and IIFE together and expose its version,
+revision and verification status in the consuming application's installation diagnostics, not through a new SDK UI.
+See [distribution and consumer diagnostics](docs/distribution.md) for the schema, limits and launcher mapping.
+
 For an extension without a bundler, vendor `dist/pokeidle-sdk.iife.js` and load it before your page adapter, in the page's
 MAIN world at `document_start`. It exposes `globalThis.PokeIdleSDK` and does not install a hook until a client starts:
 
@@ -228,14 +234,15 @@ application-specific calculations still belong in page adapters, not in the SDK 
 ## Try it
 
 ```bash
-npm install
+npm ci
 npm run build        # builds the SDK, then the test extension
 npm test
 npm run coverage     # unit tests with a coverage floor
 npm run mutation     # applies deliberate bugs to the safety code; the tests must catch each one
 ```
 
-CI runs formatting, build, lint, typecheck, tests and coverage on every push. A weekly workflow checks whether the game
+CI runs formatting, build, lint, typecheck, tests, coverage and reproducible packaging on pull requests, pushes to `main`
+and manual dispatch. Consumption is checked on Linux, macOS and Windows. A weekly workflow checks whether the game
 drifted (`catalog:check`, `protocol:check`) and runs the mutation check; CodeQL and Dependabot are on too. See
 [CONTRIBUTING](CONTRIBUTING.md), [SECURITY](SECURITY.md), [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) and the [CHANGELOG](CHANGELOG.md).
 

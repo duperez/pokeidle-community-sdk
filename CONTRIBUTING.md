@@ -15,14 +15,20 @@ disclaimer in the README first.
 ## Setup
 
 ```sh
+nvm use
+npm install --global npm@10.8.2
 npm ci
 npm run build
 npm test
 ```
 
-Node 20 or newer. The checks CI runs, in this order: `npm run format:check`, `npm run build`, `npm run lint`,
+Use Node 22 (see `.nvmrc`) and npm 10.8.2 (see `packageManager`); `nvm` is optional if Node is already installed.
+The SDK's existing Node >=20 contract is preserved; CI also checks Node 20/24 on Linux and Node 22 on macOS/Windows.
+The checks CI runs, in this order: `npm run format:check`, `npm run build`, `npm run lint`,
 `npm run typecheck`, `npm test`, `npm run coverage` (a floor, see `scripts/check-coverage.mjs`). Run `npm run format` to fix
-formatting.
+formatting. CI then runs `npm run distribution -- --require-clean` and `npm run test:distribution`, uploading artifacts
+only after these checks pass. Locally, omit `--require-clean` while developing; the manifest explicitly marks dirty builds.
+See [distribution and consumer diagnostics](docs/distribution.md) for reproduction and external-consumer checks.
 
 `npm run mutation` (about two minutes; also run weekly by CI) breaks the safety-relevant code on purpose, one change at a
 time, and fails if the tests do not notice. If you change code listed in `scripts/mutations.mjs`, keep that list in step

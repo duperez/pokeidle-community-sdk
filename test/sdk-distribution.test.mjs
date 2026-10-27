@@ -7,6 +7,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { runNpm } from '../scripts/npm.mjs';
 
 const SDK = fileURLToPath(new URL('../packages/sdk/', import.meta.url));
 const built = fs.existsSync(path.join(SDK, 'dist/index.cjs'));
@@ -60,12 +61,25 @@ test(
     try {
       const target = path.join(root, 'node_modules/pokeidle-community-sdk');
       fs.mkdirSync(target, { recursive: true });
-      fs.cpSync(path.join(SDK, 'dist'), path.join(target, 'dist'), { recursive: true });
-      fs.copyFileSync(path.join(SDK, 'package.json'), path.join(target, 'package.json'));
+      const [packed] = JSON.parse(runNpm(['pack', '--json', '--ignore-scripts', '--pack-destination', root], { cwd: SDK }));
+      runNpm(
+        [
+          'install',
+          '--offline',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          '--prefix',
+          root,
+          path.join(root, packed.filename),
+        ],
+        { cwd: root },
+      );
       const vendor = path.join(root, 'vendor');
       fs.mkdirSync(vendor);
-      fs.cpSync(path.join(SDK, 'dist/cjs'), path.join(vendor, 'sdk-types'), { recursive: true });
-      fs.copyFileSync(path.join(SDK, 'dist/index.cjs'), path.join(vendor, 'pokeidle-sdk.cjs'));
+      fs.cpSync(path.join(target, 'dist/cjs'), path.join(vendor, 'sdk-types'), { recursive: true });
+      fs.copyFileSync(path.join(target, 'dist/index.cjs'), path.join(vendor, 'pokeidle-sdk.cjs'));
       execFileSync(process.execPath, ['-e', "require('./vendor/pokeidle-sdk.cjs')"], { cwd: root, stdio: 'pipe' });
       for (const mode of ['module', 'commonjs']) {
         const code =

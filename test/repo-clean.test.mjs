@@ -57,5 +57,6 @@ test('no personal paths, credentials or e-mail addresses in tracked files', opti
 
 test('the things that must stay out of the repository are in .gitignore', () => {
   const ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
-  for (const item of ['node_modules/', 'dist/', '.env', 'recordings/']) assert.ok(ignore.includes(item), `.gitignore is missing ${item}`);
+  for (const item of ['node_modules/', 'dist/', 'artifacts/', '.env', 'recordings/'])
+    assert.ok(ignore.includes(item), `.gitignore is missing ${item}`);
 });

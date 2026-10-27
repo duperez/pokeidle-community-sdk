@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { runNpm } from '../scripts/npm.mjs';
 
 // What would be published: only the built library plus the package metadata, nothing else (no sources, tests, scripts,
 // source maps pointing into this machine, or local files). Needs `npm run build` first, as CI does.
@@ -12,7 +12,7 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const built = existsSync(path.join(ROOT, 'packages/sdk/dist/index.js'));
 
 test('npm pack contains the built library and nothing it should not', { skip: built ? false : 'run `npm run build` first' }, () => {
-  const out = execFileSync('npm', ['pack', '--dry-run', '--json', '-w', 'pokeidle-community-sdk'], { cwd: ROOT, encoding: 'utf8' });
+  const out = runNpm(['pack', '--dry-run', '--json', '--ignore-scripts', '-w', 'pokeidle-community-sdk'], { cwd: ROOT });
   const [pack] = JSON.parse(out);
   const files = pack.files.map((f) => f.path);
   for (const required of [
@@ -24,6 +24,7 @@ test('npm pack contains the built library and nothing it should not', { skip: bu
     'dist/index.cjs',
     'dist/cjs/index.d.ts',
     'dist/cjs/package.json',
+    'dist/pokeidle-sdk.iife.js',
   ])
     assert.ok(files.includes(required), `missing ${required}`);
   const allowed = (f) => f === 'package.json' || f === 'LICENSE' || f === 'README.md' || f.startsWith('dist/');
