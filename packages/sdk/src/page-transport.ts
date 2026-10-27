@@ -98,11 +98,14 @@ function installHook(page: WithHook): SharedHook {
     hook.socket = ws;
     if (adopted.has(ws)) return;
     adopted.add(ws);
+    // Only the CURRENT socket speaks: a replaced one that is still closing (or still talking) must not feed the state or
+    // announce a disconnection while its successor is up.
+    const current = (): boolean => hook.socket === ws;
     ws.addEventListener('message', (event) => {
-      if (typeof event.data === 'string') each((h) => h.onMessage(event.data as string));
+      if (current() && typeof event.data === 'string') each((h) => h.onMessage(event.data as string));
     });
-    ws.addEventListener('open', () => each((h) => h.onOpen?.()));
-    ws.addEventListener('close', () => each((h) => h.onClose?.()));
+    ws.addEventListener('open', () => current() && each((h) => h.onOpen?.()));
+    ws.addEventListener('close', () => current() && each((h) => h.onClose?.()));
   };
 
   page.WebSocket = new Proxy(Original, {
@@ -115,11 +118,12 @@ function installHook(page: WithHook): SharedHook {
   // Backup for a socket created before the hook existed: it is adopted the first time the game sends something.
   Original.prototype.send = function (this: WebSocket, data: Parameters<WebSocket['send']>[0]) {
     if (isGameSocket(this)) {
-      if (hook.socket !== this) {
+      if (!adopted.has(this)) {
         adopt(this);
         if (this.readyState === 1) each((h) => h.onOpen?.()); // adopted late: it was already open
       }
-      if (typeof data === 'string') each((h) => h.onOutgoing?.(data));
+      // A socket that was replaced does not take the transport back, and what it sends is not reported.
+      if (hook.socket === this && typeof data === 'string') each((h) => h.onOutgoing?.(data));
     }
     return originalSend.call(this, data);
   };

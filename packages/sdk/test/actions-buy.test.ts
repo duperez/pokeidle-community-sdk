@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { setup } from './helpers/actions-setup.js';
+import { setup, tick } from './helpers/actions-setup.js';
 import { Ball, Item } from '../src/index.js';
 
 test('dry run says what it would send and sends nothing', async () => {
@@ -168,4 +168,68 @@ test("confidence: certain for the game's own event, probable for the inventory a
   byError.feed({ t: 'erro', chave: 'x' });
   r = await p;
   assert.equal(r.status === 'rejected' && r.confidence, 'probable');
+});
+
+// A purchase answered by the `compra` event waits a moment for the inventory update that follows, so that update cannot
+// be taken for the evidence of the NEXT purchase of the same item.
+
+const compra = { t: 'batalha', ev: [{ k: 'compra', nome: 'Ultra Ball', qtd: 10, gasto: 1300 }] };
+const balls = (ultra: number) => ({ t: 'estado', estado: { balls: { '1': 100, '4': ultra, '5': 0 } } });
+
+test('after the `compra` event the purchase waits for the inventory update, which then shows in `after`', async () => {
+  const { actions, feed, scheduler } = setup({ confirmGraceMs: 1000 });
+  const done = actions.buyBall(Ball.UltraBall, 10);
+  feed(compra);
+  let settled = false;
+  void done.then(() => (settled = true));
+  await tick();
+  assert.equal(settled, false); // still waiting for the estado
+  feed(balls(82));
+  const result = await done;
+  assert.equal(result.status === 'confirmed' && result.after, 82);
+  assert.equal(result.status === 'confirmed' && result.confirmedBy, 'event');
+  assert.equal(result.status === 'confirmed' && result.confidence, 'certain');
+  assert.equal(scheduler.pending, 0);
+});
+
+test('if the inventory update never comes, the event alone confirms once the grace ends', async () => {
+  const { actions, feed, scheduler } = setup({ confirmGraceMs: 1000 });
+  const done = actions.buyBall(Ball.UltraBall, 10);
+  feed(compra);
+  scheduler.advance(1000);
+  const result = await done;
+  assert.equal(result.status === 'confirmed' && result.after, 72);
+  assert.equal(scheduler.pending, 0);
+});
+
+test('the update of purchase A is already counted when purchase B starts: it cannot confirm B', async () => {
+  const { actions, feed, scheduler } = setup({ confirmGraceMs: 1000, confirmTimeoutMs: 5000 });
+  const a = actions.buyBall(Ball.UltraBall, 10);
+  feed(compra);
+  feed(balls(82));
+  assert.equal((await a).status, 'confirmed');
+  scheduler.advance(3500);
+  const b = actions.buyBall(Ball.UltraBall, 10);
+  await tick();
+  feed(balls(82)); // nothing new
+  scheduler.advance(5000);
+  assert.equal((await b).status, 'unconfirmed');
+});
+
+test('an error that arrives after the `compra` event does not undo the confirmation', async () => {
+  const { actions, feed, scheduler } = setup({ confirmGraceMs: 1000 });
+  const done = actions.buyBall(Ball.UltraBall, 10);
+  feed(compra);
+  feed({ t: 'erro', chave: 'x' });
+  scheduler.advance(1000);
+  assert.equal((await done).status, 'confirmed');
+});
+
+test('the overall timeout during the grace still answers confirmed, not unconfirmed', async () => {
+  const { actions, feed, scheduler } = setup({ confirmGraceMs: 1000, confirmTimeoutMs: 1500 });
+  const done = actions.buyBall(Ball.UltraBall, 10);
+  scheduler.advance(1200);
+  feed(compra);
+  scheduler.advance(300); // the timeout (1500) comes before the end of the grace (2200)
+  assert.equal((await done).status, 'confirmed');
 });

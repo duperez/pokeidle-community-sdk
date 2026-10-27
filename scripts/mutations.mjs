@@ -40,7 +40,7 @@ export const MUTATIONS = [
   { file: 'pricing.ts', from: 'ball.priceGold <= 0', to: 'ball.priceGold < 0' },
   { file: 'pricing.ts', from: 'offered.price <= 0', to: 'offered.price < 0' },
   // confirmations
-  { file: 'confirmations.ts', from: 'after - before >= request.quantity', to: 'after - before > 0' },
+  { file: 'confirmations.ts', from: 'after - before < request.quantity', to: 'after - before <= 0' },
   { file: 'confirmations.ts', from: "event['qtd'] !== request.quantity", to: "event['qtd'] === request.quantity" },
   { file: 'confirmations.ts', from: "sameKind === 1 ? 'certain'", to: "sameKind >= 1 ? 'certain'" },
   { file: 'confirmations.ts', from: 'if (graceMs <= 0)', to: 'if (graceMs < 0)' },
@@ -59,6 +59,26 @@ export const MUTATIONS = [
   { file: 'actions.ts', from: 'gold < request.totalPrice', to: 'gold <= request.totalPrice' },
   { file: 'actions.ts', from: 'options.confirmIrreversible !== true', to: 'options.confirmIrreversible === false' },
   { file: 'actions-options.ts', from: 'value >= 0', to: 'value > 0' },
+  // connection boundary, purchase grace, socket identity, isolation, inspector policy
+  { file: 'client.ts', from: '      onClose: () => {\n        this.state.markStale();\n', to: '      onClose: () => {\n' },
+  { file: 'client.ts', from: '      onOpen: () => {\n        this.state.markStale();\n', to: '      onOpen: () => {\n' },
+  { file: 'state.ts', from: '  markStale(): void {\n    this.full = false;', to: '  markStale(): void {\n    this.full = this.full;' },
+  { file: 'confirmations.ts', from: 'host.onConnectionChange(() => callback())', to: 'host.onConnectionChange(() => undefined)' },
+  { file: 'confirmations.ts', from: "if (byEvent === null) finish({ status: 'rejected'", to: "if (true) finish({ status: 'rejected'" },
+  { file: 'confirmations.ts', from: 'if (graceMs <= 0 || count()', to: 'if (graceMs < 0 || count()' },
+  { file: 'confirmations.ts', from: '=> byEvent ?? {', to: '=> ({ ...byEvent, x: 0 }) && {' },
+  { file: 'page-transport.ts', from: 'if (current() && typeof event.data', to: 'if (typeof event.data' },
+  { file: 'page-transport.ts', from: "'close', () => current() && each", to: "'close', () => each" },
+  { file: 'page-transport.ts', from: 'if (!adopted.has(this)) {', to: 'if (hook.socket !== this) {' },
+  { file: 'page-transport.ts', from: 'if (hook.socket === this && typeof data', to: 'if (typeof data' },
+  { file: 'inspector.ts', from: "if (typeof kind === 'string') kept[i]", to: 'if (false) kept[i]' },
+  { file: 'state.ts', from: 'deepFreeze(structuredClone(value))', to: 'deepFreeze(value)' },
+  { file: 'state.ts', from: "fields['automation'] = frozenCopy(fields['automation'])", to: "fields['automation'] = fields['automation']" },
+  {
+    file: 'state.ts',
+    from: 'rowsWithId(list).map((k) => [idKey(k.id), frozenCopy(k)])',
+    to: 'rowsWithId(list).map((k) => [idKey(k.id), k])',
+  },
   // errors
   { file: 'errors.ts', from: 'defaultErrorHandler(error);\n  }\n}', to: 'throw error;\n  }\n}' },
 ];

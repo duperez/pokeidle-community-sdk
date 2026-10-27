@@ -31,6 +31,8 @@ export type ActionsState = Pick<
 export interface ActionsHost {
   readonly connected: boolean;
   readonly state: ActionsState;
+  /** Called with `false` when the connection drops and `true` when one opens. */
+  onConnectionChange(listener: (connected: boolean) => void): Unsubscribe;
   /** Listens for packets of any type name (used for the game's `erro`). */
   onType(type: string, listener: PacketListener): Unsubscribe;
   onBattleEvent<K extends BattleEventKind>(kind: K, listener: (event: BattleEventMap[K]) => void): Unsubscribe;

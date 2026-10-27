@@ -138,3 +138,38 @@ test('a throwing handler does not stop the others', () => {
     console.error = quiet;
   }
 });
+
+test('a replaced socket is silent: its late close and messages do not reach the client', () => {
+  const page = newPage();
+  const transport = new PageTransport(page);
+  const { log, handlers } = handlersLog();
+  transport.start(handlers);
+  const oldSocket = new page.WebSocket('wss://game.example/') as unknown as FakeWebSocket;
+  oldSocket.open();
+  const newSocket = new page.WebSocket('wss://game.example/') as unknown as FakeWebSocket;
+  newSocket.open();
+  log.length = 0;
+  oldSocket.close(); // closes after its successor is up
+  oldSocket.receive('{"t":"late"}');
+  assert.deepEqual(log, []);
+  newSocket.receive('{"t":"now"}');
+  assert.deepEqual(log, ['in:{"t":"now"}']);
+});
+
+test('a replaced socket that sends does not take the transport back, and is not reported', () => {
+  const page = newPage();
+  const transport = new PageTransport(page);
+  const { log, handlers } = handlersLog();
+  transport.start(handlers);
+  const oldSocket = new page.WebSocket('wss://game.example/') as unknown as FakeWebSocket;
+  oldSocket.open();
+  const newSocket = new page.WebSocket('wss://game.example/') as unknown as FakeWebSocket;
+  newSocket.open();
+  log.length = 0;
+  oldSocket.send('{"t":"stale"}');
+  assert.deepEqual(log, []);
+  assert.equal(transport.send('{"t":"mine"}'), true);
+  assert.equal(FakeWebSocket.sentFrames.at(-1), '{"t":"mine"}');
+  newSocket.close();
+  assert.deepEqual(log, ['close']); // the transport is still bound to the new socket
+});

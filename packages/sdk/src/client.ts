@@ -65,8 +65,15 @@ export class PokeIdleClient {
     this.transport.start({
       onMessage: (text) => this.handleIncoming(text),
       onOutgoing: (text) => this.handleOutgoing(text),
-      onOpen: () => this.emitConnection(true),
-      onClose: () => this.emitConnection(false),
+      // A new socket means a new session: until its `welcome` arrives, what the state holds is old (and actions refuse).
+      onOpen: () => {
+        this.state.markStale();
+        this.emitConnection(true);
+      },
+      onClose: () => {
+        this.state.markStale();
+        this.emitConnection(false);
+      },
       onError: this.onError,
     });
   }

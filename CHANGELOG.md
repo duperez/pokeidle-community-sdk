@@ -15,6 +15,23 @@ The SDK reads a game that changes without notice. A change in the game's packets
 
 ## [Unreleased]
 
+### Fixed
+
+- A new connection no longer reuses the old session's state: `state.complete` turns `false` when the socket closes or a new
+  one opens, so actions answer `no-state` until the next `welcome`. An order waiting for the game when the connection
+  drops ends as `unconfirmed` (and the next action waits).
+- A socket the game has replaced no longer feeds the client (its late messages and its `close` are ignored), and it cannot
+  take the transport back by sending.
+- A purchase confirmed by the `compra` event now waits (up to `confirmGraceMs`) for the inventory update that follows, so
+  that late update cannot be taken as the evidence of the next purchase of the same item.
+- `state.player`, the inventory, the Collection and every pokémon row are frozen private copies: neither a listener that
+  holds the packet nor a caller can change what the SDK decides on.
+- `Inspector.dump().samples.batalha` applies the same per-event masking as `battleEventSamples` (a guild name stayed readable).
+
+### Added (hardening)
+
+- `GameState.markStale()`.
+
 ### Changed
 
 - `PokeIdleClient.onBattle` is now `onAnyBattleEvent` (it listens to every battle event; `onBattleEvent(kind, …)` is unchanged).

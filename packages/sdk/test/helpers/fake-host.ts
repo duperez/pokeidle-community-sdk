@@ -23,6 +23,7 @@ export class FakeHost implements ActionsHost {
   onSent: (() => void) | null = null;
 
   readonly state: ActionsState;
+  private readonly connectionListeners = new Set<(connected: boolean) => void>();
   private subscribed = 0;
   private readonly packetListeners = new Map<string, Set<(packet: Packet) => void>>();
   private readonly battleListeners = new Map<string, Set<BattleListener>>();
@@ -38,6 +39,18 @@ export class FakeHost implements ActionsHost {
         return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value;
       },
     });
+  }
+
+  /** What the client does when the socket drops: the state goes stale and the listeners hear it. */
+  disconnect(): void {
+    this.connected = false;
+    this.real.markStale();
+    for (const listener of [...this.connectionListeners]) listener(false);
+  }
+
+  onConnectionChange(listener: (connected: boolean) => void): Unsubscribe {
+    this.connectionListeners.add(listener);
+    return this.count(() => void this.connectionListeners.delete(listener));
   }
 
   /** How many subscriptions are open right now. */

@@ -121,3 +121,43 @@ test('state.player is frozen, and rows without a numeric id are left out everywh
   assert.equal(state.pokemons.length, 1);
   assert.equal(state.findPokemon(1)?.id, 1);
 });
+
+test('what the SDK decides on cannot be changed through state.player', () => {
+  const state = stateWith(sellWelcome([pokemon(1, { slot: 0 }), pokemon(3), pokemon(5)]));
+  const player = state.player as unknown as {
+    items: Record<string, number>;
+    automation: { pokemonTravado: number[] };
+    pokemons: Array<{ slot?: number }>;
+  };
+  assert.throws(() => (player.items['200'] = 999), TypeError);
+  assert.throws(() => player.automation.pokemonTravado.pop(), TypeError);
+  assert.throws(() => (player.pokemons[0]!.slot = 9), TypeError);
+  assert.equal(state.itemCount(200), 10);
+  assert.equal(state.isInCollection(3), true);
+  assert.equal(state.isInTeam(1), true);
+});
+
+test('changing the packet after it was applied does not change the state (a listener holds the same object)', () => {
+  const packet = sellWelcome([pokemon(1, { slot: 0 }), pokemon(3)]) as unknown as {
+    estado: { items: Record<string, number>; automation: { pokemonTravado: number[] }; pokemons: Array<{ slot?: number }> };
+  };
+  const state = stateWith(packet);
+  packet.estado.items['200'] = 999;
+  packet.estado.automation.pokemonTravado.length = 0;
+  delete packet.estado.pokemons[0]!.slot;
+  assert.equal(state.itemCount(200), 10);
+  assert.equal(state.isInCollection(3), true);
+  assert.equal(state.isInTeam(1), true);
+});
+
+test('markStale: the last values stay readable but the state is no longer complete until the next welcome', () => {
+  const state = stateWith(sellWelcome([pokemon(1)]));
+  assert.equal(state.complete, true);
+  state.markStale();
+  assert.equal(state.complete, false);
+  assert.equal(state.gold, 100_000);
+  state.applyPacket({ t: 'estado', estado: { gold: 5 } });
+  assert.equal(state.complete, false); // a delta does not make it complete
+  state.applyPacket(welcome());
+  assert.equal(state.complete, true);
+});

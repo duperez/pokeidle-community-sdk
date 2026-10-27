@@ -45,9 +45,24 @@ function safeCopy(source: Record<string, unknown>): Record<string, unknown> {
   for (const [key, value] of Object.entries(source)) if (!UNSAFE_KEYS.has(key)) out[key] = value;
   return out;
 }
-/** `items` and `balls` are maps of id to quantity: copied so a listener that changes the packet cannot corrupt the state. */
-const ownMaps = (fields: Record<string, unknown>): Record<string, unknown> => {
-  for (const key of ['items', 'balls']) if (isObject(fields[key])) fields[key] = safeCopy(fields[key]);
+/** Freezes a plain data tree (what comes out of `JSON.parse`) all the way down. */
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+/** A private, frozen copy: neither a listener that holds the packet nor whoever reads `state.player` can change it. */
+const frozenCopy = <T>(value: T): T => deepFreeze(structuredClone(value));
+
+/**
+ * The parts of the state that the SDK's own decisions rest on are private, frozen copies: the inventory (`items`,
+ * `balls`) and the Collection (`automation`). The packet's objects and the snapshot given to callers never alias them.
+ */
+const ownDecisionData = (fields: Record<string, unknown>): Record<string, unknown> => {
+  for (const key of ['items', 'balls']) if (isObject(fields[key])) fields[key] = deepFreeze(safeCopy(fields[key]));
+  if (isObject(fields['automation'])) fields['automation'] = frozenCopy(fields['automation']);
   return fields;
 };
 const rowsWithId = (v: unknown): PokemonWire[] =>
@@ -80,6 +95,14 @@ export class GameState {
    */
   get complete(): boolean {
     return this.full;
+  }
+
+  /**
+   * The connection this state came from is gone (or a new one just opened): what is held is the LAST KNOWN, no longer
+   * current, so `complete` turns `false` until the next `welcome`. Nothing is erased: you can still read the last values.
+   */
+  markStale(): void {
+    this.full = false;
   }
 
   /** The ball catalog from the last welcome packet. */
@@ -152,8 +175,10 @@ export class GameState {
   }
 
   /**
-   * Everything known about the player, or `null` before the first welcome. Treat it as read-only: it is a snapshot,
-   * the same object until the next update, and changing it does not change the SDK's state.
+   * Everything known about the player, or `null` before the first welcome. Treat it as read-only: it is a snapshot, the
+   * same object until the next update. The parts the SDK's decisions rest on (the inventory, the Collection, every pokémon
+   * row) are frozen private copies, so they cannot be changed from here; the rest is shared with the game's packet and is
+   * only read-only by contract.
    */
   get player(): PlayerState | null {
     if (!this.fields) return null;
@@ -289,13 +314,13 @@ export class GameState {
     this.pokemonCache = null;
     this.playerCache = null;
     const { cheio, pokemons, pkMud, pkFora, dexMud, dexFora, ...rest } = safeCopy(partial);
-    const known = (list: unknown): Array<[string, PokemonWire]> => rowsWithId(list).map((k) => [idKey(k.id), k]);
+    const known = (list: unknown): Array<[string, PokemonWire]> => rowsWithId(list).map((k) => [idKey(k.id), frozenCopy(k)]);
     if (full || cheio === true || !this.fields) {
-      this.fields = ownMaps({ ...rest });
+      this.fields = ownDecisionData({ ...rest });
       if (full || cheio === true) this.full = true; // a delta that arrives first becomes the base but is not a complete state
       this.pokemonById = new Map(known(pokemons));
     } else {
-      Object.assign(this.fields, ownMaps(rest)); // `rest` has no unsafe keys, so no setter can run
+      Object.assign(this.fields, ownDecisionData(rest)); // `rest` has no unsafe keys, so no setter can run
       // A complete list outside a full state replaces the collection instead of adding to it.
       if (Array.isArray(pokemons)) this.pokemonById = new Map(known(pokemons));
     }

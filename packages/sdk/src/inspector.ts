@@ -130,8 +130,28 @@ export class Inspector {
     if (event === undefined || key === OTHER) return;
     const kept = this.battleSamples.get(key) ?? [];
     if (kept.length < this.maxSamples) {
-      kept.push(redact(event, GAME_ONLY_EVENTS.has(key) ? this.redactOptions : { ...this.redactOptions, maskStrings: true }));
+      kept.push(redact(event, this.optionsForEvent(key)));
       this.battleSamples.set(key, kept);
+    }
+  }
+
+  /** Strings in an event are masked unless it is one of the events known to carry only game data (never a person's text). */
+  private optionsForEvent(kind: string): RedactOptions {
+    return GAME_ONLY_EVENTS.has(kind) ? this.redactOptions : { ...this.redactOptions, maskStrings: true };
+  }
+
+  /**
+   * A `batalha` packet carries the events: the same per-event policy as `battleEventSamples` must apply to them here, or
+   * the very text that one side masks stays readable in the other. `sample` is the already redacted copy and is fixed in place.
+   */
+  private applyEventPolicy(packet: Packet, sample: unknown): void {
+    const events = packet['ev'];
+    const kept = (sample as { ev?: unknown }).ev;
+    if (packet.t !== 'batalha' || !Array.isArray(events) || !Array.isArray(kept)) return;
+    for (let i = 0; i < kept.length && i < events.length; i++) {
+      const event: unknown = events[i];
+      const kind = typeof event === 'object' && event !== null ? (event as { k?: unknown }).k : undefined;
+      if (typeof kind === 'string') kept[i] = redact(event, this.optionsForEvent(kind.slice(0, 60)), 2);
     }
   }
 
@@ -147,6 +167,7 @@ export class Inspector {
     if (kept.length < this.maxSamples) {
       const social = this.socialPrefixes.some((prefix) => key.startsWith(prefix));
       const sample = redact(packet, social ? { ...this.redactOptions, maskStrings: true } : this.redactOptions);
+      this.applyEventPolicy(packet, sample);
       for (const path of this.maskedPaths) maskPath(sample, path);
       kept.push(sample);
       this.samples.set(key, kept);

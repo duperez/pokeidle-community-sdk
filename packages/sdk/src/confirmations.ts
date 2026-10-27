@@ -8,6 +8,12 @@ import { waitForFirst, type Waiter } from './wait-for-first.js';
 
 type Deps = { host: ActionsHost; scheduler: Scheduler; options: ActionsOptions };
 
+/**
+ * The connection dropped or was replaced while we waited. The order may have gone through before that, so the answer is
+ * `unconfirmed` (and the next action waits), never "failed".
+ */
+const onConnectionLost = (host: ActionsHost, callback: () => void): (() => void) => host.onConnectionChange(() => callback());
+
 /** The useful part of an `erro` packet. */
 export function errorOf(packet: Record<string, unknown>): { chave?: string; msg?: string; params?: Record<string, unknown> } {
   const params = packet['params'];
@@ -24,17 +30,38 @@ export function waitForPurchase({ host, scheduler, options }: Deps, request: Buy
   const state = host.state;
   const count = (): number => (request.kind === 'ball' ? state.ballCount(request.id) : state.itemCount(request.id));
   const name = (request.kind === 'ball' ? state.ballName(request.id) : state.itemName(request.id))?.toLowerCase() ?? null;
+  const graceMs = options.confirmGraceMs ?? DEFAULTS.confirmGraceMs;
+  // Set when the game's `compra` event arrived: the order is confirmed from then on, whatever else happens.
+  let byEvent: BuyResult | null = null;
+  const unconfirmed = (): BuyResult => byEvent ?? { status: 'unconfirmed', request, waitedMs: scheduler.now() - startedAt };
   return waitForFirst<BuyResult>(
     scheduler,
     options.confirmTimeoutMs ?? DEFAULTS.confirmTimeoutMs,
     (finish, onCleanup) => {
+      let graceTimer: unknown;
+      onCleanup(() => {
+        if (graceTimer !== undefined) scheduler.clearTimeout(graceTimer);
+      });
       // the game's own confirmation: `compra` with the quantity (and the name, when we know it)
       onCleanup(
         host.onBattleEvent('compra', (event) => {
           const eventName = typeof event['nome'] === 'string' ? event['nome'].toLowerCase() : null;
-          if (event['qtd'] !== request.quantity || eventName === null || (name !== null && eventName !== name)) return;
+          if (byEvent !== null || event['qtd'] !== request.quantity || eventName === null || (name !== null && eventName !== name)) return;
           const spent = typeof event['gasto'] === 'number' ? event['gasto'] : null;
-          finish({ status: 'confirmed', request, confirmedBy: 'event', confidence: 'certain', before, after: count(), spent });
+          const confirmed = (): BuyResult => ({
+            status: 'confirmed',
+            request,
+            confirmedBy: 'event',
+            confidence: 'certain',
+            before,
+            after: count(),
+            spent,
+          });
+          byEvent = confirmed();
+          // The `estado` update with the new count usually comes right after the event. If we answered now, that late update
+          // could be taken for the evidence of the NEXT purchase of the same item: wait for it (a short grace) first.
+          if (graceMs <= 0 || count() - before >= request.quantity) return finish(confirmed());
+          graceTimer = scheduler.setTimeout(() => finish(confirmed()), graceMs);
         }),
       );
       // the inventory grew (balls used in the hunt can hide a small purchase: that is why the event comes first)
@@ -42,21 +69,37 @@ export function waitForPurchase({ host, scheduler, options }: Deps, request: Buy
         state.onChange(() => {
           const after = count();
           // At least the quantity ordered: a drop or a purchase made elsewhere that adds a little must not confirm this order.
-          if (after - before >= request.quantity)
-            finish({
+          if (after - before < request.quantity) return;
+          if (byEvent !== null)
+            return finish({
               status: 'confirmed',
               request,
-              confirmedBy: 'inventory',
-              confidence: 'probable',
+              confirmedBy: 'event',
+              confidence: 'certain',
               before,
               after,
-              spent: request.totalPrice,
+              spent: byEvent.status === 'confirmed' ? byEvent.spent : null,
             });
+          finish({
+            status: 'confirmed',
+            request,
+            confirmedBy: 'inventory',
+            confidence: 'probable',
+            before,
+            after,
+            spent: request.totalPrice,
+          });
         }),
       );
-      onCleanup(host.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })));
+      // an error after the event is about something else: the order is already confirmed
+      onCleanup(
+        host.onType('erro', (packet) => {
+          if (byEvent === null) finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) });
+        }),
+      );
+      onCleanup(onConnectionLost(host, () => finish(unconfirmed())));
     },
-    () => ({ status: 'unconfirmed', request, waitedMs: scheduler.now() - startedAt }),
+    unconfirmed,
   );
 }
 
@@ -106,6 +149,7 @@ export function waitForSale({ host, scheduler, options }: Deps, request: SellReq
         }),
       );
       onCleanup(host.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })));
+      onCleanup(onConnectionLost(host, () => finish({ status: 'unconfirmed', request, waitedMs: scheduler.now() - startedAt })));
     },
     () => ({ status: 'unconfirmed', request, waitedMs: scheduler.now() - startedAt }),
   );

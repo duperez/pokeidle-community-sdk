@@ -347,6 +347,7 @@
     "value: typeof GameState",
     "type: GameState",
     "  complete: boolean",
+    "  markStale: () => void",
     "  ballCatalog: readonly BallEntry[]",
     "  xpShareItemId: number | null",
     "  activePokemonId: number | null",

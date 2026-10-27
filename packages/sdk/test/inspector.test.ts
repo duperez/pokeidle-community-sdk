@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Inspector } from '../src/index.js';
+import { Inspector, TEXT_MASK } from '../src/index.js';
 
 test('counts received and sent packets and flags unknown types', () => {
   const inspector = new Inspector();
@@ -89,4 +89,22 @@ test('battle events are sampled: game-only kinds keep their text, kinds that can
     { k: 'venda', nome: 'Charmander', ganho: 101 },
   ]);
   assert.deepEqual(battleEventSamples.amigoPedidoRecebido, [{ k: '[text]', de: '[text]', nick: '[redacted]', n: 3 }]);
+});
+
+test('the same per-event masking applies inside the batalha sample as in battleEventSamples', () => {
+  const inspector = new Inspector();
+  const packet = {
+    t: 'batalha',
+    ev: [
+      { k: 'guildCriada', nome: 'Secret Guild Name' },
+      { k: 'ataque', nome: 'Tackle' },
+    ],
+  };
+  inspector.recordReceived(packet);
+  for (const event of packet.ev) inspector.recordBattleEvent(event.k, event);
+  const dump = inspector.dump();
+  assert.equal(JSON.stringify(dump).includes('Secret Guild Name'), false);
+  const events = (dump.samples['batalha'] as Array<{ ev: Array<{ k: string; nome: string }> }>)[0]?.ev;
+  assert.equal(events?.[0]?.nome, TEXT_MASK);
+  assert.equal(events?.[1]?.nome, 'Tackle'); // a game-only event keeps its text
 });
