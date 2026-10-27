@@ -40,6 +40,12 @@ The SDK reads a game that changes without notice. A change in the game's packets
 ### Added (hardening)
 
 - `GameState.markStale()`.
+- Asynchronous transports: `Transport<S>` and `PokeIdleClient<S>` are generic over what `send` returns
+  (`SendResult` = `boolean | Promise<boolean>`, default `boolean`, so existing code and `PageTransport` are unchanged).
+  `client.sendRaw`/`sendCommand` return the transport's own type; `Actions` awaits a promise. The guards still throw
+  synchronously before anything is sent. If the transport's promise **rejects**, the order is treated as "maybe sent": the
+  rate and spending budgets are charged and, if the game never answers, it ends `unconfirmed` (which also starts the
+  cooldown). A transport should resolve `false`, not reject, when it knows nothing was sent.
 
 ### Changed
 

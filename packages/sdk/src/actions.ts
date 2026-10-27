@@ -164,12 +164,25 @@ export class Actions {
     this.inFlight = true;
     try {
       const confirmation = spec.wait();
-      let sent = false;
+      let answer: boolean | Promise<boolean>;
       try {
-        sent = this.host.sendCommand(spec.command, { confirmIrreversible: spec.confirmIrreversible });
+        answer = this.host.sendCommand(spec.command, { confirmIrreversible: spec.confirmIrreversible });
       } catch (error) {
         confirmation.cancel(); // a guard refused it (CommandRefusedError): nothing was sent
         throw error;
+      }
+      // A synchronous host answers right away (and keeps the exact timing it always had); an asynchronous one is awaited.
+      let sent: boolean;
+      if (typeof answer === 'boolean') {
+        sent = answer;
+      } else {
+        try {
+          sent = await answer;
+        } catch {
+          // The transport's promise REJECTED: we cannot know whether the frame left. Fail closed for the money: treat it as
+          // sent (charge the budgets, wait for the game) and let it end `unconfirmed`, which also starts the cooldown.
+          sent = true;
+        }
       }
       if (!sent) {
         confirmation.cancel();

@@ -52,6 +52,10 @@ export const MUTATIONS = [
     to: 'state.pokemon(request.pokemonId) === undefined',
   },
   // actions orchestration
+  // asynchronous send: a rejected promise counts as "maybe sent" (the budgets are charged); a refused one is not sent
+  { file: 'actions.ts', from: '          sent = true;', to: '          sent = false;' },
+  { file: 'actions.ts', from: 'sent = await answer;', to: 'sent = true;' },
+  { file: 'actions.ts', from: "typeof answer === 'boolean'", to: "typeof answer !== 'boolean'" },
   { file: 'actions.ts', from: 'this.limiter.recordSend(spec.now);', to: '' },
   { file: 'actions.ts', from: 'this.ledger.record(spec.now, spec.spendGold)', to: 'void 0' },
   { file: 'actions.ts', from: "result.status === 'unconfirmed' || result.status === 'rejected'", to: "result.status === 'unconfirmed'" },

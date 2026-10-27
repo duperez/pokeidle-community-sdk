@@ -24,7 +24,7 @@ export {
 } from './packets.js';
 export { PageTransport, type PageLike } from './page-transport.js';
 export { REDACTED, TEXT_MASK, cleanText, redact, type RedactOptions } from './redact.js';
-export type { Transport, TransportHandlers } from './transport.js';
+export type { SendResult, Transport, TransportHandlers } from './transport.js';
 export {
   Ball,
   BALL_CATALOG,

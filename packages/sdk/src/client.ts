@@ -10,10 +10,10 @@ import type { PacketMap } from './protocol/packet-map.js';
 import { GameState } from './state.js';
 
 export type { Unsubscribe } from './listeners.js';
-import type { Transport } from './transport.js';
+import type { SendResult, Transport } from './transport.js';
 
-export interface ClientOptions {
-  transport: Transport;
+export interface ClientOptions<S extends SendResult = boolean> {
+  transport: Transport<S>;
   /** Records counts and redacted samples of what goes by. `false` turns it off. Default: a new `Inspector`. */
   inspector?: Inspector | false;
   /** Frames longer than this are ignored (and counted in the inspector). The default is large on purpose: `welcome` can be several MB. */
@@ -32,13 +32,13 @@ export interface ClientOptions {
  * The entry point: turns the game's frames into packets and delivers them to your listeners. You only care about
  * "what came in" (`on`) and, later, "what to send"; how the frames travel is the transport's job.
  */
-export class PokeIdleClient {
+export class PokeIdleClient<S extends SendResult = boolean> {
   readonly inspector: Inspector | null;
   /** The player's state, kept up to date from the game's packets. */
   readonly state: GameState;
   /** What you can DO in the game (buy...), with safety nets: see `ActionsOptions`. */
   readonly actions: Actions;
-  private readonly transport: Transport;
+  private readonly transport: Transport<S>;
   private readonly maxBytes: number;
   private readonly onError: ErrorHandler;
   private readonly byType = new Map<string, Set<PacketListener>>();
@@ -49,7 +49,7 @@ export class PokeIdleClient {
   private readonly connection = new Set<(connected: boolean) => void>();
   private started = false;
 
-  constructor(options: ClientOptions) {
+  constructor(options: ClientOptions<S>) {
     this.transport = options.transport;
     this.inspector = options.inspector === false ? null : (options.inspector ?? new Inspector());
     this.maxBytes = options.maxPacketBytes ?? DEFAULT_MAX_PACKET_BYTES;
@@ -146,9 +146,9 @@ export class PokeIdleClient {
 
   /**
    * Low level: sends a text frame exactly as given. Prefer the typed actions (coming in later versions).
-   * Returns `false` if the socket is not open.
+   * Returns `false` if the socket is not open (or a promise of that, with a transport whose `send` is asynchronous).
    */
-  sendRaw(text: string): boolean {
+  sendRaw(text: string): S {
     return this.transport.send(text);
   }
 
@@ -160,9 +160,10 @@ export class PokeIdleClient {
    *   `{ confirmIrreversible: true }`;
    * - numbers must be finite (`JSON.stringify(NaN)` is `null`) and `qty`/`qtd` positive integers.
    * It validates nothing else and asks nothing: it sends exactly what you pass. Throws `CommandRefusedError` when a
-   * guard stops it; returns `false` if the socket is not open.
+   * guard stops it; returns `false` if the socket is not open (or a promise of that, with a transport whose `send` is
+   * asynchronous: the guards still throw synchronously, before anything is sent).
    */
-  sendCommand(command: SendableCommand, options: { confirmIrreversible?: boolean } = {}): boolean {
+  sendCommand(command: SendableCommand, options: { confirmIrreversible?: boolean } = {}): S {
     assertSendable(command, options.confirmIrreversible === true);
     return this.transport.send(JSON.stringify(command));
   }

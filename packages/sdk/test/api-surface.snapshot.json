@@ -233,8 +233,8 @@
     "type: \"shop.buy\" | \"shop.sellPokemon\" | \"chat.historico\" | \"chat.mute\" | \"afilia… [4214 chars, sha1 3abfebcf25ff]"
   ],
   "ClientOptions": [
-    "type: ClientOptions",
-    "  transport: Transport",
+    "type: ClientOptions<S>",
+    "  transport: Transport<S>",
     "  inspector?: false | Inspector | undefined",
     "  maxPacketBytes?: number | undefined",
     "  actions?: ActionsOptions | undefined",
@@ -656,7 +656,7 @@
   ],
   "PokeIdleClient": [
     "value: typeof PokeIdleClient",
-    "type: PokeIdleClient",
+    "type: PokeIdleClient<S>",
     "  inspector: Inspector | null",
     "  state: GameState",
     "  actions: Actions",
@@ -670,8 +670,8 @@
     "  onPacket: (listener: PacketListener) => Unsubscribe",
     "  onOutgoing: (listener: PacketListener) => Unsubscribe",
     "  onConnectionChange: (listener: (connected: boolean) => void) => Unsubscribe",
-    "  sendRaw: (text: string) => boolean",
-    "  sendCommand: (command: SendableCommand, options?: { confirmIrreversible?: boolean | undefined; }) => boolean"
+    "  sendRaw: (text: string) => S",
+    "  sendCommand: (command: SendableCommand, options?: { confirmIrreversible?: boolean | undefined; }) => S"
   ],
   "Pokemon": [
     "type: Pokemon",
@@ -793,6 +793,9 @@
   "SendableCommand": [
     "type: { readonly t: \"shop.buy\"; readonly kind: \"ball\" | \"item\"; readonly id: num… [8952 chars, sha1 cd0664c487cc]"
   ],
+  "SendResult": [
+    "type: boolean | Promise<boolean>"
+  ],
   "SERVER_PACKET_READS": [
     "value: { readonly amigos: readonly [\"busca\", \"coins\", \"conversa\", \"dm\", \"dmAtual… [4258 chars, sha1 672387e9bd3f]"
   ],
@@ -888,10 +891,10 @@
     "  pong: Packet & { readonly t: \"pong\"; }"
   ],
   "Transport": [
-    "type: Transport",
+    "type: Transport<S>",
     "  start: (handlers: TransportHandlers) => void",
     "  stop: () => void",
-    "  send: (text: string) => boolean",
+    "  send: (text: string) => S",
     "  readyState: number"
   ],
   "TransportHandlers": [

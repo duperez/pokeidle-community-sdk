@@ -36,5 +36,5 @@ export interface ActionsHost {
   /** Listens for packets of any type name (used for the game's `erro`). */
   onType(type: string, listener: PacketListener): Unsubscribe;
   onBattleEvent<K extends BattleEventKind>(kind: K, listener: (event: BattleEventMap[K]) => void): Unsubscribe;
-  sendCommand(command: SendableCommand, options?: { confirmIrreversible?: boolean }): boolean;
+  sendCommand(command: SendableCommand, options?: { confirmIrreversible?: boolean }): boolean | Promise<boolean>;
 }
