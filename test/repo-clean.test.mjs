@@ -12,6 +12,8 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ALLOWED_EXTENSIONS = new Set(['.ts', '.js', '.mjs', '.json', '.md', '.yml', '']);
 const MAX_FILE_BYTES = 200_000;
 const MAX_JSON_BYTES = 40_000; // a bigger JSON looks like a data dump
+// Generated declaration metadata, matched against public exports by api-surface.test.ts; the code-file size cap still applies.
+const API_SNAPSHOT = 'packages/sdk/test/api-surface.snapshot.json';
 const THIS_FILE = 'test/repo-clean.test.mjs';
 const LOCK_FILES = new Set(['package-lock.json']);
 
@@ -40,7 +42,7 @@ test('only code and documentation file types, and no big files', options, () => 
     assert.ok(ALLOWED_EXTENSIONS.has(path.extname(file)), `${file}: file type not allowed (images, binaries and data do not belong here)`);
     const size = fs.statSync(path.join(ROOT, file)).size;
     assert.ok(size <= MAX_FILE_BYTES, `${file}: ${size} bytes, too big`);
-    if (file.endsWith('.json') && !LOCK_FILES.has(path.basename(file)))
+    if (file.endsWith('.json') && file !== API_SNAPSHOT && !LOCK_FILES.has(path.basename(file)))
       assert.ok(size <= MAX_JSON_BYTES, `${file}: JSON too big (looks like a data dump)`);
   }
 });
