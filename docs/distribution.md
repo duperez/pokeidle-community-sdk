@@ -37,8 +37,10 @@ build. Re-run distribution after any source, documentation or metadata change.
 
 The validator checks archive SHA-256, npm SHA-512 integrity, `SHA256SUMS`, and the size/SHA-256 of **all files installed
 offline from the tarball**, rejecting extra or missing package files. External-consumer tests also install a real tarball
-outside the checkout and exercise ESM, CJS, portable CJS types, async transports and the classic browser IIFE. No tests
-connect to the game.
+outside the checkout and exercise ESM, CJS, portable CJS types, Promise-based send results and the classic browser IIFE.
+They also execute the standalone example and independently evaluated bundles, including reentrant lifecycle boundaries.
+No tests connect to the game. VM checks do not prove browser extension injection; the opt-in
+[native synthetic proof](../examples/test-extension/README.md#native-synthetic-proof) provides a separate evidence lane.
 
 ## Schema 1 and launcher integration
 
@@ -58,7 +60,7 @@ For vendoring, take **all parts from the same verified artifact**:
 | Consumer            | Package paths                                                                     |
 | ------------------- | --------------------------------------------------------------------------------- |
 | ESM/bundler         | `dist/index.js` and its relative modules; package exports select ESM declarations |
-| CommonJS host       | Self-contained `dist/index.cjs`                                                   |
+| CommonJS module     | Self-contained `dist/index.cjs`                                                   |
 | CommonJS TypeScript | Entire `dist/cjs/` tree, including `package.json`; import types from `index.js`   |
 | Page-world script   | `dist/pokeidle-sdk.iife.js`, exposing `globalThis.PokeIdleSDK`                    |
 
@@ -66,6 +68,67 @@ Keep the SDK license and upstream metadata alongside vendored files. The launche
 can retain its `versao`, `commit`, CJS `sha256`, `navegador.sha256` and `declaracoes[].sha256`; map them to `version`,
 `revision` and matching `files[].sha256` here. Do not mix declarations, CJS and IIFE from different revisions, even if
 their package versions match: unreleased revisions can all identify as `0.0.1`.
+
+## Page runtime installation and consumer migration
+
+The module formats are distribution choices, not connection strategies. Runtime attachment must execute in the game's
+page MAIN world. Importing/requiring a package does not create an alternate host connection, and constructing a
+`PokeIdleClient` is inert. A standalone extension needs neither a launcher nor a socket/transport handle.
+
+For classic scripts, load the IIFE followed by your consumer entry point in a MAIN/document_start content-script entry:
+
+```json
+{
+  "content_scripts": [
+    {
+      "matches": ["https://pokeidle.io/*"],
+      "js": ["vendor/pokeidle-sdk.iife.js", "main-world.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ]
+}
+```
+
+In `main-world.js`:
+
+```js
+const { bootstrapPageSession, PokeIdleClient } = globalThis.PokeIdleSDK;
+bootstrapPageSession();
+const client = new PokeIdleClient();
+client.start();
+// Read current data only when client.connected && client.state.complete.
+```
+
+Loading exports alone does not hook WebSocket. `bootstrapPageSession(options?)` installs collection before consumers;
+`start()` attaches to that runtime, ensuring default bootstrap only when none exists. Late attachment can use a
+continuously collected current snapshot without replaying old welcome/domain events. Missing capture cannot recover
+historical traffic or invent readiness. `stop()` detaches one client without closing the game's socket, stopping peers
+or stopping capture after the last client. Restart adopts the current generation, not historical commands.
+
+Migrate removed `Transport`, `PageTransport`, `PageLike` and `SendResult` exports and the old client generic rather
+than retaining a compatibility adapter. Constructor `transport`, `actions` and `maxPacketBytes` are refused even in
+JavaScript. Configure shared `actions`/`maxPacketBytes` only through bootstrap; normalized policy is copied/frozen and
+a conflicting explicit bootstrap fails with `PageSessionError.code === 'configuration-conflict'`.
+Keep `inspector`/`onError` local to each facade. `client.state` is a read-only `StateView`, without mutable state-feed
+methods. `sendRaw`/`sendCommand` always return `Promise<boolean>`; use await, preserve synchronous validation/busy
+errors, and do not confuse acceptance with a server-confirmed effect. Preserve per-action `onSend` before the terminal
+result. An uncertain write is not permission to retry.
+
+Compatible bundles in the same document/MAIN global share capture, parsing, state and action ownership. Runtime ABI 1
+and the required `shared-state`, `shared-writer`, `consumer-lifecycle` capabilities determine reuse, not package-version
+equality. Incompatible/malformed occupied slots or legacy hooks fail without overwriting the live runtime.
+This does not implement sharing across isolated worlds, frames, extension contexts or processes.
+See [architecture](architecture.md) for generation invalidation, immutable views, shared writer policy and stop semantics.
+
+A future launcher/isolated-world bridge must call the client already running in MAIN and consume its normalized
+facts/snapshots/events. Do not construct another SDK client in the host with a custom frame transport or reprocess
+the protocol there. A host may mirror only the facts it needs, associate document identity with document-local
+generation/readiness, and forward permitted actions while keeping send acceptance separate from terminal evidence.
+No bridge, IPC/Electron implementation or CDP fallback is delivered by this package. Profiles, cookies, windows,
+multiple accounts, persistent budgets and automation remain host responsibilities.
+
+## Installation diagnostics
 
 The consumer's installation-diagnostics UI should display the SDK package version, full source revision and build
 dirty/verification status together with its own version/revision and runtime versions. Bundle these metadata at build
