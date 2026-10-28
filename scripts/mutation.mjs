@@ -15,16 +15,17 @@ import { EXPECTED_SURVIVORS, MUTATIONS } from './mutations.mjs';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'packages/sdk/src');
 
-// Per-file summaries count executed tests, unlike a successful empty-file wrapper.
+// File-wrapper results are not executed tests; this works on every supported Node version.
 export default async function* mutationReporter(events) {
   let executed = 0;
   let failed = false;
   let invalid = false;
   for await (const { type, data } of events) {
     if (type === 'test:stdout' || type === 'test:stderr') yield data.message;
-    if (type === 'test:summary' && data.file) {
-      const { tests, skipped, todo } = data.counts;
-      executed += tests - skipped - todo;
+    if ((type === 'test:pass' || type === 'test:fail') && !data.skip && !data.todo) {
+      const fileWrapper = data.file && path.resolve(data.name) === data.file;
+      if (!fileWrapper && data.details.type !== 'suite') executed++;
+      if (fileWrapper && type === 'test:fail') invalid = true;
     }
     if (type === 'test:fail' && !data.skip && !data.todo) {
       failed = true;

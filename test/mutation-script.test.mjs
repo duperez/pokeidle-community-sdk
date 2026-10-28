@@ -42,6 +42,8 @@ test('the real Node runner distinguishes semantic failures from import, syntax a
     ['empty', '', 'invalid', 0],
     ['no-tests', prelude, 'invalid', 0],
     ['skipped', `${prelude}test.skip('does not execute', () => assert.fail());`, 'invalid', 0],
+    ['todo', `${prelude}test.todo('does not count', () => assert.fail());`, 'invalid', 0],
+    ['empty-suite', "import { describe } from 'node:test'; describe('empty suite', () => {});", 'invalid', 0],
     ['crash', 'process.exit(2);', 'invalid', 1],
   ];
   for (const [name, source, expected, status] of fixtures) {
