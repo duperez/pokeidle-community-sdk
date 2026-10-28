@@ -161,6 +161,16 @@ Stop do dono depois de envio aceito/incerto não desfaz o comando: resolve a cha
 sem evidência como unconfirmed, preserva floors e inicia cooldown compartilhado.
 Se já existe evidência conclusiva, preservar o resultado que ela permite.
 Stop antes do dispatch impede envio. Essa decisão não emite desconexão para pares.
+Separar settlement da chamada do consumidor de liberação da reserva: a reserva
+do comando já despachado e o waiter interno continuam pertencendo ao runtime
+até evidência, timeout original ou fronteira de geração. Nesse intervalo B
+continua recebendo busy, mesmo se o cooldown configurado for zero. Stop não
+recomeça o timeout nem deixa o consumidor dependente de seu próprio listener
+removido. Ao encerrar o waiter interno, aplicar o cooldown devido ao resultado,
+sem apagar o risco já registrado pelo stop; só então liberar a reserva.
+O send local de página liquida aceitação/erro sincronicamente; a Promise pública
+não introduz espera por ACK. Assim onSend precede também o settlement por stop,
+e nenhuma promessa fica esperando um ACK que este mecanismo não possui.
 Nenhum attach/stop reinicia ledger/limiter; só troca de geração limpa floors,
 preservando cooldown e orçamento em memória.
 
