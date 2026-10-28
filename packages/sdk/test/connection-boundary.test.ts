@@ -24,6 +24,20 @@ test('after the socket drops, actions refuse until the new welcome arrives (the 
   assert.equal(ctx.client.state.complete, true);
 });
 
+test('the internal onOpen contract invalidates state without an optional boundary or preceding close', async () => {
+  const { client, transport, actions, feed } = setupSell();
+  const readiness: boolean[] = [];
+  client.onConnectionChange(() => readiness.push(client.state.complete));
+  assert.equal(client.state.complete, true);
+  transport.handlers?.onOpen?.();
+  assert.equal(client.state.complete, false);
+  assert.deepEqual(readiness, [false]);
+  assert.equal((await actions.sellPokemon(5, SELL)).status, 'no-state');
+  assert.deepEqual(transport.sent, []);
+  feed(sellWelcome([pokemon(5)]));
+  assert.equal(client.state.complete, true);
+});
+
 test('a purchase or sale waiting for the game when the connection drops ends as unconfirmed, with the cooldown', async () => {
   const host = new FakeHost();
   host.feed(sellWelcome([pokemon(5)]));
