@@ -363,3 +363,15 @@ R1 and R2 are closed for this focused correction, subject to preservation in
 the final integrated SHA. No browser/server was started for this check.
 R3 migration, R4 budget and final broad/mutation/distribution gates remain
 separate; the 13-stage native proof still identifies ae4f514, not fc0fb1f.
+
+### R3 documentation correction
+
+Independently read the complete revised architecture and distribution diff at
+`2786fc86f53f991c7564ae84e9efd71a6f143695`. Public transport recipes were
+replaced with bootstrap/facade usage, shared immutable policy, document/MAIN
+scope, compatible-runtime reuse, generation/stop/writer semantics and
+Promise-based sends. Future host/isolated-world bridges remain explicitly
+unimplemented, without a second parser or CDP fallback. Native and VM proof
+lanes remain distinct and no final budget result is claimed.
+R3 is closed for that documentation checkpoint, subject to preservation in
+the consolidated revision. No runtime tests were run for this docs-only check.
