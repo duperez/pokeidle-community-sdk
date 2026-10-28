@@ -9,6 +9,8 @@ export interface TransportHandlers {
   onMessage(text: string): void;
   /** A frame was sent by the game's own client (observed, not sent by the SDK). */
   onOutgoing?(text: string): void;
+  /** A different socket was adopted, including a successor that is still connecting. */
+  onBoundary?(): void;
   onOpen?(): void;
   onClose?(): void;
   /** Where the transport reports an error thrown by one of these handlers (it must not stop the other subscribers). */

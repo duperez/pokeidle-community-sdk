@@ -76,6 +76,11 @@ export class PokeIdleClient<S extends SendResult = boolean> {
         onOutgoing: (text) => {
           if (current()) this.handleOutgoing(text);
         },
+        onBoundary: () => {
+          if (!current()) return;
+          this.state.markStale();
+          this.emitConnection(false);
+        },
         // A new socket means a new session: until its `welcome` arrives, what the state holds is old (and actions refuse).
         onOpen: () => {
           if (!current()) return;

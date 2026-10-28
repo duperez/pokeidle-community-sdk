@@ -46,6 +46,7 @@ export class PageTransport implements Transport {
     this.subscription = {
       onMessage: (text) => guarded(onError, () => handlers.onMessage(text)),
       onOutgoing: (text) => guarded(onError, () => handlers.onOutgoing?.(text)),
+      onBoundary: () => guarded(onError, () => handlers.onBoundary?.()),
       onOpen: () => guarded(onError, () => handlers.onOpen?.()),
       onClose: () => guarded(onError, () => handlers.onClose?.()),
     };
@@ -96,6 +97,7 @@ function installHook(page: WithHook): SharedHook {
   };
   const adopt = (ws: WebSocket): void => {
     hook.socket = ws;
+    each((h) => h.onBoundary?.());
     if (adopted.has(ws)) return;
     adopted.add(ws);
     // Only the CURRENT socket speaks: a replaced one that is still closing (or still talking) must not feed the state or

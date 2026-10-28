@@ -23,6 +23,8 @@ The SDK reads a game that changes without notice. A change in the game's packets
 
 ### Fixed
 
+- Adopting a replacement socket invalidates the previous state's completeness immediately, including while its
+  successor is still CONNECTING rather than waiting for its open event.
 - Stopping a client now invalidates completeness, notifies observers and ends pending orders conservatively; callbacks
   retained from a previous run cannot feed a restarted client. Failed starts detach partial subscriptions and can be retried.
 - All nested state data, normalized lists and server catalogs are privately owned and frozen, not just decision fields.

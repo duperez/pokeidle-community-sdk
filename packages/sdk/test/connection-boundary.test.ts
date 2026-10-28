@@ -90,3 +90,26 @@ test('a replaced socket is silent, so the OPEN of its successor is what makes th
   second.dispatchEvent(Object.assign(new Event('message'), { data: JSON.stringify(sellWelcome([pokemon(5)])) }));
   assert.equal(client.state.complete, true);
 });
+
+test('adopting a CONNECTING successor invalidates completeness before it opens', () => {
+  class Socket extends EventTarget {
+    readyState = 0;
+    constructor(public url: string) {
+      super();
+    }
+    send(): void {}
+  }
+  const page = { WebSocket: class extends Socket {}, location: { host: 'g', href: 'https://g/' } } as unknown as PageLike;
+  const client = new PokeIdleClient({ transport: new PageTransport(page) });
+  client.start();
+  const first = new page.WebSocket('wss://g/');
+  Object.assign(first, { readyState: 1 });
+  first.dispatchEvent(new Event('open'));
+  first.dispatchEvent(Object.assign(new Event('message'), { data: JSON.stringify(sellWelcome([pokemon(5)])) }));
+  assert.equal(client.state.complete, true);
+  const readiness: boolean[] = [];
+  client.onConnectionChange(() => readiness.push(client.state.complete));
+  new page.WebSocket('wss://g/');
+  assert.equal(client.state.complete, false, 'adoption, not the later open event, ends the old generation');
+  assert.deepEqual(readiness, [false]);
+});

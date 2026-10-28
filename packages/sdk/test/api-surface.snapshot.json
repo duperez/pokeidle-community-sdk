@@ -925,6 +925,7 @@
     "type: TransportHandlers",
     "  onMessage: (text: string) => void",
     "  onOutgoing?: ((text: string) => void) | undefined",
+    "  onBoundary?: (() => void) | undefined",
     "  onOpen?: (() => void) | undefined",
     "  onClose?: (() => void) | undefined",
     "  onError?: ErrorHandler | undefined"
