@@ -240,6 +240,58 @@ test('independent IIFE consumers stop old-generation fan-out after a listener cr
   });
 });
 
+test('a stopped IIFE facade restarted inside a state listener receives no old-run connection tail', { skip: !built }, () => {
+  const context = vm.createContext({ URL, structuredClone, EventTarget, Event, MessageEvent, setTimeout, clearTimeout, console });
+  vm.runInContext(
+    `class Socket extends EventTarget {
+       constructor(url) { super(); this.url = url; this.readyState = 1; }
+       send() {}
+     }
+     globalThis.WebSocket = Socket;
+     globalThis.location = {host:'game.test',href:'https://game.test/'};
+    `,
+    context,
+  );
+  const bundle = fs.readFileSync(path.join(SDK, 'dist/pokeidle-sdk.iife.js'), 'utf8');
+  vm.runInContext(bundle, context);
+  const actual = vm.runInContext(
+    `(() => {
+       PokeIdleSDK.bootstrapPageSession();
+       const a = new PokeIdleSDK.PokeIdleClient({inspector:false});
+       const b = new PokeIdleSDK.PokeIdleClient({inspector:false});
+       a.start(); b.start();
+       const socket = new WebSocket('wss://game.test/');
+       socket.dispatchEvent(new Event('open'));
+       socket.dispatchEvent(new MessageEvent('message', {
+         data:'{"t":"welcome","estado":{"cheio":true,"gold":101,"pokemons":[]}}'
+       }));
+       let restarted = false;
+       const connections = [];
+       a.onConnectionChange(connected => connections.push([connected,a.connected,a.state.complete]));
+       a.state.onChange(() => {
+         if (!a.connected && !restarted) {
+           restarted = true;
+           a.start();
+         }
+       });
+       const generation = b.generation;
+       a.stop();
+       const result = {connections:[...connections],a:[a.connected,a.state.complete,a.state.gold],
+         b:[b.connected,b.state.complete,b.state.gold],socketState:socket.readyState,sameGeneration:b.generation === generation};
+       a.stop(); b.stop();
+       return JSON.stringify(result);
+     })()`,
+    context,
+  );
+  assert.deepEqual(JSON.parse(actual), {
+    connections: [[true, true, true]],
+    a: [true, true, 101],
+    b: [true, true, 101],
+    socketState: 1,
+    sameGeneration: true,
+  });
+});
+
 test(
   'a relocated distribution runs and typechecks as both ESM and CommonJS without the source checkout',
   { skip: built ? false : 'run npm run build first' },

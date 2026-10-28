@@ -92,5 +92,7 @@ All owned helpers closed before PASS was emitted.
 
 This was discovery evidence, not final SDK acceptance: the parallel core
 still had its existing 40 KiB bundle budget and mutation-target updates
-pending. Rerun against the final integrated revision; do not transfer this
-checkpoint's result to later bytes without checking them.
+pending. Those initial 13 stages did not cover replacement from inside a
+consumer listener and do not close the later reentrant fan-out regression.
+Rerun the extended harness against the final integrated revision; do not
+transfer this checkpoint's result to later bytes without checking them.
