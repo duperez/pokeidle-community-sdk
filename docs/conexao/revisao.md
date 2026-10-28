@@ -490,3 +490,23 @@ missing-target handling, and a complete run with no infrastructure false
 kills. The reviewer has not implemented the correction. Runtime/native
 results need not be rerun for a runner-only correction if exact SDK bytes
 remain identical; any runtime change requires a new relevant check.
+
+### Independent cross-bundle processing-count check
+
+Reviewed and executed test-only checkpoint
+`db84585fa34a4470e67e1cbca5df4ec8e4b9451e`; its only difference from ca704f2
+is `test/sdk-distribution.test.mjs`. The test evaluates two complete IIFEs
+without module-cache reuse and verifies their exported GameState classes
+are distinct. Within an isolated VM, it counts JSON.parse calls for one
+exact synthetic frame and applyPacket calls across both class prototypes.
+Instrumentation is restored in finally.
+
+The observed requirement is one parse, one total state application and gold
+102 in both attached facades. This directly tests shared parsing/state,
+rather than inferring it solely from hook identity or public snapshots.
+Independent Node22/npm10.8.2 clean reproducible distribution and all 11
+distribution checks passed, zero skips. SDK SHA-256 remained exactly
+`960b0802467783beaea0c20756b9a2bd765792ce7ae1e76fb1eca73ef2b2a665`.
+No browser was started; the ca704f2 native15 evidence still identifies these
+same SDK bytes. This check does not establish CPU, latency or allocation
+improvements and does not close R5.
