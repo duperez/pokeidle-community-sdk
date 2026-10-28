@@ -510,3 +510,75 @@ distribution checks passed, zero skips. SDK SHA-256 remained exactly
 No browser was started; the ca704f2 native15 evidence still identifies these
 same SDK bytes. This check does not establish CPU, latency or allocation
 improvements and does not close R5.
+
+### Runtime-owner final runner and repository gates
+
+The runner correction is isolated in `f193bc7`, followed by the Node20
+compatibility correction `ddf0216`. It consumes native Node test events,
+not TAP `not ok` text. Executed tests exclude file wrappers, skipped/todo
+tests and suites; an unsuccessful process wrapper invalidates the entire
+run even if another file also has a genuine assertion failure. Missing
+or incomplete reporter output is invalid. Invalid runs are reported as
+problems, never credited as semantic kills or expected survivors.
+
+Real subprocess regressions exercise passing tests, assertion failures,
+TypeErrors in executed tests, missing imports, JavaScript syntax errors,
+TypeScript/tsx transform errors, empty files, no-test modules, skipped/todo
+tests, empty suites, process crashes and mixed semantic/infrastructure
+failures. The focused runner suite passes 5/5 on Node `20.19.0` and
+`22.23.4`. Native pass/fail events are used on both versions; the first
+correction's dependence on Node22 per-file summary events was detected and
+removed rather than bypassing Node20 checks.
+
+The first full run honestly reported 76 killed mutations and one survivor:
+removing the internal kernel's stale-state invalidation on open. The
+transport seam's boundary callback is optional, and its open callback
+denotes a new connection without requiring a previous close. Test-only
+checkpoint `03ef51bd9ef88c0ab8203494bf622effb0e9433a` covers that contract:
+old complete state becomes stale before connection observers run, a sale
+is refused without sending, and a new welcome restores completeness.
+The three client-core mutations then all failed semantically.
+
+Final author-side gates on that checkpoint used Node `22.23.4` and npm
+`10.8.2`, including nested npm/Node subprocesses:
+
+| Command                                   | Result                                                                             |
+| ----------------------------------------- | ---------------------------------------------------------------------------------- |
+| `npm run lint`                            | Passed, including SDK/example build                                                |
+| `npm run typecheck`                       | Passed SDK and example                                                             |
+| `npm test`                                | 268 SDK and 34 repository tests passed, zero skips                                 |
+| `npm run format:check`                    | Passed                                                                             |
+| `npm run coverage`                        | Lines 99.28% (floor 94), branches 96.03% (floor 92)                                |
+| `npm run mutation`                        | All 77 mutations killed; zero invalid runs, survivors, missing targets or problems |
+| `npm run distribution -- --require-clean` | Reproducible, source 03ef51b, dirty=false                                          |
+| `npm run test:distribution`               | 11/11 passed, zero skips                                                           |
+
+The full `npm test` also passes on Node `20.19.0`/npm `10.8.2` with the
+same 268+34 tests and zero skips. Node24 and the other operating systems
+were not executed in this local closure; the existing CI matrix remains.
+The 77-entry mutation list and coverage/size thresholds were not relaxed.
+Baseline mutation tests include size; only mutant runs exclude that file.
+Sources were exclusively owned during mutation execution and restored
+byte-for-byte afterward.
+
+`git diff ca704f2 -- packages/sdk/src` is empty: no runtime source changed
+to close R5 or the survivor. The full public IIFE remains SHA-256
+`960b0802467783beaea0c20756b9a2bd765792ce7ae1e76fb1eca73ef2b2a665`;
+the package remains
+`2c73dd981603632f25646163f3ef6d826b7e4fe8f0300be1e3c13076b35c46d1`.
+Thus the independent ca704f2 native15 proof identifies these same SDK
+bytes; it is not a new browser execution by the runtime owner. The
+separate official tree-shaken client budget entry remains 40,935 raw /
+14,213 gzip bytes under the strict 40,960-byte raw ceiling. That budget
+entry is not the complete all-exports IIFE.
+
+**Temporal protocol limit:** the independent live `protocol:check`
+observed upstream app.js moving from `1.374.0` to `1.380.1`, including
+additions in praca/centro/campo.init. This is upstream drift, not a codec
+equivalence failure, and it is not recorded as a green live check here.
+The extracted protocol/catalog snapshot is deliberately frozen for this
+delivery; it was not regenerated to hide drift or change the size gate.
+The reported checks establish behavior against that snapshot and the
+synthetic fixtures, not complete compatibility with every future game
+version. No account, launcher IPC/isolated-world bridge, publication or
+CPU/network performance claim is included.

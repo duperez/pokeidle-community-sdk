@@ -30,14 +30,18 @@ formatting. CI then runs `npm run distribution -- --require-clean` and `npm run 
 only after these checks pass. Locally, omit `--require-clean` while developing; the manifest explicitly marks dirty builds.
 See [distribution and consumer diagnostics](docs/distribution.md) for reproduction and external-consumer checks.
 
-`npm run mutation` (about two minutes; also run weekly by CI) breaks the safety-relevant code on purpose, one change at a
+`npm run mutation` (several minutes; also run weekly by CI) breaks the safety-relevant code on purpose, one change at a
 time, and fails if the tests do not notice. If you change code listed in `scripts/mutations.mjs`, keep that list in step
-(a test fails when an entry no longer applies).
+(a test fails when an entry no longer applies). The baseline runs the entire SDK suite, including bundle size; mutant
+runs exclude only bundle size so code growth cannot masquerade as behavioral detection. Loader/compile/process failures
+and runs without executed tests are invalid, not semantic kills, and fail the gate. Sources are restored after each
+mutation; do not build, format or edit SDK sources concurrently in the same checkout.
 
 ## How the code is organized
 
-Read [docs/architecture.md](docs/architecture.md). In short: a **transport** gets frames, the **client** parses them and
-fans them out, **state** keeps the player up to date, **actions** send commands and wait for the game to confirm. The
+Read [docs/architecture.md](docs/architecture.md). One document/MAIN **runtime** owns capture, parsing, state and the
+shared Actions writer. Consumer **clients** own attachment, subscriptions and diagnostics, not separate parsers or
+states. The transport is an internal seam, not a public configuration option. The
 protocol registry and the catalogs are **generated** from the game's public client (`npm run protocol`,
 `npm run catalog`); do not edit `*.generated.ts` by hand.
 

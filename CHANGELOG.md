@@ -37,8 +37,9 @@ The SDK reads a game that changes without notice. A change in the game's packets
 
 - Adopting a replacement socket invalidates the previous state's completeness immediately, including while its
   successor is still CONNECTING rather than waiting for its open event.
-- Stopping a client now invalidates completeness, notifies observers and ends pending orders conservatively; callbacks
-  retained from a previous run cannot feed a restarted client. Failed starts detach partial subscriptions and can be retried.
+- Stopping the internal capture kernel invalidates completeness, notifies observers and ends pending orders conservatively;
+  callbacks retained from a previous run cannot feed a restarted kernel. Public consumer stop retains shared capture/state
+  as described above. Failed starts detach partial subscriptions and can be retried.
 - All nested state data, normalized lists and server catalogs are privately owned and frozen, not just decision fields.
   A new `welcome` clears catalogs/protection metadata omitted by the new session.
 - Purchases reserve expected inventory across orders, preventing a delayed update from confirming another purchase even
@@ -64,8 +65,7 @@ The SDK reads a game that changes without notice. A change in the game's packets
 ### Breaking (hardening)
 
 - The inventory, the Collection and the pokémon rows in `state.player` are frozen: a write from your code now throws
-  `TypeError` (in strict mode) instead of silently changing what the SDK reads. `client.stop()` followed by `client.start()`
-  on an open socket leaves `state.complete` false until the next `welcome` (a page reload).
+  `TypeError` (in strict mode) instead of silently changing what the SDK reads.
 
 ### Added (hardening)
 
@@ -74,10 +74,9 @@ The SDK reads a game that changes without notice. A change in the game's packets
 - `npcShopPrice(itemId)`: what the NPC shop charges for a potion or revive, `null` for anything it is not known to sell. Narrower
   than `itemInfo(id).npcPrice` (rare items such as Max Revive and Golden Potion have an `npcPrice` but no shop sells them);
   it is the table the SDK's own purchases use.
-- Asynchronous transports: `Transport<S>` and `PokeIdleClient<S>` are generic over what `send` returns
-  (`SendResult` = `boolean | Promise<boolean>`, default `boolean`, so existing code and `PageTransport` are unchanged).
-  `client.sendRaw`/`sendCommand` return the transport's own type; `Actions` awaits a promise. The guards still throw
-  synchronously before anything is sent. If the transport's promise **rejects**, the order is treated as "maybe sent": the
+- The internal transport test seam supports synchronous and asynchronous acceptance; public consumers use the
+  shared page session and always receive `Promise<boolean>` from low-level sends. The guards still throw
+  synchronously before anything is sent. If an internal transport promise **rejects**, the order is treated as "maybe sent": the
   rate and spending budgets are charged and, if the game never answers, it ends `unconfirmed` (which also starts the
   cooldown). A transport should resolve `false`, not reject, when it knows nothing was sent. A send promise must eventually
   settle: one that never does keeps that `Actions` instance busy (every later action answers `busy`).
