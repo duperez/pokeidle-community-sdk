@@ -24,8 +24,16 @@ export function applyMutation(source, mutation) {
   return source.includes(mutation.from) ? source.replace(mutation.from, mutation.to) : null;
 }
 
-function runTests() {
-  const run = spawnSync('npm', ['run', 'test', '-w', 'pokeidle-community-sdk'], { cwd: ROOT, encoding: 'utf8' });
+function runTests(mutated = false) {
+  // Size remains a mandatory baseline gate, not evidence that a semantic mutation was detected.
+  const tests = fs
+    .readdirSync(path.join(ROOT, 'packages/sdk/test'))
+    .filter((name) => name.endsWith('.test.ts') && (!mutated || name !== 'bundle-size.test.ts'))
+    .map((name) => path.join('test', name));
+  const run = spawnSync(process.execPath, ['--import', 'tsx', '--test', ...tests], {
+    cwd: path.join(ROOT, 'packages/sdk'),
+    encoding: 'utf8',
+  });
   return `${run.stdout}\n${run.stderr}`;
 }
 
@@ -59,7 +67,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         continue;
       }
       fs.writeFileSync(file, mutated);
-      const killed = testsFailed(runTests());
+      const killed = testsFailed(runTests(true));
       fs.writeFileSync(file, original);
       const expected = EXPECTED_SURVIVORS.some((s) => s.file === mutation.file && s.from === mutation.from);
       console.log(
