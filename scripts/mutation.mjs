@@ -15,9 +15,33 @@ import { EXPECTED_SURVIVORS, MUTATIONS } from './mutations.mjs';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'packages/sdk/src');
 
-/** Did the unit tests fail? Counts `not ok` lines: a crashed run with no test output is NOT a kill. */
+// Per-file summaries count executed tests, unlike a successful empty-file wrapper.
+export default async function* mutationReporter(events) {
+  let executed = 0;
+  let failed = false;
+  let invalid = false;
+  for await (const { type, data } of events) {
+    if (type === 'test:stdout' || type === 'test:stderr') yield data.message;
+    if (type === 'test:summary' && data.file) {
+      const { tests, skipped, todo } = data.counts;
+      executed += tests - skipped - todo;
+    }
+    if (type === 'test:fail' && !data.skip && !data.todo) {
+      failed = true;
+      const error = data.details.error;
+      if (error.exitCode !== undefined || error.signal !== undefined) invalid = true;
+      yield `${data.name}: ${error.cause?.stack ?? error.stack ?? error}\n`;
+    }
+  }
+  yield `mutation-result:${invalid || !executed ? 'invalid' : failed ? 'failed' : 'passed'}\n`;
+}
+
+export function classifyTestRun(output) {
+  return [...output.matchAll(/^mutation-result:(passed|failed|invalid)$/gm)].at(-1)?.[1] ?? 'invalid';
+}
+
 export function testsFailed(output) {
-  return /^not ok /m.test(output);
+  return classifyTestRun(output) === 'failed';
 }
 
 export function applyMutation(source, mutation) {
@@ -30,10 +54,13 @@ function runTests(mutated = false) {
     .readdirSync(path.join(ROOT, 'packages/sdk/test'))
     .filter((name) => name.endsWith('.test.ts') && (!mutated || name !== 'bundle-size.test.ts'))
     .map((name) => path.join('test', name));
-  const run = spawnSync(process.execPath, ['--import', 'tsx', '--test', ...tests], {
+  const run = spawnSync(process.execPath, ['--import', 'tsx', '--test', `--test-reporter=${fileURLToPath(import.meta.url)}`, ...tests], {
     cwd: path.join(ROOT, 'packages/sdk'),
     encoding: 'utf8',
   });
+  if (run.error) throw run.error;
+  if (run.signal) throw new Error(`test runner terminated by ${run.signal}`);
+  if (run.status !== 0 && run.status !== 1) throw new Error(`test runner exited with status ${run.status}\n${run.stderr}`);
   return `${run.stdout}\n${run.stderr}`;
 }
 
@@ -50,8 +77,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   });
 
   const baseline = runTests();
-  if (testsFailed(baseline) || !/^# pass \d+/m.test(baseline)) {
-    console.error('the tests do not pass without any mutation: fix them first');
+  if (classifyTestRun(baseline) !== 'passed') {
+    console.error('the tests do not pass without any mutation: fix them first\n', baseline);
     process.exit(1);
   }
 
@@ -67,8 +94,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         continue;
       }
       fs.writeFileSync(file, mutated);
-      const killed = testsFailed(runTests(true));
+      const output = runTests(true);
+      const result = classifyTestRun(output);
       fs.writeFileSync(file, original);
+      if (result === 'invalid') {
+        problems.push(`INVALID RUN  ${mutation.file}: ${JSON.stringify(mutation.from.slice(0, 60))}`);
+        console.error('invalid test run (not a semantic kill):\n', output);
+        continue;
+      }
+      const killed = result === 'failed';
       const expected = EXPECTED_SURVIVORS.some((s) => s.file === mutation.file && s.from === mutation.from);
       console.log(
         `${killed ? 'killed  ' : expected ? 'expected' : 'SURVIVED'}  ${mutation.file}: ${mutation.from.slice(0, 60).replace(/\n/g, '\\n')}`,
