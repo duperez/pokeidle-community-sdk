@@ -120,6 +120,10 @@ inclusive durante callbacks reentrantes. Cada entrega verifica attach/run atual:
 um listener que para outro cliente não permite callback posterior daquele run.
 Erros locais seguem onError daquele cliente; erro do handler não interrompe pares.
 Não usar o onError de um cliente como proprietário global de falhas de runtime.
+Antes de qualquer attach, falhas síncronas de bootstrap são lançadas ao chamador;
+falhas assíncronas do core usam o handler padrão existente com erros controlados
+por código, sem incluir frame/erro arbitrário da página. Não reter amostras sem
+Inspector local attached nem transmitir falhas privadas a outros consumidores.
 
 ## Lifecycle e gerações
 
@@ -229,6 +233,8 @@ diferentemente da base. Atualizar README, package README, architecture, CHANGELO
 snapshot de API, testes, extensão e verificadores de distribuição no mesmo incremento.
 Não manter fallback legado silencioso. Migração do launcher vem após prova standalone,
 por SHA exato e com a mesma política de página, sem segundo transporte público.
+Configuração JavaScript legada contendo `transport` deve falhar explicitamente
+antes de instalar/adotar runtime; remover só o tipo TypeScript não é suficiente.
 
 ## Matriz de aceite e execução
 
