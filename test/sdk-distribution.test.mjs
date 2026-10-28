@@ -92,6 +92,7 @@ test('independent browser bundles retain early state and isolate stop and socket
        b.on('estado', () => deltasB.push(b.state.gold));
        a.start(); b.start();
        const late = [a.connected,a.state.complete,a.state.gold,b.connected,b.state.complete,b.state.gold];
+       const lateWelcomes = welcomes.slice();
        first.receive({t:'estado',estado:{gold:102}});
        a.stop();
        first.receive({t:'estado',estado:{gold:103}});
@@ -105,7 +106,7 @@ test('independent browser bundles retain early state and isolate stop and socket
        const opened = [b.connected,b.state.complete,b.state.gold];
        second.receive({t:'welcome',estado:{cheio:true,gold:201,pokemons:[]}});
        const accepted = await b.sendCommand({t:'ping'});
-       const result = {late,welcomes,deltasA,deltasB,stopped,connecting,opened,
+       const result = {late,lateWelcomes,welcomes,deltasA,deltasB,stopped,connecting,opened,
          current:[b.connected,b.state.complete,b.state.gold],accepted,oldFrames:first.sent,newFrames:second.sent};
        b.stop();
        second.receive({t:'estado',estado:{gold:202}});
@@ -118,6 +119,7 @@ test('independent browser bundles retain early state and isolate stop and socket
   );
   assert.deepEqual(JSON.parse(actual), {
     late: [true, true, 101, true, true, 101],
+    lateWelcomes: [],
     welcomes: ['b'],
     deltasA: [102],
     deltasB: [102, 103],

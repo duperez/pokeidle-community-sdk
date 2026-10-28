@@ -25,6 +25,7 @@ async function run() {
   let sockets;
   let directory;
   let pendingUpgrade;
+  let report;
   try {
     const tools = process.env.SDK_PROOF_TOOLS;
     assert.ok(tools && path.isAbsolute(tools), 'proof-tools-required');
@@ -97,7 +98,10 @@ async function run() {
         upgrade(request, socket, head);
       }
     });
-    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', resolve);
+    });
     const origin = `http://127.0.0.1:${server.address().port}`;
     context = await chromium.launchPersistentContext(path.join(directory, 'profile'), {
       channel: 'chromium',
@@ -182,31 +186,35 @@ async function run() {
     await deadline(commandReceived);
     check('exactly-one-send-on-current-socket', frames, [{ socket: 1, text: '{"t":"ping"}' }]);
     check('no-extra-game-connections', peers.length, 2);
-    process.stdout.write(
-      JSON.stringify({
-        status: 'PASS',
-        stages,
-        browserVersion: context.browser().version(),
-        sdkSha256: hash(bundle),
-        wrappersSha256: [hash(wrapperA), hash(wrapperB)],
-        connections: peers.length,
-        commandFrames: frames.length,
-      }) + '\n',
-    );
+    report = {
+      status: 'PASS',
+      stages,
+      browserVersion: context.browser().version(),
+      sdkSha256: hash(bundle),
+      wrappersSha256: [hash(wrapperA), hash(wrapperB)],
+      connections: peers.length,
+      commandFrames: frames.length,
+    };
   } catch {
-    process.stdout.write(JSON.stringify({ status: 'FAIL', code: 'native-proof-incomplete', completedStages: stages }) + '\n');
+    report = { status: 'FAIL', code: 'native-proof-incomplete', completedStages: stages };
     process.exitCode = 1;
   } finally {
     try {
-      await context?.close();
-    } finally {
-      pendingUpgrade?.socket.destroy();
-      for (const peer of sockets?.clients ?? []) peer.terminate();
-      if (sockets) await new Promise((resolve) => sockets.close(resolve));
-      if (server?.listening) await new Promise((resolve) => server.close(resolve));
-      if (directory) await fs.rm(directory, { recursive: true, force: true });
+      try {
+        await context?.close();
+      } finally {
+        pendingUpgrade?.socket.destroy();
+        for (const peer of sockets?.clients ?? []) peer.terminate();
+        if (sockets) await new Promise((resolve) => sockets.close(resolve));
+        if (server?.listening) await new Promise((resolve) => server.close(resolve));
+        if (directory) await fs.rm(directory, { recursive: true, force: true });
+      }
+    } catch {
+      report = { status: 'FAIL', code: 'native-proof-cleanup-failed', completedStages: stages };
+      process.exitCode = 1;
     }
   }
+  process.stdout.write(JSON.stringify(report) + '\n');
 }
 
 async function deadline(promise) {
