@@ -155,6 +155,29 @@ export function extractProtocol(rawSource, { minimums = MINIMUMS } = {}) {
 }
 
 const quoteList = (values) => values.map((v) => `'${v}'`).join(', ');
+const nameList = (input) => {
+  const values = sorted(input);
+  const groups = [];
+  for (let i = 0; i < values.length;) {
+    let end = i + 1;
+    while (end < values.length && values[end].slice(0, 3) === values[i].slice(0, 3)) end++;
+    const first = values[i];
+    const last = values[end - 1];
+    let length = 0;
+    while (length < first.length && first[length] === last[length]) length++;
+    const prefix = first.slice(0, length);
+    groups.push(
+      end - i > 1 && length >= 3
+        ? `${prefix}:${values
+            .slice(i, end)
+            .map((value) => value.slice(length))
+            .join(',')}`
+        : values.slice(i, end).join(' '),
+    );
+    i = end;
+  }
+  return `/* @__PURE__ */ names('${groups.join(' ')}') as readonly [${quoteList(values)}]`;
+};
 const record = (map) =>
   [...map]
     .sort((a, b) => a[0].localeCompare(b[0]))
@@ -169,14 +192,22 @@ export function renderRegistry({ server, events, commands }, version = 'unknown'
 // The field lists are HEURISTIC: they come from reading the client's code (the packet's own branch and the handlers
 // that receive it), so they can miss fields the client reads some other way and can include ones it does not use.
 
+// Compact shared prefixes keep name-only diagnostics from shipping repeated namespaces.
+function names(encoded: string): readonly string[] {
+  return Object.freeze(encoded === '' ? [] : encoded.split(' ').flatMap((group) => {
+    const colon = group.indexOf(':');
+    return colon < 0 ? [group] : group.slice(colon + 1).split(',').map((suffix) => group.slice(0, colon) + suffix);
+  }));
+}
+
 /** Packet types the game's client handles when they arrive. */
-export const SERVER_PACKET_TYPES = [${quoteList(sorted(server.keys()))}] as const;
+export const SERVER_PACKET_TYPES = ${nameList(server.keys())};
 
 /** Kinds of event inside a \`batalha\` packet (\`ev[].k\`). */
-export const BATTLE_EVENT_KINDS = [${quoteList(sorted(events.keys()))}] as const;
+export const BATTLE_EVENT_KINDS = ${nameList(events.keys())};
 
 /** Commands the game's client sends. */
-export const CLIENT_COMMAND_TYPES = [${quoteList(sorted(commands))}] as const;
+export const CLIENT_COMMAND_TYPES = ${nameList(commands)};
 
 /** Fields the client reads from each received packet type. */
 export const SERVER_PACKET_READS = {

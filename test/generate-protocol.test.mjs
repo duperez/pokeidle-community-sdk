@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import vm from 'node:vm';
+import { transformSync } from 'esbuild';
 import { extractProtocol, fieldsRead, renderRegistry, stripComments } from '../scripts/generate-protocol.mjs';
 
 test('fieldsRead reads `param.x`, `param?.x` and destructuring, and never treats a letter as a dot', () => {
@@ -63,6 +65,19 @@ test('renderRegistry produces a TypeScript file with the four lists', () => {
   for (const name of ['SERVER_PACKET_TYPES', 'BATTLE_EVENT_KINDS', 'CLIENT_COMMAND_TYPES', 'SERVER_PACKET_READS', 'BATTLE_EVENT_READS'])
     assert.ok(text.includes(name), name);
   assert.ok(text.includes("'amigos': ['lista', 'max', 'pedidos']"));
+});
+
+test('compact generated names preserve exact sorted identifiers, empty suffixes and empty lists', () => {
+  const commands = new Set(['guild.beta', 'guild', 'guild.alpha', 'guild.deep.inner', 'ping']);
+  const registry = { server: new Map(), events: new Map([['event', new Set()]]), commands };
+  const output = transformSync(renderRegistry(registry), { loader: 'ts', format: 'cjs' }).code;
+  const context = vm.createContext({ module: { exports: {} } });
+  vm.runInContext(output, context);
+  const actual = context.module.exports;
+  assert.deepEqual(JSON.parse(JSON.stringify(actual.CLIENT_COMMAND_TYPES)), [...commands].sort());
+  assert.deepEqual(JSON.parse(JSON.stringify(actual.SERVER_PACKET_TYPES)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(actual.BATTLE_EVENT_KINDS)), ['event']);
+  assert.equal(Object.isFrozen(actual.CLIENT_COMMAND_TYPES), true);
 });
 
 test('the extraction fails instead of writing a shrunken registry when it finds too little', () => {
