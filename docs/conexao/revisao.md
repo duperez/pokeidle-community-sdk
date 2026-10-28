@@ -2,11 +2,18 @@
 
 ## Status and scope
 
-Phase A: acceptance matrix and baseline risks, not approval of an implementation.
+This document records chronological checkpoints, not one cumulative PASS
+inherited by every revision. Latest consolidated review: ca704f2 passes the
+independently executed runtime/distribution/native gates, with R1-R4 closed
+on its exact artifact. Final mutation acceptance is pending R5's runner
+correction and a complete independently checked mutation run.
+
+Initial Phase A: acceptance matrix and baseline risks, not approval of an implementation.
 Reviewed base: `cd3261d996db9b1f8ea7cacf81ac53fe026667f9`; HEAD matched and
 the review worktree was clean before this documentation change.
 No runtime changes, publication, real account access or graphical processes.
-The architecture proposal and implementation SHA have not yet been reviewed.
+At that initial checkpoint, the architecture proposal and implementation SHA
+had not yet been reviewed. Subsequent findings and closure evidence follow below.
 
 The shared session brief, review brief and tooling guide are the requirements
 for this review. A standalone extension must use one internal MAIN /
