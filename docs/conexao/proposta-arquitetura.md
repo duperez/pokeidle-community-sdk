@@ -1,43 +1,44 @@
-# Proposta de arquitetura do conector standalone
+# Standalone connector architecture proposal
 
-## Status, escopo e evidência
+## Status, scope and evidence
 
-Proposta para discussão e implementação, não descrição de funcionalidade já entregue.
-Base examinada: `cd3261d996db9b1f8ea7cacf81ac53fe026667f9`; HEAD confirmado nessa revisão,
-com worktree limpo antes da criação deste documento. Nenhum runtime foi alterado.
+This is a proposal for discussion and implementation, not a description of
+functionality already delivered. Reviewed baseline:
+`cd3261d996db9b1f8ea7cacf81ac53fe026667f9`; HEAD matched that revision and
+the worktree was clean before creating this document. No runtime was changed.
 
-Recomendação: um runtime por documento/realm MAIN, instalado explicitamente no
-`document_start`, com um hook, um parser, um estado canônico e um coordenador de
-ações. Clientes são fachadas com assinaturas, erros e diagnósticos próprios.
-Login, conexão, reconexão e fechamento do WebSocket pertencem ao jogo.
-Contas, perfis, janelas, persistência de orçamento e automação pertencem ao host.
+Recommendation: one runtime per document/MAIN realm, explicitly installed at
+`document_start`, with one hook, one parser, one canonical state and one action
+coordinator. Clients are facades with their own subscriptions, errors and
+diagnostics. The game owns login, connection, reconnection and WebSocket closure.
+The host owns accounts, profiles, windows, persistent budgets and automation.
 
-Este incremento deve compartilhar de fato entre duas cópias compatíveis no mesmo
-global MAIN, não somente entre imports de um módulo. Não cobre globals diferentes,
-iframes, isolated worlds, processos ou origens de extensões. Uma futura ponte
-isolated-to-MAIN adaptará operações deste runtime; não será outro mecanismo
-de WebSocket nem uma opção pública de transporte.
+This increment must actually share between two compatible copies in the same
+MAIN global, not only between imports of one module. It does not cover different
+globals, iframes, isolated worlds, processes or extension origins. A future
+isolated-to-MAIN bridge will adapt this runtime's operations; it will not be
+another WebSocket mechanism or a public transport option.
 
-Evidência da base:
+Baseline evidence:
 
-| Local | Comportamento relevante |
+| Location | Relevant behavior |
 | --- | --- |
-| `packages/sdk/src/page-transport.ts:17,74-76,97-139` | Rendezvous por símbolo global; adoção por constructor/send; socket anterior silenciado; versão existente não validada. |
-| `packages/sdk/src/client.ts:53-60,193-210` | Cada cliente cria estado/Actions e faz parsing próprio. Compartilhar só o hook não satisfaz o objetivo. |
-| `packages/sdk/src/client.ts:66-111` | start/stop idempotentes e proteção por execução; stale no open/close, não imediatamente ao adotar sucessor CONNECTING. |
-| `packages/sdk/src/client.ts:245-256` | Exceções isoladas, mas listeners recebem o mesmo objeto mutável. |
-| `packages/sdk/src/state.ts:49-60,99-103` | Cópias privadas congeladas já existem; markStale conserva valores antigos. |
-| `packages/sdk/src/actions.ts:39-55,181-225` | inFlight, floors, limites e ledger são por Actions; listeners são armados antes do envio e onSend precede resultado terminal. |
-| `packages/sdk/src/confirmations.ts:28-113,117-169` | Evidência por evento/inventário sem request id; não representa recibo transacional. |
-| `examples/test-extension/manifest.json:7-13` | Extensão independente já declara MAIN/document_start. |
+| `packages/sdk/src/page-transport.ts:17,74-76,97-139` | Global-symbol rendezvous; constructor/send adoption; replaced socket silenced; existing version not validated. |
+| `packages/sdk/src/client.ts:53-60,193-210` | Each client creates state/Actions and parses independently. Sharing only the hook does not satisfy the goal. |
+| `packages/sdk/src/client.ts:66-111` | Idempotent start/stop and per-run guards; stale on open/close, not immediately on adopting a CONNECTING successor. |
+| `packages/sdk/src/client.ts:245-256` | Exceptions are isolated, but listeners receive the same mutable object. |
+| `packages/sdk/src/state.ts:49-60,99-103` | Private frozen copies already exist; markStale retains old values. |
+| `packages/sdk/src/actions.ts:39-55,181-225` | inFlight, floors, limits and ledger are per Actions instance; listeners are armed before sending and onSend precedes the terminal result. |
+| `packages/sdk/src/confirmations.ts:28-113,117-169` | Event/inventory evidence without a request id; not a transaction receipt. |
+| `examples/test-extension/manifest.json:7-13` | The independent extension already declares MAIN/document_start. |
 
-## API pública proposta
+## Proposed public API
 
-Os nomes abaixo são propostos; devem ser congelados antes da implementação.
-Manter `PokeIdleClient` e APIs de domínio existentes reduz a migração.
+The names below are proposed; freeze them before implementation.
+Keeping `PokeIdleClient` and existing domain APIs reduces migration work.
 
 ```ts
-// Executar no MAIN/document_start, mesmo que a interface só monte depois.
+// Run in MAIN/document_start, even if the interface mounts later.
 import { bootstrapPageSession, PokeIdleClient } from 'pokeidle-community-sdk';
 
 bootstrapPageSession();
@@ -47,249 +48,255 @@ const off = client.state.onChange(() => render(client.state));
 client.start();
 
 if (client.connected && client.state.complete) {
-  // Valores atuais desta geração, não confirmação de comando.
+  // Current values for this generation, not command confirmation.
 }
 
 off();
-client.stop(); // Não fecha socket, não para pares, não remove o runtime.
+client.stop(); // Does not close the socket, stop peers or remove the runtime.
 ```
 
-Contrato proposto:
+Proposed contract:
 
-| Superfície | Semântica |
+| Surface | Semantics |
 | --- | --- |
-| `bootstrapPageSession(options?): void` | Instala/adota runtime cedo; idempotente para configuração normalizada igual. Não retorna socket nem runtime mutável. |
-| `new PokeIdleClient(options?)` | Cria somente fachada parada; sem hook, DOM, conexão ou assinatura global. Aceita `onError` e `inspector` locais. |
-| `start(): void` | Attach síncrono e idempotente. Se faltou bootstrap, instala com defaults; isso não recupera tráfego perdido. Falhas de contexto/versão/configuração são explícitas e deixam cliente parado. |
-| `stop(): void` | Detach idempotente; connected/complete locais false antes de notificar. Valores locais ficam last-known; assinaturas explícitas sobrevivem para restart. |
-| `connected: boolean` | Cliente iniciado e socket corrente OPEN. Não implica estado completo. |
-| `generation: number` | Geração observada neste documento, 0 antes de adoção; metadado legível, não identificador global de conta. |
-| `state.complete: boolean` | Snapshot completo coletado pelo runtime nesta geração e cliente attached. |
-| `state` | View somente leitura, preservando getters e onChange; não expor `applyPacket`/`markStale` nessa view. |
-| `actions` | Fachada vinculada ao consumidor; encaminha para coordenador único. Sem objeto Actions mutável compartilhado publicamente. |
-| `sendCommand`/`sendRaw` | Sempre `Promise<boolean>`; true = aceito para envio, false = definitivamente não enviado por ausência de conexão/attach. Erros de validação continuam síncronos; falha incerta rejeita. |
+| `bootstrapPageSession(options?): void` | Installs/adopts the runtime early; idempotent for equal normalized configuration. Returns neither a socket nor a mutable runtime. |
+| `new PokeIdleClient(options?)` | Creates only a stopped facade; no hook, DOM, connection or global subscription. Accepts local `onError` and `inspector`. |
+| `start(): void` | Synchronous, idempotent attach. Without bootstrap, installs with defaults; this cannot recover missed traffic. Context/version/configuration failures are explicit and leave the client stopped. |
+| `stop(): void` | Idempotent detach; local connected/complete become false before notification. Local values remain last-known; explicit subscriptions survive for restart. |
+| `connected: boolean` | Client started and current socket OPEN. Does not imply complete state. |
+| `generation: number` | Generation observed in this document, 0 before adoption; readable metadata, not a global account identifier. |
+| `state.complete: boolean` | Complete snapshot collected by the runtime in this generation, with the client attached. |
+| `state` | Read-only view preserving getters and onChange; do not expose `applyPacket`/`markStale` through this view. |
+| `actions` | Consumer-bound facade forwarding to the single coordinator. No publicly shared mutable Actions object. |
+| `sendCommand`/`sendRaw` | Always `Promise<boolean>`; true = accepted for sending, false = definitely not sent because connection/attachment is absent. Validation errors remain synchronous; uncertain failure rejects. |
 
-O retorno uniforme assíncrono dos envios elimina o generic de transporte e evita
-uma futura reescrita da API quando houver ponte. Não introduzir fila de comandos.
-Uma Promise rejeitada não autoriza repetir um envio.
+A uniform asynchronous send return removes the transport generic and avoids a
+future API rewrite when a bridge exists. Do not introduce a command queue.
+A rejected Promise does not authorize repeating a send.
 
-`BootstrapOptions` contém somente política compartilhada: `maxPacketBytes` e
-`actions` (limites, checks, dryRun e tempos existentes, sem scheduler público).
-Defaults são normalizados antes de comparar. Primeiro bootstrap fixa a política;
-outro bootstrap com política diferente lança erro de configuração, sem alterar
-pares. `start()` adota a política existente sem tentar reaplicar defaults.
-Copiar e congelar opções aninhadas na entrada; mutação posterior do objeto do
-consumidor não altera política, comparação ou comportamento de outro cliente.
-Não admitir `actions`/`maxPacketBytes` por fachada nesta etapa: orçamento, cooldown
-e floors não podem depender de quem venceu a corrida entre clientes.
-`dryRun`/`onSend` por chamada continuam como hoje; limites duráveis ficam no host.
-Relógio, PageLike e transporte fake permanecem seams internos de testes.
+`BootstrapOptions` contains only shared policy: `maxPacketBytes` and `actions`
+(existing limits, checks, dryRun and timing options, without a public scheduler).
+Normalize defaults before comparing. The first bootstrap fixes policy; another
+bootstrap with different policy throws a configuration error without changing
+peers. `start()` adopts existing policy without trying to reapply defaults.
+Copy and freeze nested options on entry; later mutation of the consumer's object
+must not change policy, comparison or another client's behavior.
+Do not allow `actions`/`maxPacketBytes` per facade in this increment: budgets,
+cooldown and floors cannot depend on which client wins a race.
+Per-call `dryRun`/`onSend` remain as today; durable limits stay with the host.
+Clock, PageLike and fake transport remain internal test seams.
 
-## Estrutura e ownership
+## Structure and ownership
 
 ```text
-jogo -> WebSocket existente -> hook MAIN -> parse/validação -> estado canônico
-                                             |                    |
-                                             +-> reconciliação <-+
-                                             |     única
-                                             +-> fachadas A/B -> listeners locais
-fachadas A/B -> guardas + coordenador único -> send original do socket corrente
+game -> existing WebSocket -> MAIN hook -> parse/validate -> canonical state
+                                               |                 |
+                                               +-> reconciliation+
+                                               |      (single)
+                                               +-> facades A/B -> local listeners
+facades A/B -> guards + single coordinator -> current socket's original send
 ```
 
-O runtime usa um slot global estável, com ABI numérica explícita e capacidades
-requeridas. Reutiliza-se o padrão de `Symbol.for` da base, não `instanceof` entre
-bundles. A validação acontece antes de modificar constructor/prototype/global.
-ABI e capacidades compatíveis reutilizam hook/parser/estado/coordenador; diferenças
-de versão do pacote por si sós não implicam incompatibilidade. Incompatibilidade
-gera erro tipado/controlado, sem substituir o slot nem empilhar proxies.
-O slot legado de page-hook v1 também deve ser detectado: falhar explicitamente
-se não puder ser adotado com segurança, não instalar um segundo hook ao lado dele.
+The runtime uses a stable global slot, with an explicit numeric ABI and required
+capabilities. Reuse the baseline's `Symbol.for` pattern, not cross-bundle
+`instanceof`. Validate before modifying constructor/prototype/global.
+Compatible ABI and capabilities reuse hook/parser/state/coordinator; package
+version differences alone do not imply incompatibility. Incompatibility produces
+a typed/controlled error without replacing the slot or stacking proxies.
+Detect the legacy page-hook v1 slot too: fail explicitly if it cannot be safely
+adopted, rather than installing a second hook beside it.
 
-Não desfazer patch quando o último consumidor parar: o runtime continua coletando
-estado para attach tardio. Guardar somente estado atual/last-known, contadores
-limitados e reconciliação pendente; não um histórico bruto de pacotes.
-Na destruição do documento todo o runtime é descartado; não persistir contas.
+Do not unpatch when the last consumer stops: the runtime continues collecting
+state for late attachment. Retain only current/last-known state, bounded counters
+and pending reconciliation, not raw packet history.
+Document destruction discards the entire runtime; do not persist accounts.
 
-Fachadas não recebem o `GameState` mutável canônico. Pode-se reutilizar getters
-existentes numa view delegada; stop retém um snapshot congelado local.
-Estado e eventos são profundamente imutáveis antes de chegar a código consumidor;
-um mesmo payload congelado pode ser compartilhado sem clone por listener.
-Actions atualiza sua reconciliação antes de observadores externos.
-Aplicação de estado e invalidação devem concluir antes da primeira notificação,
-inclusive durante callbacks reentrantes. Cada entrega verifica attach/run atual:
-um listener que para outro cliente não permite callback posterior daquele run.
-Erros locais seguem onError daquele cliente; erro do handler não interrompe pares.
-Não usar o onError de um cliente como proprietário global de falhas de runtime.
-Antes de qualquer attach, falhas síncronas de bootstrap são lançadas ao chamador;
-falhas assíncronas do core usam o handler padrão existente com erros controlados
-por código, sem incluir frame/erro arbitrário da página. Não reter amostras sem
-Inspector local attached nem transmitir falhas privadas a outros consumidores.
+Facades do not receive the mutable canonical `GameState`. Existing getters can
+be reused through a delegated view; stop retains a local frozen snapshot.
+State and events are deeply immutable before reaching consumer code; the same
+frozen payload can be shared without cloning for each listener.
+Actions updates reconciliation before external observers.
+State application and invalidation must finish before the first notification,
+including during reentrant callbacks. Each delivery checks the current attach/run:
+a listener stopping another client prevents later callbacks for that client's old run.
+Local errors follow that client's onError; a failing handler does not interrupt peers.
+Do not make one client's onError the global owner of runtime failures.
+Before any attachment, synchronous bootstrap failures are thrown to the caller;
+asynchronous core failures use the existing default handler with code-controlled
+errors, without including arbitrary page frames/errors. Do not retain samples
+without an attached local Inspector or broadcast private failures to other consumers.
 
-## Lifecycle e gerações
+## Lifecycle and generations
 
-Geração identifica adoção de socket, não número de clientes. Attach/run identifica
-execução da fachada. Capturas e waiters verificam ambos quando aplicável.
-Antes de qualquer callback de fronteira, trocar geração/socket, invalidar complete
-e finalizar reconciliação afetada. Só então notificar estado/conexão.
+A generation identifies socket adoption, not client count. Attach/run identifies
+a facade execution. Capture callbacks and waiters check both where applicable.
+Before any boundary callback, change generation/socket, invalidate complete and
+finish affected reconciliation. Only then notify state/connection observers.
 
-| Evento | Runtime/geração | Fachada e ações |
+| Event | Runtime/generation | Facade and actions |
 | --- | --- | --- |
-| Constructor de cliente | Nenhuma alteração global | Parado, disconnected, incompleto. |
-| Bootstrap sem socket | Hook instalado, estado incompleto | Pode haver zero clientes; não abre conexão. |
-| Socket elegível novo, ainda CONNECTING | Geração avança imediatamente; complete false; socket anterior perde autoridade | Observadores nunca veem dados anteriores como atuais; pendências antigas não migram. |
-| OPEN do socket corrente | Mesma geração; connected true; não restaura complete | Ações retornam no-state até estado completo válido. |
-| `welcome` válido e completo | Aplica estado/catálogos antes de notificar; complete true | Ações podem usar essa geração. Welcome parcial/malformado não fabrica complete. |
-| Attach após bootstrap coletar welcome + deltas | Não reinicia geração nem parsing | View imediatamente atual; não sintetiza evento welcome nem reenvia eventos históricos. |
-| Attach sem welcome coletado | Socket pode estar OPEN; complete false | Só valores parciais reais; recuperação via próximo welcome/reload pelo host/jogo, sem login/query automática. |
-| Socket preexistente antes do hook | Adota no primeiro send observado, se não houver sucessor vivo | Não há enumeração mágica de sockets nem recuperação do welcome perdido. |
-| Mensagem/open/close/send de socket substituído | Ignora para estado/eventos/adoção | Não ressuscita geração nem desconecta sucessor. |
-| CLOSE do corrente | complete false, connected false antes de notificar | Pendências possivelmente enviadas terminam unconfirmed, salvo evidência já conclusiva segundo regra existente. |
-| stop de A, B permanece | Runtime e geração intactos | A stale/disconnected; B continua atual; só ação pertencente a A é cancelada localmente. |
-| stop de último consumidor | Hook, parser e coleta continuam | Não fecha socket; libera assinaturas internas das fachadas, não histórico de limites/risco. |
-| restart de A | Adota estado atual do runtime se completo na geração corrente | Não reaproveita callbacks antigos; nenhuma repetição de comando. |
-| Nova navegação/documento | Novo runtime e nova identidade de sessão | Nenhum estado/pendência da página anterior é atual. |
+| Client constructor | No global change | Stopped, disconnected, incomplete. |
+| Bootstrap without socket | Hook installed, incomplete state | Zero clients are allowed; opens no connection. |
+| New eligible socket, still CONNECTING | Generation advances immediately; complete false; previous socket loses authority | Observers never see previous data as current; old pending operations do not migrate. |
+| Current socket OPEN | Same generation; connected true; does not restore complete | Actions return no-state until valid complete state. |
+| Valid complete `welcome` | Applies state/catalogs before notification; complete true | Actions can use this generation. Partial/malformed welcome does not fabricate complete. |
+| Attach after bootstrap collected welcome + deltas | Does not restart generation or parsing | Immediately current view; no synthetic welcome event or historical event replay. |
+| Attach without collected welcome | Socket may be OPEN; complete false | Only actual partial values; recovery through next welcome/reload by host/game, without automatic login/query. |
+| Socket predating the hook | Adopts on first observed send if no live successor exists | No magic socket enumeration or recovery of missed welcome. |
+| Replaced socket message/open/close/send | Ignored for state/events/adoption | Does not resurrect a generation or disconnect the successor. |
+| Current socket CLOSE | complete false, connected false before notification | Possibly sent pending operations end unconfirmed, except for already conclusive evidence under the existing rule. |
+| A stops, B remains | Runtime and generation unchanged | A stale/disconnected; B stays current; only A's own action is locally cancelled. |
+| Last consumer stops | Hook, parser and collection continue | Does not close socket; releases facade-internal subscriptions, not limit/risk history. |
+| A restarts | Adopts current runtime state if complete in the current generation | Does not reuse old callbacks; no command repetition. |
+| New navigation/document | New runtime and session identity | No state/pending operation from the previous page is current. |
 
-Preservar o filtro de host da página e path `/`, com esquemas WebSocket válidos;
-não passar a aceitar qualquer socket do documento. Constructor deve preservar
-argumentos, protocolos, constantes, subclassing, identidade dos objetos retornados
-e exceções nativas. Adoção por send continua sendo backstop, não mecanismo de login.
+Preserve the page-host and `/` path filter, with valid WebSocket schemes;
+do not start accepting every socket in the document. The constructor must
+preserve arguments, protocols, constants, subclassing, returned object identity
+and native exceptions. Send adoption remains a backstop, not a login mechanism.
 
-## Comandos concorrentes e evidência
+## Concurrent commands and evidence
 
-Um coordenador controla inFlight, floors e cooldown para todo o runtime, com
-limiter e ledger únicos sob a política de bootstrap. Fachadas apenas identificam
-o dono da chamada e encaminham observers locais. Uma ação de B enquanto A está
-pendente retorna busy; não fica em fila e não ganha retry automático.
+One coordinator controls inFlight, floors and cooldown for the whole runtime,
+with a single limiter and ledger under bootstrap policy. Facades only identify
+the invocation owner and forward local observers. An action from B while A is
+pending returns busy; it is neither queued nor retried automatically.
 
-Stop do dono depois de envio aceito/incerto não desfaz o comando: resolve a chamada
-sem evidência como unconfirmed, preserva floors e inicia cooldown compartilhado.
-Se já existe evidência conclusiva, preservar o resultado que ela permite.
-Stop antes do dispatch impede envio. Essa decisão não emite desconexão para pares.
-Separar settlement da chamada do consumidor de liberação da reserva: a reserva
-do comando já despachado e o waiter interno continuam pertencendo ao runtime
-até evidência, timeout original ou fronteira de geração. Nesse intervalo B
-continua recebendo busy, mesmo se o cooldown configurado for zero. Stop não
-recomeça o timeout nem deixa o consumidor dependente de seu próprio listener
-removido. Ao encerrar o waiter interno, aplicar o cooldown devido ao resultado,
-sem apagar o risco já registrado pelo stop; só então liberar a reserva.
-O send local de página liquida aceitação/erro sincronicamente; a Promise pública
-não introduz espera por ACK. Assim onSend precede também o settlement por stop,
-e nenhuma promessa fica esperando um ACK que este mecanismo não possui.
-Nenhum attach/stop reinicia ledger/limiter; só troca de geração limpa floors,
-preservando cooldown e orçamento em memória.
+Stopping the owner after an accepted/uncertain send does not undo the command:
+resolve the invocation without evidence as unconfirmed, preserve floors and
+start shared cooldown. If conclusive evidence already exists, preserve the
+result it supports. Stop before dispatch prevents sending. This decision does
+not emit a disconnection to peers.
+Separate consumer invocation settlement from reservation release: the dispatched
+command's reservation and internal waiter remain owned by the runtime until
+evidence, the original timeout or a generation boundary. B keeps receiving busy
+during that interval, even if configured cooldown is zero. Stop neither restarts
+the timeout nor leaves the consumer dependent on its own removed listener.
+When the internal waiter finishes, apply the cooldown due to its result without
+erasing risk already recorded by stop; only then release the reservation.
+Local page send settles acceptance/error synchronously; the public Promise does
+not introduce an ACK wait. Thus onSend also precedes settlement caused by stop,
+and no Promise waits for an ACK this mechanism does not have.
+No attach/stop resets ledger/limiter; only a generation change clears floors,
+preserving cooldown and the in-memory budget.
 
-Enviar via low-level não pode contornar uma ação pendente: `sendCommand`/`sendRaw`
-de consumidor recusam com erro busy explícito; não retornar false com significado
-errado. O envio interno da ação usa sua própria reserva, sem deadlock.
-Cada envio imediato usa a geração/reserva capturada, sem reter comando para OPEN.
+Low-level sending cannot bypass a pending action: consumer `sendCommand`/`sendRaw`
+refuse with an explicit busy error; do not return false with the wrong meaning.
+The action's internal send uses its own reservation without deadlocking.
+Each immediate send uses its captured generation/reservation without retaining
+the command until OPEN.
 
-Low-level e comandos manuais do jogo continuam sem receipt correlacionável.
-Como regra conservadora mínima, envio low-level aceito/incerto marca evidência
-externa na geração; raw é opaco e sempre marca. Envio observado do jogo durante
-uma ação também marca interferência para essa reconciliação. Nesse caso, não
-confirmar por delta de inventário/remoção isolada e nunca elevar evento ambíguo a
-certain: um evento compatível pode no máximo ser probable. A marca conservadora
-de low-level dura até troca de geração; não criar catálogo especulativo de efeitos.
-Envios normais do jogo não são bloqueados, alterados ou repetidos pelo SDK.
-Mesmo sem interferência observada, certain continua significando correspondência
-pela regra existente, nunca prova transacional. Escritas externas não observáveis
-não podem ser excluídas pelo SDK.
+Low-level and manual game commands still lack a correlatable receipt.
+As the minimum conservative rule, an accepted/uncertain low-level send marks
+external evidence in the generation; raw is opaque and always marks it.
+An observed game send during an action also marks interference for that
+reconciliation. In that case, do not confirm from an isolated inventory
+delta/removal or promote an ambiguous event to certain: a matching event can
+be at most probable. The conservative low-level mark lasts until generation
+change; do not invent a speculative catalog of effects.
+Normal game sends are not blocked, modified or repeated by the SDK.
+Even without observed interference, certain still means a match under the
+existing rule, never transactional proof. The SDK cannot exclude unobservable
+external writes.
 
-Armar listeners antes do envio; reservar floors/limites antes do onSend. Preservar
-accepted/not-sent/uncertain e onSend exatamente uma vez, antes do resultado terminal,
-mesmo com resposta síncrona ou observer que lança. Nunca converter erro incerto em
-not-sent. Nenhuma geração nova pode fornecer evidência a uma ação da anterior.
+Arm listeners before sending; reserve floors/limits before onSend. Preserve
+accepted/not-sent/uncertain and exactly one onSend before the terminal result,
+even with a synchronous response or a throwing observer. Never convert uncertain
+failure into not-sent. No new generation can provide evidence for an action
+from the previous generation.
 
-## Alternativa rejeitada e migração
+## Rejected alternative and migration
 
-| Opção | Consequência | Decisão |
+| Option | Consequence | Decision |
 | --- | --- | --- |
-| Runtime MAIN único com fachadas e política compartilhada | Menos flexibilidade por cliente, mas readiness tardia e serialização coerentes; ponte futura usa o mesmo proprietário. | Recomendada para este incremento. |
-| Apenas factory sem transport público, conservando parser/estado/Actions por cliente | Migração inicial menor, mas duplica CPU, perde welcome antes de attach e permite duas ações independentes sobre a mesma evidência. | Rejeitada: não entrega compartilhamento comprometido. |
+| Single MAIN runtime with facades and shared policy | Less per-client flexibility, but coherent late readiness and serialization; a future bridge uses the same owner. | Recommended for this increment. |
+| Only a factory without public transport, retaining per-client parser/state/Actions | Smaller initial migration, but duplicates CPU, misses welcome before attach and permits two independent actions against the same evidence. | Rejected: does not deliver committed sharing. |
 
-Não adicionar broker cross-extension, daemon, worker obrigatório ou outro repo.
-A ponte futura usará attach/detach, snapshot/eventos e pedidos/resultados com
-identidade de documento/geração e correlação interna; callbacks e erros arbitrários
-não atravessam IPC. A correlação de IPC não cria request id no protocolo do jogo.
-Seu isolamento/autorização é trabalho posterior; não prometer segurança entre
-extensões que executam juntas em MAIN.
+Do not add a cross-extension broker, daemon, mandatory worker or another repo.
+The future bridge will use attach/detach, snapshots/events and requests/results
+with document/generation identity and internal correlation; callbacks and
+arbitrary errors do not cross IPC. IPC correlation does not create a request id
+in the game protocol. Its isolation/authorization is later work; do not promise
+security between extensions executing together in MAIN.
 
-A futura integração do launcher consumirá fatos/getters já normalizados e
-resultados de ações do cliente da página. Uma projeção serializável combina
-geração, conexão, complete e somente os fatos necessários ao host; não espelhar
-frames para outro PokeIdleClient no main nem reaplicar o protocolo fora da página.
-O host associa identidade de documento ao seu espelho para não confundir gerações
-numéricas de navegações diferentes. O futuro adaptador encaminha apenas ações
-permitidas e preserva onSend separado do terminal. A instalação antecipada que
-falha não habilita fallback CDP; o hook de envio duplicado do host deverá sair.
-Isto é uma restrição de integração, não implementação de IPC/Electron neste plano.
+Future launcher integration will consume already normalized facts/getters and
+action results from the page client. A serializable projection combines
+generation, connection, complete and only facts needed by the host; do not mirror
+frames to another PokeIdleClient in main or reapply the protocol outside the page.
+The host associates document identity with its mirror to distinguish numeric
+generations from different navigations. The future adapter forwards only allowed
+actions and preserves onSend separately from the terminal result.
+Failed early installation does not enable CDP fallback; the host's duplicate
+send hook must be removed. This is an integration constraint, not an
+IPC/Electron implementation in this plan.
 
-Remover exports e exemplos públicos de Transport/PageTransport/PageLike/SendResult,
-o generic de PokeIdleClient e as instruções de CDP/transporte customizado.
-Mover opções globais do constructor para bootstrap; atualizar consumidores de
-send boolean para await. Alterar client.state para view readonly sem mutadores.
-Documentar que restart pode agora reutilizar estado completo contínuo do runtime,
-diferentemente da base. Atualizar README, package README, architecture, CHANGELOG,
-snapshot de API, testes, extensão e verificadores de distribuição no mesmo incremento.
-Não manter fallback legado silencioso. Migração do launcher vem após prova standalone,
-por SHA exato e com a mesma política de página, sem segundo transporte público.
-Configuração JavaScript legada contendo `transport` deve falhar explicitamente
-antes de instalar/adotar runtime; remover só o tipo TypeScript não é suficiente.
+Remove public Transport/PageTransport/PageLike/SendResult exports and examples,
+the PokeIdleClient generic and CDP/custom-transport instructions.
+Move global options from constructor to bootstrap; update boolean send consumers
+to await. Change client.state to a read-only view without mutators.
+Document that restart can now reuse continuously collected complete runtime
+state, unlike the baseline. Update README, package README, architecture,
+CHANGELOG, API snapshot, tests, extension and distribution verifiers in the
+same increment. Do not retain a silent legacy fallback.
+Launcher migration follows standalone proof, using an exact SHA and the same
+page policy, without a second public transport.
+Legacy JavaScript configuration containing `transport` must fail explicitly
+before runtime installation/adoption; removing only its TypeScript type is insufficient.
 
-## Matriz de aceite e execução
+## Acceptance matrix and execution
 
-| Caso | Prova mínima exigida |
+| Case | Minimum required proof |
 | --- | --- |
-| Bootstrap/construção | Constructor não instala hook; bootstrap em MAIN antes do jogo captura welcome sem cliente; duas chamadas iguais não repatcham. |
-| Filtro/constructor | Host/path/esquema, protocolos, instanceof/subclasse, constantes e throws nativos; sockets alheios intactos. |
-| Adoção/attach tardio | Socket antigo adotado no send; attach com/sem welcome; dois clientes leem mesmo estado sem duplicar parse/apply. |
-| Geração | Sucessor CONNECTING invalida antes de callbacks; eventos velhos ignorados; welcome posterior não confirma ordem antiga. |
-| stop/restart | A não para B; snapshot parado stale; restart usa geração atual; zero consumidores mantém coleta; nenhum replay de comandos. |
-| Bundles | Duas cópias compiladas independentes no mesmo MAIN compartilham; incompatibilidade/slot legado/config divergente falham sem repatch. |
-| Isolamento | Mutação aninhada de packet/battle/state não afeta pares; listener/onError/onSend que lança; stop reentrante impede callbacks antigos. |
-| Concorrência | Duas ações competem pelo mesmo inFlight; floors/cooldown sobrevivem ao dono; low-level busy; manual/raw interferente não vira confirmação forte. |
-| Send/reconciliação | Resposta imediata, false, accepted, throw incerto, rejeição, timeout, stop e disconnect; ordem onSend/terminal e budgets preservada. |
-| Dados hostis/volume | JSON inválido, tipo inválido, frame grande e welcome grande válido; descarte observável por razão controlada, sem payload em diagnóstico. |
-| Standalone real | Extensão/IIFE e jogo sintético locais: bootstrap cedo, welcome antes de attach, duas cópias compatíveis e sucessor; sem launcher/CDP/conta real. |
+| Bootstrap/construction | Constructor installs no hook; MAIN bootstrap before game captures welcome without a client; two equal calls do not repatch. |
+| Filter/constructor | Host/path/scheme, protocols, instanceof/subclass, constants and native throws; unrelated sockets untouched. |
+| Adoption/late attach | Old socket adopted on send; attach with/without welcome; two clients read the same state without duplicate parse/apply. |
+| Generation | CONNECTING successor invalidates before callbacks; old events ignored; later welcome does not confirm an old order. |
+| stop/restart | A does not stop B; stopped snapshot stale; restart uses current generation; zero consumers keeps collection; no command replay. |
+| Bundles | Two independent compiled copies in the same MAIN share; incompatibility/legacy slot/configuration conflict fail without repatch. |
+| Isolation | Nested packet/battle/state mutation cannot affect peers; throwing listener/onError/onSend; reentrant stop prevents old callbacks. |
+| Concurrency | Two actions compete for the same inFlight; floors/cooldown outlive owner; low-level busy; interfering manual/raw writes do not become strong confirmation. |
+| Send/reconciliation | Immediate response, false, accepted, uncertain throw, rejection, timeout, stop and disconnect; onSend/terminal ordering and budgets preserved. |
+| Hostile data/volume | Invalid JSON, invalid type, large frame and valid large welcome; drops observable by controlled reason, without diagnostic payload. |
+| Real standalone | Local extension/IIFE and synthetic game: early bootstrap, welcome before attach, two compatible copies and successor; no launcher/CDP/real account. |
 
-Fakes unitários não provam worlds de extensão. Exigir evidência sintética em
-navegador para distribuição MAIN; se não demonstrada, registrar como não
-demonstrada, nunca inferir de um teste Node/vm. Não iniciar navegador neste papel;
-coordenador reserva janela serial para implementador/revisor.
+Unit fakes do not prove extension worlds. Require synthetic browser evidence for
+MAIN distribution; if not demonstrated, record it as unproven, never infer it
+from a Node/vm test. Do not start a browser in this role; the coordinator reserves
+a serial window for implementer/reviewer.
 
-Usar comandos existentes: `npm run test:sdk`, `npm run test:repo`,
+Use existing commands: `npm run test:sdk`, `npm run test:repo`,
 `npm run typecheck`, `npm run lint`, `npm run distribution -- --require-clean`
-e `npm run test:distribution`; selecionar testes menores durante red/green.
-Atualização de API intencional: em `packages/sdk`,
-`UPDATE_API_SNAPSHOT=1 npm test`. Não regenerar catálogos/protocolo via rede para
-resolver a conexão. Diagnósticos automáticos counts-only com enums controlados,
-limites de séries/bytes e sem packets, credenciais, texto DOM ou erros arbitrários.
-Callbacks curtos não removem parsing do renderer; desempenho só com baseline,
-condições equivalentes e repetições, sem thresholds universais inventados.
+and `npm run test:distribution`; select smaller tests during red/green.
+Intentional API update: in `packages/sdk`, `UPDATE_API_SNAPSHOT=1 npm test`.
+Do not regenerate catalogs/protocol over the network to solve the connection.
+Automatic diagnostics are counts-only with controlled enums, series/byte limits
+and no packets, credentials, DOM text or arbitrary errors.
+Short callbacks do not remove parsing from the renderer; performance needs a
+baseline, equivalent conditions and repetitions, without invented universal thresholds.
 
-## Decisões mínimas para congelamento
+## Minimum decisions for contract freeze
 
-1. Compartilhamento real no mesmo MAIN/global; isolated worlds explicitamente fora deste incremento.
-2. Bootstrap explícito precoce, constructor inerte e start como attach com fallback local de defaults.
-3. Política única no bootstrap, não Actions/options independentes por fachada.
-4. Geração avança na adoção, inclusive CONNECTING; restart pode adotar snapshot continuamente coletado.
-5. View/eventos imutáveis e coordenação única de ações, inclusive risco preservado após stop.
-6. Envios Promise, busy explícito e evidência conservadora diante de interferência.
+1. Actual sharing in the same MAIN/global; isolated worlds explicitly outside this increment.
+2. Explicit early bootstrap, inert constructor and start as attach with a local default fallback.
+3. Single bootstrap policy, not independent Actions/options per facade.
+4. Generation advances on adoption, including CONNECTING; restart can adopt a continuously collected snapshot.
+5. Immutable view/events and single action coordination, including risk preserved after stop.
+6. Promise sends, explicit busy and conservative evidence under interference.
 
-Nomes exatos dos novos erros e forma interna da view são escolhas de implementação;
-não precisam de nova abstração pública. Nenhuma pergunta funcional impede o plano:
-o coordenador arbitra divergências concretas destes seis pontos em até duas rodadas.
-Próximo passo executável: implementador escreve casos red de bootstrap tardio,
-sucessor CONNECTING, duas cópias e ação concorrente; implementa o runtime mínimo
-e só então atualiza API/docs/distribuição.
+Exact new error names and internal view structure are implementation choices;
+they need no new public abstraction. No functional question blocks the plan:
+the coordinator arbitrates concrete disagreements on these six points within
+two rounds. Next executable step: the implementer writes red cases for late
+bootstrap, CONNECTING successor, two copies and a concurrent action; implements
+the minimum runtime; then updates API/docs/distribution.
 
-Neste trabalho foram lidos os três briefings e os arquivos citados; executados
-`git rev-parse HEAD`, `git status --short` e inspeção de fontes/manifests/testes.
-Também foi lida via `git show` a matriz independente de
-`9dd6e21e9ad4b8ad02e4c8e2d76704dc10c9623c:docs/conexao/revisao.md`; os critérios
-A1-A12 são compatíveis com esta proposta, sem reivindicar execução dos testes
-relatados naquela outra sessão.
-Skill `blueprint` usada para fronteiras, ownership e lifecycle; skill
-`verification-before-completion` usada para conferir escopo e evidência do
-checkpoint documental. Não foram executados testes de runtime nem navegador
-por esta sessão: o entregável é exclusivamente a proposta.
+This work read all three briefings and the cited files; executed
+`git rev-parse HEAD`, `git status --short` and source/manifest/test inspection.
+It also read the independent matrix through `git show` at
+`9dd6e21e9ad4b8ad02e4c8e2d76704dc10c9623c:docs/conexao/revisao.md`; criteria
+A1-A12 are compatible with this proposal, without claiming execution of tests
+reported by that other session.
+Skill `blueprint` was used for boundaries, ownership and lifecycle;
+`verification-before-completion` was used to check scope and documentary
+checkpoint evidence. This session ran no runtime tests or browser:
+the deliverable is exclusively the proposal.
