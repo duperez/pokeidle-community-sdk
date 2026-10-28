@@ -1,5 +1,5 @@
 import type { ActionsHost } from './actions-host.js';
-import { realScheduler, resolveChecks, validateOptions } from './actions-options.js';
+import { assertActionId, assertBuyArguments, realScheduler, resolveChecks, validateOptions } from './actions-options.js';
 import type {
   ActionCallOptions,
   ActionsOptions,
@@ -28,8 +28,6 @@ import type { Waiter } from './wait-for-first.js';
 // - a rate limit (default: 3 s between actions and at most 10 per minute);
 // - an optional spending cap per hour;
 // - one action in flight at a time, and a pause after an unconfirmed one (it may only be late: buying again would pay twice).
-
-const MAX_PER_ORDER = 9999; // the game's own client never asks for more
 
 /** Created for you as `client.actions`; it depends only on `ActionsHost`, not on the client class. The limits live in memory and are per instance: a page reload starts them over. */
 export class Actions {
@@ -89,9 +87,7 @@ export class Actions {
   }
 
   async #buy(kind: 'ball' | 'item', id: number, quantity: number, options: ActionCallOptions): Promise<BuyResult> {
-    if (!Number.isInteger(id) || id < 0) throw new RangeError(`the ${kind} id must be a non-negative integer, got ${String(id)}`);
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_PER_ORDER)
-      throw new RangeError(`the quantity must be an integer from 1 to ${MAX_PER_ORDER}, got ${String(quantity)}`);
+    assertBuyArguments(kind, id, quantity);
 
     if (this.#inFlight) return { status: 'busy' };
     if (!this.host.connected) return { status: 'not-connected' };
@@ -150,8 +146,7 @@ export class Actions {
    * the Exp. Share) and waits for the game's `venda` event or for the pokémon to leave your list.
    */
   async sellPokemon(pokemonId: number, options: ActionCallOptions & { confirmIrreversible?: boolean } = {}): Promise<SellResult> {
-    if (!Number.isInteger(pokemonId) || pokemonId < 0)
-      throw new RangeError(`the pokémon id must be a non-negative integer, got ${String(pokemonId)}`);
+    assertActionId('pokémon', pokemonId);
     const dryRun = options.dryRun ?? this.#options.dryRun ?? false;
     if (!dryRun && options.confirmIrreversible !== true && isIrreversibleCommand('shop.sellPokemon')) {
       throw new CommandRefusedError(

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { PokeIdleClient } from '../src/client-core.js';
+import test, { type TestContext } from 'node:test';
+import { PokeIdleClient as Core } from '../src/client-core.js';
+import { PokeIdleClient, bootstrapPageSession } from '../src/index.js';
+import { page } from './helpers/fake-page.js';
 import type { Transport, TransportHandlers } from '../src/transport.js';
 
 class FakeTransport implements Transport {
@@ -22,66 +24,68 @@ class FakeTransport implements Transport {
   }
 }
 
-const setup = () => {
-  const transport = new FakeTransport();
+const setup = (t: TestContext) => {
+  const fixture = page(t);
   const errors: unknown[] = [];
-  const client = new PokeIdleClient({ transport, onError: (e) => errors.push(e) });
+  const client = new PokeIdleClient({ onError: (e) => errors.push(e) });
   client.start();
-  return { transport, client, errors };
+  const socket = fixture.socket();
+  socket.open();
+  return { socket, client, errors, fixture };
 };
 
-test('delivers packets by type and to the catch-all listener', () => {
-  const { transport, client } = setup();
+test('delivers packets by type and to the catch-all listener', (t) => {
+  const { socket, client } = setup(t);
   const typed: string[] = [];
   const all: string[] = [];
   client.on('pong', (p) => typed.push(p.t));
   client.onPacket((p) => all.push(p.t));
-  transport.handlers?.onMessage('{"t":"pong"}');
-  transport.handlers?.onMessage('{"t":"other"}');
+  socket.raw('{"t":"pong"}');
+  socket.raw('{"t":"other"}');
   assert.deepEqual(typed, ['pong']);
   assert.deepEqual(all, ['pong', 'other']);
 });
 
-test('ignores frames that are not packets', () => {
-  const { transport, client } = setup();
+test('ignores frames that are not packets', (t) => {
+  const { socket, client } = setup(t);
   let calls = 0;
   client.onPacket(() => (calls += 1));
-  for (const bad of ['', 'nope', '[]', '{"x":1}']) transport.handlers?.onMessage(bad);
+  for (const bad of ['', 'nope', '[]', '{"x":1}']) socket.raw(bad);
   assert.equal(calls, 0);
 });
 
-test('a throwing listener does not break the others and is reported', () => {
-  const { transport, client, errors } = setup();
+test('a throwing listener does not break the others and is reported', (t) => {
+  const { socket, client, errors } = setup(t);
   const seen: string[] = [];
   client.on('pong', () => {
     throw new Error('boom');
   });
   client.on('pong', (p) => seen.push(p.t));
-  transport.handlers?.onMessage('{"t":"pong"}');
+  socket.raw('{"t":"pong"}');
   assert.deepEqual(seen, ['pong']);
   assert.equal(errors.length, 1);
 });
 
-test('unsubscribe stops delivery', () => {
-  const { transport, client } = setup();
+test('unsubscribe stops delivery', (t) => {
+  const { socket, client } = setup(t);
   let calls = 0;
   const off = client.on('pong', () => (calls += 1));
-  transport.handlers?.onMessage('{"t":"pong"}');
+  socket.raw('{"t":"pong"}');
   off();
-  transport.handlers?.onMessage('{"t":"pong"}');
+  socket.raw('{"t":"pong"}');
   assert.equal(calls, 1);
 });
 
-test('observes outgoing packets, connection changes and records in the inspector', () => {
-  const { transport, client } = setup();
+test('observes outgoing packets, connection changes and records in the inspector', (t) => {
+  const { socket, client } = setup(t);
   const out: string[] = [];
   const states: boolean[] = [];
   client.onOutgoing((p) => out.push(p.t));
   client.onConnectionChange((c) => states.push(c));
-  transport.handlers?.onOutgoing?.('{"t":"ping"}');
-  transport.handlers?.onOpen?.();
-  transport.handlers?.onClose?.();
-  transport.handlers?.onMessage('{"t":"pong"}');
+  socket.send('{"t":"ping"}');
+  socket.open();
+  socket.raw('{"t":"pong"}');
+  socket.close();
   assert.deepEqual(out, ['ping']);
   assert.deepEqual(states, [true, false]);
   const dump = client.inspector?.dump();
@@ -89,17 +93,17 @@ test('observes outgoing packets, connection changes and records in the inspector
   assert.deepEqual(dump?.received, { pong: 1 });
 });
 
-test('start is idempotent, stop detaches, sendRaw goes through the transport', () => {
-  const { transport, client } = setup();
+test('start is idempotent, stop detaches only the consumer, sendRaw uses the page socket', async (t) => {
+  const { socket, client, fixture } = setup(t);
+  const hook = globalThis.WebSocket;
   client.start();
-  assert.equal(transport.starts, 1);
-  assert.equal(client.sendRaw('{"t":"ping"}'), true);
-  assert.deepEqual(transport.sent, ['{"t":"ping"}']);
-  transport.readyState = 3;
-  assert.equal(client.sendRaw('x'), false);
-  assert.equal(client.connected, false);
+  assert.equal(globalThis.WebSocket, hook);
+  assert.equal(await client.sendRaw('{"t":"ping"}'), true);
+  assert.deepEqual(fixture.Socket.writes, ['{"t":"ping"}']);
   client.stop();
-  assert.equal(transport.handlers, null);
+  assert.equal(socket.readyState, 1, 'consumer stop never closes the game socket');
+  assert.equal(await client.sendRaw('x'), false);
+  assert.equal(client.connected, false);
 });
 
 test('a failed start detaches partial handlers and can be retried', () => {
@@ -114,7 +118,7 @@ test('a failed start detaches partial handlers and can be retried', () => {
       throw new Error('startup failed');
     }
   };
-  const client = new PokeIdleClient({ transport });
+  const client = new Core({ transport });
   assert.throws(() => client.start(), /startup failed/);
   assert.equal(transport.handlers, null);
   assert.equal(client.connected, false);
@@ -125,31 +129,34 @@ test('a failed start detaches partial handlers and can be retried', () => {
 });
 
 test('the inspector can be turned off', () => {
-  const client = new PokeIdleClient({ transport: new FakeTransport(), inspector: false });
+  const client = new PokeIdleClient({ inspector: false });
   assert.equal(client.inspector, null);
 });
 
-test('on() gives a typed packet for known types, and client.state is updated before the listener runs', () => {
-  const { transport, client } = setup();
+test('on() gives a typed packet for known types, and client.state is updated before the listener runs', (t) => {
+  const { socket, client } = setup(t);
   const seen: Array<number | undefined> = [];
   client.on('welcome', (packet) => {
     const gold: number | undefined = packet.estado?.gold; // typed: a wrong field type would not compile
     seen.push(gold, client.state.gold ?? undefined);
   });
-  transport.handlers?.onMessage('{"t":"welcome","estado":{"cheio":true,"gold":42}}');
+  socket.raw('{"t":"welcome","estado":{"cheio":true,"gold":42}}');
   assert.deepEqual(seen, [42, 42]);
   client.onType('some.other.type', (packet) => seen.push(Object.keys(packet).length)); // a type the SDK does not know
-  transport.handlers?.onMessage('{"t":"some.other.type","a":1}');
+  socket.raw('{"t":"some.other.type","a":1}');
   assert.equal(seen.at(-1), 2);
 });
 
-test('a frame that is ignored is counted by the inspector, never dropped silently', () => {
-  const transport = new FakeTransport();
-  const client = new PokeIdleClient({ transport, maxPacketBytes: 50 });
+test('a frame that is ignored is counted by the inspector, never dropped silently', (t) => {
+  const fixture = page(t);
+  bootstrapPageSession({ maxPacketBytes: 50 });
+  const client = new PokeIdleClient();
   client.start();
-  transport.handlers?.onMessage(`{"t":"welcome","big":"${'a'.repeat(100)}"}`);
-  transport.handlers?.onMessage('garbage');
-  transport.handlers?.onMessage('{"t":"pong"}');
+  const socket = fixture.socket();
+  socket.open();
+  socket.raw(`{"t":"welcome","big":"${'a'.repeat(100)}"}`);
+  socket.raw('garbage');
+  socket.raw('{"t":"pong"}');
   assert.deepEqual(client.inspector?.dump().ignored, { oversized: 1, 'not-a-packet': 1 });
   assert.deepEqual(client.inspector?.dump().received, { pong: 1 });
 });

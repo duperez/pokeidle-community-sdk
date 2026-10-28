@@ -1,9 +1,10 @@
 import type { ActionCallOptions, BuyResult, SellResult } from './actions-types.js';
+import { assertActionId, assertBuyArguments } from './actions-options.js';
 import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
 import { Inspector } from './inspector.js';
 import type { PacketListener, Unsubscribe } from './listeners.js';
 import { ensurePageSession, type Consumer, type PageSession } from './page-session.js';
-import { PageSessionError } from './page-session-error.js';
+import { PageSessionError, refusePageSession } from './page-session-error.js';
 import type { BattleEvent, BattleEventKind, BattleEventMap } from './protocol/events.js';
 import type { PacketMap } from './protocol/packet-map.js';
 import { assertSendable, type SendableCommand } from './protocol/send-guard.js';
@@ -43,22 +44,24 @@ export class PokeIdleClient {
 
   constructor(options: ClientOptions = {}) {
     if (options === null || typeof options !== 'object' || 'transport' in options || 'actions' in options || 'maxPacketBytes' in options)
-      throw new PageSessionError('invalid-options');
+      refusePageSession('invalid-options');
     this.#onError = options.onError ?? defaultErrorHandler;
     this.inspector = options.inspector === false ? null : (options.inspector ?? new Inspector());
     this.state = new StateView(
       () => (this.#consumer ? this.#runtime!.capture() : this.#last),
       () => this.#consumer !== null,
-      (listener) => this.add(this.#changes, listener),
+      (listener) => this.#add(this.#changes, listener),
     );
     const spentLastHour = () => this.#runtime?.spentLastHour ?? 0;
     this.actions = Object.freeze({
-      buyBall: (id: number, quantity: number, call: ActionCallOptions = {}) => this.buy('ball', id, quantity, call),
-      buyItem: (id: number, quantity: number, call: ActionCallOptions = {}) => this.buy('item', id, quantity, call),
-      sellPokemon: (id: number, call: ActionCallOptions & { confirmIrreversible?: boolean } = {}) =>
-        this.#consumer && this.#runtime
+      buyBall: (id: number, quantity: number, call: ActionCallOptions = {}) => this.#buy('ball', id, quantity, call),
+      buyItem: (id: number, quantity: number, call: ActionCallOptions = {}) => this.#buy('item', id, quantity, call),
+      sellPokemon: async (id: number, call: ActionCallOptions & { confirmIrreversible?: boolean } = {}) => {
+        assertActionId('pokémon', id);
+        return this.#consumer && this.#runtime
           ? this.#runtime.sell(this.#consumer, id, { ...call })
-          : Promise.resolve({ status: 'not-connected' } as const),
+          : ({ status: 'not-connected' } as const);
+      },
       get spentLastHour() {
         return spentLastHour();
       },
@@ -83,9 +86,9 @@ export class PokeIdleClient {
         const active = delivery();
         if (!active()) return;
         this.inspector?.recordReceived(packet);
-        if (changed) this.deliver(this.#changes, [], active);
-        this.deliver(this.#types.get(packet.t), [packet], active);
-        this.deliver(this.#packets, [packet], active);
+        if (changed) this.#deliver(this.#changes, [], active);
+        this.#deliver(this.#types.get(packet.t), [packet], active);
+        this.#deliver(this.#packets, [packet], active);
         if (packet.t !== 'batalha' || !Array.isArray(packet['ev'])) return;
         const events: unknown[] = packet['ev'];
         for (const event of events) {
@@ -95,22 +98,22 @@ export class PokeIdleClient {
           if (typeof kind !== 'string') continue;
           this.inspector?.recordBattleEvent(kind, event);
           const typed = event as BattleEvent;
-          this.deliver(this.#battle.get(kind), [typed as never], active);
-          this.deliver(this.#anyBattle, [typed], active);
+          this.#deliver(this.#battle.get(kind), [typed as never], active);
+          this.#deliver(this.#anyBattle, [typed], active);
         }
       },
       outgoing: (packet) => {
         const active = delivery();
         if (!active()) return;
         this.inspector?.recordSent(packet);
-        this.deliver(this.#outgoing, [packet], active);
+        this.#deliver(this.#outgoing, [packet], active);
       },
       connection: (connected) => {
         const active = delivery();
         if (!active()) return;
         this.#generation = runtime.generation;
-        this.deliver(this.#changes, [], active);
-        this.deliver(this.#connection, [connected], active);
+        this.#deliver(this.#changes, [], active);
+        this.#deliver(this.#connection, [connected], active);
       },
     };
     this.#runtime = runtime;
@@ -118,8 +121,8 @@ export class PokeIdleClient {
     this.#consumer = consumer;
     runtime.attach(consumer);
     const active = delivery();
-    this.deliver(this.#changes, [], active);
-    if (runtime.connected) this.deliver(this.#connection, [true], active);
+    this.#deliver(this.#changes, [], active);
+    if (runtime.connected) this.#deliver(this.#connection, [true], active);
   }
 
   stop(): void {
@@ -130,8 +133,8 @@ export class PokeIdleClient {
     const run = ++this.#run;
     this.#runtime.detach(consumer);
     const stopped = () => this.#run === run && this.#consumer === null;
-    this.deliver(this.#changes, [], stopped);
-    this.deliver(this.#connection, [false], stopped);
+    this.#deliver(this.#changes, [], stopped);
+    this.#deliver(this.#connection, [false], stopped);
   }
   get connected(): boolean {
     return this.#consumer !== null && (this.#runtime?.connected ?? false);
@@ -145,30 +148,30 @@ export class PokeIdleClient {
   onType(type: string, listener: PacketListener): Unsubscribe {
     const listeners = this.#types.get(type) ?? new Set<PacketListener>();
     this.#types.set(type, listeners);
-    return this.add(listeners, listener);
+    return this.#add(listeners, listener);
   }
   onPacket(listener: PacketListener): Unsubscribe {
-    return this.add(this.#packets, listener);
+    return this.#add(this.#packets, listener);
   }
   onOutgoing(listener: PacketListener): Unsubscribe {
-    return this.add(this.#outgoing, listener);
+    return this.#add(this.#outgoing, listener);
   }
   onConnectionChange(listener: (connected: boolean) => void): Unsubscribe {
-    return this.add(this.#connection, listener);
+    return this.#add(this.#connection, listener);
   }
   onBattleEvent<K extends BattleEventKind>(kind: K, listener: (event: BattleEventMap[K]) => void): Unsubscribe {
     const listeners = this.#battle.get(kind) ?? new Set<(event: never) => void>();
     this.#battle.set(kind, listeners);
-    return this.add(listeners, listener);
+    return this.#add(listeners, listener);
   }
   onAnyBattleEvent(listener: (event: BattleEvent) => void): Unsubscribe {
-    return this.add(this.#anyBattle, listener);
+    return this.#add(this.#anyBattle, listener);
   }
   sendRaw(text: string): Promise<boolean> {
     if (!this.#consumer || !this.#runtime) return Promise.resolve(false);
     // Busy is a definite synchronous refusal; only the native write can have an uncertain outcome.
     const runtime = this.#runtime;
-    if (runtime.busy) throw new PageSessionError('busy');
+    if (runtime.busy) refusePageSession('busy');
     try {
       return Promise.resolve(runtime.send(text));
     } catch (error) {
@@ -182,18 +185,19 @@ export class PokeIdleClient {
     assertSendable(command, options.confirmIrreversible === true);
     return this.sendRaw(JSON.stringify(command));
   }
-  private buy(kind: 'ball' | 'item', id: number, quantity: number, options: ActionCallOptions): Promise<BuyResult> {
+  async #buy(kind: 'ball' | 'item', id: number, quantity: number, options: ActionCallOptions): Promise<BuyResult> {
+    assertBuyArguments(kind, id, quantity);
     return this.#consumer && this.#runtime
       ? this.#runtime.buy(this.#consumer, kind, id, quantity, { ...options })
       : Promise.resolve({ status: 'not-connected' });
   }
-  private add<T>(set: Set<T>, listener: T): Unsubscribe {
+  #add<T>(set: Set<T>, listener: T): Unsubscribe {
     set.add(listener);
     return () => {
       set.delete(listener);
     };
   }
-  private deliver<A extends unknown[]>(listeners: Set<(...args: A) => void> | undefined, args: A, active: () => boolean): void {
+  #deliver<A extends unknown[]>(listeners: Set<(...args: A) => void> | undefined, args: A, active: () => boolean): void {
     for (const listener of [...(listeners ?? [])]) {
       if (!active()) break;
       if (listeners?.has(listener)) guarded(this.#onError, () => listener(...args));

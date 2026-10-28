@@ -4,6 +4,7 @@ import * as SDK from '../src/index.js';
 import { welcome } from './helpers/fixtures.js';
 import { ensurePageSession } from '../src/page-session.js';
 import { FakeScheduler } from './helpers/fake-scheduler.js';
+import { page } from './helpers/fake-page.js';
 
 const SESSION = Symbol.for('pokeidle-community-sdk.page-session');
 const HOOK = Symbol.for('pokeidle-community-sdk.page-hook');
@@ -13,65 +14,18 @@ const bootstrap = (options?: unknown): void => {
   start?.(options);
 };
 
-function page(t: { after(fn: () => void): void }) {
-  const keys = ['WebSocket', 'location', SESSION, HOOK];
-  const saved = keys.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
-  class Socket extends EventTarget {
-    static writes: string[] = [];
-    static onWrite: (() => void) | undefined;
-    static error: Error | undefined;
-    readyState = 0;
-    constructor(public url: string) {
-      super();
-    }
-    send(text: string): void {
-      Socket.writes.push(text);
-      Socket.onWrite?.();
-      if (Socket.error) throw Socket.error;
-    }
-    open(): void {
-      this.readyState = 1;
-      this.dispatchEvent(new Event('open'));
-    }
-    feed(packet: object): void {
-      this.dispatchEvent(Object.assign(new Event('message'), { data: JSON.stringify(packet) }));
-    }
-    close(): void {
-      this.readyState = 3;
-      this.dispatchEvent(new Event('close'));
-    }
-  }
-  for (const key of keys) Reflect.deleteProperty(globalThis, key);
-  Object.defineProperties(globalThis, {
-    WebSocket: { value: Socket, writable: true, configurable: true },
-    location: { value: { host: 'game.example', href: 'https://game.example/' }, configurable: true },
-  });
-  t.after(() => {
-    keys.forEach((key, index) => {
-      Reflect.deleteProperty(globalThis, key);
-      const descriptor = saved[index];
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    });
-  });
-  return {
-    Socket,
-    socket() {
-      const ws = new globalThis.WebSocket('wss://game.example/');
-      return ws as unknown as Socket;
-    },
-  };
-}
-
 test('one frame is parsed and applied once, not once per attached facade', (t) => {
   const fixture = page(t);
   const parse = JSON.parse;
   const frame = JSON.stringify(welcome());
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- Invoked below with the original state receiver.
   const apply = SDK.GameState.prototype.applyPacket;
   let parses = 0;
   let applies = 0;
   JSON.parse = (...args: Parameters<typeof JSON.parse>) => {
     if (args[0] === frame) parses++;
-    return parse(...args);
+    const value: unknown = parse(...args);
+    return value;
   };
   t.after(() => {
     JSON.parse = parse;
@@ -158,6 +112,7 @@ for (const occupied of [
   test(`incompatible runtime slot is refused without replacing native hooks (${JSON.stringify(occupied)})`, (t) => {
     page(t);
     const Original = globalThis.WebSocket;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Identity comparison only; never invoked unbound.
     const send = Original.prototype.send;
     Object.defineProperty(globalThis, SESSION, { value: occupied, configurable: true });
     assert.throws(
@@ -165,6 +120,7 @@ for (const occupied of [
       (error: unknown) => error instanceof SDK.PageSessionError && error.code === 'incompatible-runtime',
     );
     assert.equal(globalThis.WebSocket, Original);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Identity comparison only.
     assert.equal(globalThis.WebSocket.prototype.send, send);
     assert.equal(Reflect.get(globalThis, SESSION), occupied);
   });
@@ -331,7 +287,7 @@ test('early standalone bootstrap collects full state before the first consumer a
   const ws = fixture.socket();
   ws.open();
   ws.feed(welcome());
-  const client = Reflect.construct(SDK.PokeIdleClient, []) as SDK.PokeIdleClient;
+  const client = new SDK.PokeIdleClient();
   let packets = 0;
   client.onPacket(() => packets++);
   client.start();
@@ -344,10 +300,10 @@ test('early standalone bootstrap collects full state before the first consumer a
 test('construction is inert and stop detaches only one consumer while capture continues', (t) => {
   const fixture = page(t);
   const Original = globalThis.WebSocket;
-  const a = Reflect.construct(SDK.PokeIdleClient, []) as SDK.PokeIdleClient;
+  const a = new SDK.PokeIdleClient();
   assert.equal(globalThis.WebSocket, Original);
   bootstrap();
-  const b = Reflect.construct(SDK.PokeIdleClient, []) as SDK.PokeIdleClient;
+  const b = new SDK.PokeIdleClient();
   a.start();
   b.start();
   const ws = fixture.socket();
@@ -380,7 +336,7 @@ test('policy conflicts and legacy configuration fail before changing the page ho
     (error: unknown) => Reflect.get(Object(error), 'code') === 'configuration-conflict',
   );
   assert.equal(globalThis.WebSocket, patched);
-  const client = Reflect.construct(SDK.PokeIdleClient, []) as SDK.PokeIdleClient;
+  const client = new SDK.PokeIdleClient();
   client.start();
   assert.equal(globalThis.WebSocket, patched, 'default start adopts existing explicit policy');
 });
@@ -389,8 +345,8 @@ test('two consumers cannot mutate shared event payloads or stop a peer callback 
   const fixture = page(t);
   bootstrap();
   const errors: unknown[] = [];
-  const a = Reflect.construct(SDK.PokeIdleClient, [{ onError: (error: unknown) => errors.push(error) }]) as SDK.PokeIdleClient;
-  const b = Reflect.construct(SDK.PokeIdleClient, []) as SDK.PokeIdleClient;
+  const a = new SDK.PokeIdleClient({ onError: (error) => errors.push(error) });
+  const b = new SDK.PokeIdleClient();
   a.start();
   b.start();
   const seen: unknown[] = [];
@@ -501,11 +457,103 @@ test('a restart during stop cannot receive a stale false tail or an unsubscribed
   assert.equal(removedCalls, 0);
 });
 
+test('a not-sent receipt that stops its owner cannot become unconfirmed or invent cooldown', async (t) => {
+  const fixture = page(t);
+  const clock = new FakeScheduler();
+  ensurePageSession(globalThis, { actions: { rateLimit: false } }, clock);
+  const a = new SDK.PokeIdleClient();
+  const b = new SDK.PokeIdleClient();
+  a.start();
+  b.start();
+  const ws = fixture.socket();
+  ws.open();
+  ws.feed(welcome());
+  const now = clock.now.bind(clock);
+  let reads = 0;
+  clock.now = () => {
+    if (++reads === 2) ws.close(); // internal seam: lose the socket after preflight but before dispatch
+    return now();
+  };
+  const receipts: string[] = [];
+  const result = await a.actions.buyBall(SDK.Ball.UltraBall, 1, {
+    onSend: (outcome) => {
+      receipts.push(outcome.status);
+      a.stop();
+    },
+  });
+  assert.deepEqual(receipts, ['not-sent']);
+  assert.equal(result.status, 'not-connected');
+  assert.equal(clock.pending, 0);
+  assert.equal(fixture.Socket.writes.length, 0);
+  assert.equal(b.actions.spentLastHour, 0);
+  const successor = fixture.socket();
+  successor.open();
+  successor.feed(welcome());
+  assert.equal((await b.actions.buyBall(SDK.Ball.UltraBall, 1, { dryRun: true })).status, 'dry-run');
+});
+
+test('owner detach risk retains cooldown after the original waiter later confirms', async (t) => {
+  const fixture = page(t);
+  const clock = new FakeScheduler();
+  ensurePageSession(globalThis, { actions: { rateLimit: false, confirmGraceMs: 0, unconfirmedCooldownMs: 20 } }, clock);
+  const a = new SDK.PokeIdleClient();
+  const b = new SDK.PokeIdleClient();
+  a.start();
+  b.start();
+  const ws = fixture.socket();
+  ws.open();
+  ws.feed(welcome());
+  const pending = a.actions.buyBall(SDK.Ball.UltraBall, 1);
+  a.stop();
+  assert.equal((await pending).status, 'unconfirmed');
+  clock.advance(21);
+  assert.equal((await b.actions.buyBall(SDK.Ball.UltraBall, 1)).status, 'busy');
+  ws.feed({ t: 'batalha', ev: [{ k: 'compra', nome: 'Ultra Ball', qtd: 1 }] });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal((await b.actions.buyBall(SDK.Ball.UltraBall, 1, { dryRun: true })).status, 'rate-limited');
+  clock.advance(20);
+  assert.equal((await b.actions.buyBall(SDK.Ball.UltraBall, 1, { dryRun: true })).status, 'dry-run');
+  assert.equal(clock.pending, 0);
+});
+
+test('a generation change inside onSend preserves accepted before the unconfirmed terminal', async (t) => {
+  const fixture = page(t);
+  bootstrap({ actions: { rateLimit: false, unconfirmedCooldownMs: 0 } });
+  const client = new SDK.PokeIdleClient();
+  client.start();
+  const ws = fixture.socket();
+  ws.open();
+  ws.feed(welcome());
+  const order: string[] = [];
+  const result = await client.actions.buyBall(SDK.Ball.UltraBall, 1, {
+    onSend: (outcome) => {
+      order.push(outcome.status);
+      fixture.socket();
+    },
+  });
+  order.push(result.status);
+  assert.deepEqual(order, ['accepted', 'unconfirmed']);
+  assert.equal(fixture.Socket.writes.length, 1);
+  assert.equal(client.generation, 2);
+  assert.equal(client.state.complete, false);
+});
+
+test('invalid action arguments reject before lifecycle or busy refusals without bootstrapping', async (t) => {
+  page(t);
+  const Original = globalThis.WebSocket;
+  const client = new SDK.PokeIdleClient();
+  await assert.rejects(client.actions.buyBall(-1, 1), RangeError);
+  await assert.rejects(client.actions.buyItem(1, 0), RangeError);
+  await assert.rejects(client.actions.sellPokemon(NaN), RangeError);
+  assert.equal(globalThis.WebSocket, Original);
+  assert.equal(Reflect.get(globalThis, SESSION), undefined);
+});
+
 test('owner stop keeps the shared writer reserved until original reconciliation finishes', async (t) => {
   const fixture = page(t);
   bootstrap({ actions: { rateLimit: false, confirmGraceMs: 0, unconfirmedCooldownMs: 0 } });
-  const a = Reflect.construct(SDK.PokeIdleClient, []) as SDK.PokeIdleClient;
-  const b = Reflect.construct(SDK.PokeIdleClient, []) as SDK.PokeIdleClient;
+  const a = new SDK.PokeIdleClient();
+  const b = new SDK.PokeIdleClient();
   a.start();
   b.start();
   const ws = fixture.socket();
@@ -520,6 +568,7 @@ test('owner stop keeps the shared writer reserved until original reconciliation 
   if (terminal.status === 'unconfirmed')
     assert.equal(Object.isFrozen(terminal.request), true, 'detached callers cannot mutate the live waiter request');
   assert.deepEqual(order, ['send', 'terminal']);
+  await assert.rejects(b.actions.buyBall(SDK.Ball.UltraBall, 0), RangeError);
   assert.equal((await b.actions.buyBall(SDK.Ball.UltraBall, 1)).status, 'busy');
   assert.throws(
     () => b.sendCommand({ t: 'market.itens' }),

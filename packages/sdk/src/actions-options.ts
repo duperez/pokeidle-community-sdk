@@ -9,6 +9,17 @@ export const DEFAULTS = {
   confirmGraceMs: 1000,
 } as const;
 
+export function assertActionId(kind: 'ball' | 'item' | 'pokémon', id: number): void {
+  if (!Number.isInteger(id) || id < 0) throw new RangeError(`the ${kind} id must be a non-negative integer, got ${String(id)}`);
+}
+
+export function assertBuyArguments(kind: 'ball' | 'item', id: number, quantity: number): void {
+  assertActionId(kind, id);
+  const max = 9999; // the game's own client never asks for more
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > max)
+    throw new RangeError(`the quantity must be an integer from 1 to ${max}, got ${String(quantity)}`);
+}
+
 export const realScheduler: Scheduler = {
   now: () => Date.now(),
   setTimeout: (cb, ms) => setTimeout(cb, ms),

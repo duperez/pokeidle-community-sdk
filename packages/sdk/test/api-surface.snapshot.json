@@ -697,7 +697,10 @@
     "  onBattleEvent: <K extends BattleEventKind>(kind: K, listener: (event: BattleEventMap[K]) => void) => Unsubscribe",
     "  onAnyBattleEvent: (listener: (event: BattleEvent) => void) => Unsubscribe",
     "  sendRaw: (text: string) => Promise<boolean>",
-    "  sendCommand: (command: SendableCommand, options?: { confirmIrreversible?: boolean | undefined; }) => Promise<boolean>"
+    "  sendCommand: (command: SendableCommand, options?: { confirmIrreversible?: boolean | undefined; }) => Promise<boolean>",
+    "  #buy: (kind: \"ball\" | \"item\", id: number, quantity: number, options: ActionCallOptions) => Promise<BuyResult>",
+    "  #add: <T>(set: Set<T>, listener: T) => Unsubscribe",
+    "  #deliver: <A extends unknown[]>(listeners: Set<(...args: A) => void> | undefined, args: A, active: () => boolean) => void"
   ],
   "Pokemon": [
     "type: Pokemon",

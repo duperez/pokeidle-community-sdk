@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import {
-  type BattlePacket,
-  type ChatPacket,
-  type FieldInitPacket,
-  type FieldPacket,
-  type MarketPacket,
-  type MiniGamePacket,
-  type StatePacket,
-  type WelcomePacket,
+import test, { type TestContext } from 'node:test';
+import type {
+  BattlePacket,
+  ChatPacket,
+  FieldInitPacket,
+  FieldPacket,
+  MarketPacket,
+  MiniGamePacket,
+  StatePacket,
+  WelcomePacket,
 } from '../src/index.js';
-import { PokeIdleClient } from '../src/client-core.js';
-import type { Transport, TransportHandlers } from '../src/transport.js';
+import { PokeIdleClient, type ClientOptions } from '../src/index.js';
+import { page } from './helpers/fake-page.js';
 
 // Samples with the SHAPE of real traffic and INVENTED values. The `satisfies` clauses make the compiler check that the
 // types accept a real-looking packet: if a type is too narrow, this file stops compiling.
@@ -169,50 +169,39 @@ const reveal = {
   jogando: 188,
 } satisfies MiniGamePacket;
 
-class FakeTransport implements Transport {
-  handlers: TransportHandlers | null = null;
-  sent: string[] = [];
-  readyState = 1;
-  start(handlers: TransportHandlers): void {
-    this.handlers = handlers;
-  }
-  stop(): void {
-    this.handlers = null;
-  }
-  send(text: string): boolean {
-    this.sent.push(text);
-    return true;
-  }
-}
-const feed = (transport: FakeTransport, ...packets: object[]) => packets.forEach((p) => transport.handlers?.onMessage(JSON.stringify(p)));
-
-test('real-shaped packets flow through the client and the state', () => {
-  const transport = new FakeTransport();
-  const client = new PokeIdleClient({ transport });
+const setup = (t: TestContext, options: ClientOptions = {}) => {
+  const fixture = page(t);
+  const client = new PokeIdleClient(options);
   client.start();
+  const socket = fixture.socket();
+  socket.open();
+  return { client, socket, fixture };
+};
+const feed = (socket: { feed(packet: object): void }, ...packets: object[]) => packets.forEach((packet) => socket.feed(packet));
+
+test('real-shaped packets flow through the client and the state', (t) => {
+  const { client, socket } = setup(t);
   const seen: string[] = [];
   client.on('campo', (p) => seen.push(`campo ${p.mobs?.[0]?.n}`));
   client.on('chat', (p) => seen.push(`chat ${p.anuncioChat?.moeda}`));
   client.on('market', (p) => seen.push(`market ${p.medias?.['2']?.orb?.media}`));
   client.on('mg', (p) => seen.push(`mg ${p.op}`));
   client.on('raidFichas', (p) => seen.push(`raidFichas ${typeof p.fichas}`)); // client-code level: a known field, value unknown
-  feed(transport, welcome, stateUpdate, field, fieldInit, chat, market, round, reveal, { t: 'raidFichas', fichas: [] });
+  feed(socket, welcome, stateUpdate, field, fieldInit, chat, market, round, reveal, { t: 'raidFichas', fichas: [] });
   assert.deepEqual(seen, ['campo Rattata', 'chat orb', 'market 2', 'mg rodada', 'mg revela', 'raidFichas object']);
   assert.equal(client.state.gold, 6);
   assert.equal(client.state.complete, true);
   assert.deepEqual(client.inspector?.dump().unknownTypes, []);
 });
 
-test('battle events are delivered one by one, typed by kind', () => {
-  const transport = new FakeTransport();
-  const client = new PokeIdleClient({ transport });
-  client.start();
+test('battle events are delivered one by one, typed by kind', (t) => {
+  const { client, socket } = setup(t);
   const log: string[] = [];
   client.onBattleEvent('morte', (e) => log.push(`morte ${e.nome} +${e.ouro}`));
   client.onBattleEvent('bola', (e) => log.push(`bola ${e.ballId} ${e.sucesso}`));
   client.onBattleEvent('compra', (e) => log.push(`compra ${typeof e.gasto}`)); // client-code level
   client.onAnyBattleEvent((e) => log.push(`any ${e.k}`));
-  feed(transport, battle);
+  feed(socket, battle);
   assert.deepEqual(
     log.filter((l) => !l.startsWith('any')),
     ['morte Rattata +8', 'bola 2 false', 'compra number'],
@@ -224,47 +213,44 @@ test('battle events are delivered one by one, typed by kind', () => {
   assert.deepEqual(client.inspector?.dump().battleEvents, { ataque: 1, morte: 1, bola: 1, fugiu: 1, spawn: 1, compra: 1 });
 });
 
-test('malformed battle events are ignored and a throwing battle listener does not break the others', () => {
-  const transport = new FakeTransport();
+test('malformed battle events are ignored and a throwing battle listener does not break the others', (t) => {
   const errors: unknown[] = [];
-  const client = new PokeIdleClient({ transport, onError: (e) => errors.push(e) });
-  client.start();
+  const { client, socket } = setup(t, { onError: (e) => errors.push(e) });
   const seen: string[] = [];
   client.onBattleEvent('morte', () => {
     throw new Error('boom');
   });
   client.onBattleEvent('morte', (e) => seen.push(e.k));
-  feed(transport, { t: 'batalha', ev: [null, 5, 'x', { x: 1 }, { k: 7 }, { k: 'morte' }] }, { t: 'batalha', ev: 'nope' }, { t: 'batalha' });
+  feed(socket, { t: 'batalha', ev: [null, 5, 'x', { x: 1 }, { k: 7 }, { k: 'morte' }] }, { t: 'batalha', ev: 'nope' }, { t: 'batalha' });
   assert.deepEqual(seen, ['morte']);
   assert.equal(errors.length, 1);
 });
 
-test('the inspector flags what the game adds: packet types, battle events and commands', () => {
-  const transport = new FakeTransport();
-  const client = new PokeIdleClient({ transport });
-  client.start();
-  feed(transport, { t: 'a.brand.new.packet' }, { t: 'batalha', ev: [{ k: 'aBrandNewEvent' }, { k: 'morte' }] });
-  transport.handlers?.onOutgoing?.(JSON.stringify({ t: 'shop.buy', kind: 'ball', id: 4, qty: 1 }));
-  transport.handlers?.onOutgoing?.(JSON.stringify({ t: 'a.new.command' }));
-  transport.handlers?.onOutgoing?.(JSON.stringify({ t: 'mg.palpite', k: 1, texto: 'x' }));
+test('the inspector flags what the game adds: packet types, battle events and commands', (t) => {
+  const { client, socket } = setup(t);
+  feed(socket, { t: 'a.brand.new.packet' }, { t: 'batalha', ev: [{ k: 'aBrandNewEvent' }, { k: 'morte' }] });
+  socket.send(JSON.stringify({ t: 'shop.buy', kind: 'ball', id: 4, qty: 1 }));
+  socket.send(JSON.stringify({ t: 'a.new.command' }));
+  socket.send(JSON.stringify({ t: 'mg.palpite', k: 1, texto: 'x' }));
   const dump = client.inspector?.dump();
   assert.deepEqual(dump?.unknownTypes, ['a.brand.new.packet']);
   assert.deepEqual(dump?.unknownBattleEvents, ['aBrandNewEvent']);
   assert.deepEqual(dump?.unknownSentTypes, ['a.new.command']);
 });
 
-test('sendCommand sends the command as JSON through the transport', () => {
-  const transport = new FakeTransport();
-  const client = new PokeIdleClient({ transport });
-  assert.equal(client.sendCommand({ t: 'shop.buy', kind: 'ball', id: 4, qty: 10 }), true);
-  assert.equal(client.sendCommand({ t: 'market.comprar', id: 1, qtd: 1, preco: 5, moeda: 'gold' }, { confirmIrreversible: true }), true);
-  assert.equal(client.sendCommand({ t: 'guild.info' }), true); // known by name only: a plain object
+test('sendCommand sends the command as JSON through the page socket', async (t) => {
+  const { client, socket, fixture } = setup(t);
+  assert.equal(await client.sendCommand({ t: 'shop.buy', kind: 'ball', id: 4, qty: 10 }), true);
+  assert.equal(
+    await client.sendCommand({ t: 'market.comprar', id: 1, qtd: 1, preco: 5, moeda: 'gold' }, { confirmIrreversible: true }),
+    true,
+  );
+  assert.equal(await client.sendCommand({ t: 'guild.info' }), true); // known by name only: a plain object
   assert.deepEqual(
-    transport.sent.map((s) => (JSON.parse(s) as { t: string }).t),
+    fixture.Socket.writes.map((s) => (JSON.parse(s) as { t: string }).t),
     ['shop.buy', 'market.comprar', 'guild.info'],
   );
-  assert.deepEqual(JSON.parse(transport.sent[0] ?? ''), { t: 'shop.buy', kind: 'ball', id: 4, qty: 10 });
-  transport.readyState = 3;
-  transport.send = () => false;
-  assert.equal(client.sendCommand({ t: 'ping' }), false);
+  assert.deepEqual(JSON.parse(fixture.Socket.writes[0] ?? ''), { t: 'shop.buy', kind: 'ball', id: 4, qty: 10 });
+  socket.close();
+  assert.equal(await client.sendCommand({ t: 'ping' }), false);
 });

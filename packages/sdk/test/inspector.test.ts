@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BATTLE_EVENT_KINDS, CLIENT_COMMAND_TYPES, KNOWN_PACKET_TYPES, Inspector, TEXT_MASK } from '../src/index.js';
-import { PokeIdleClient } from '../src/client-core.js';
-import type { TransportHandlers } from '../src/transport.js';
+import { PokeIdleClient, bootstrapPageSession } from '../src/index.js';
+import { page } from './helpers/fake-page.js';
 
 test('counts received and sent packets and flags unknown types', () => {
   const inspector = new Inspector();
@@ -256,32 +256,24 @@ test('invalid inspector modes and effective limits fail loudly instead of silent
   assert.doesNotThrow(() => new Inspector({ mode: 'redacted-samples', maxTypes: 0, maxSamplesPerType: 0 }));
 });
 
-test('client counts-only integration records incoming drops and observed game commands, not SDK sends', () => {
-  const bridge: { handlers?: TransportHandlers } = {};
+test('client counts-only integration records incoming drops and observed game commands, not SDK sends', async (t) => {
+  const fixture = page(t);
+  bootstrapPageSession({ maxPacketBytes: 512 });
   const inspector = new Inspector({ mode: 'counts-only', maxTypes: 256 });
   const client = new PokeIdleClient({
     inspector,
-    maxPacketBytes: 512,
-    transport: {
-      readyState: 1,
-      start(handlers: TransportHandlers) {
-        bridge.handlers = handlers;
-      },
-      stop() {},
-      send() {
-        return true;
-      },
-    },
   });
   client.start();
-  assert.equal(client.sendCommand({ t: 'ping' }), true);
+  const socket = fixture.socket();
+  socket.open();
+  assert.equal(await client.sendCommand({ t: 'ping' }), true);
   assert.deepEqual(inspector.dump().sent, {}, 'SDK sends deliberately bypass observation of the game client');
   const canary = 'synthetic-private-canary';
-  bridge.handlers?.onOutgoing?.(JSON.stringify({ t: 'ping', token: canary }));
-  bridge.handlers?.onMessage(JSON.stringify({ t: 'batalha', ev: [{ k: canary, texto: canary }] }));
-  bridge.handlers?.onMessage(JSON.stringify({ t: canary, token: canary }));
-  bridge.handlers?.onMessage('not-json');
-  bridge.handlers?.onMessage('x'.repeat(513));
+  socket.send(JSON.stringify({ t: 'ping', token: canary }));
+  socket.feed({ t: 'batalha', ev: [{ k: canary, texto: canary }] });
+  socket.feed({ t: canary, token: canary });
+  socket.raw('not-json');
+  socket.raw('x'.repeat(513));
   const dump = inspector.dump();
   assert.deepEqual(dump.sent, { ping: 1 });
   assert.deepEqual(dump.received, { batalha: 1, '(unknown)': 1 });

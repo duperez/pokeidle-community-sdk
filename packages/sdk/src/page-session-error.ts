@@ -8,3 +8,8 @@ export class PageSessionError extends Error {
     this.name = 'PageSessionError';
   }
 }
+
+/** Internal refusal path, shared by bootstrap, policy validation and consumer guards. */
+export function refusePageSession(code: PageSessionErrorCode): never {
+  throw new PageSessionError(code);
+}

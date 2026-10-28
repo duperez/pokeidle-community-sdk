@@ -1,8 +1,7 @@
 import { Actions } from './actions.js';
 import type { ActionsOptions } from './actions-types.js';
-import { defaultErrorHandler, guarded, report, type ErrorHandler } from './errors.js';
+import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
 import type { PacketListener, Unsubscribe } from './listeners.js';
-import { Inspector } from './inspector.js';
 import { DEFAULT_MAX_PACKET_BYTES, readFrame, type Packet, type IgnoredReason } from './packets.js';
 import { deepFreeze } from './immutable.js';
 import type { BattleEvent, BattleEventKind, BattleEventMap } from './protocol/events.js';
@@ -15,8 +14,6 @@ import type { SendResult, Transport } from './transport.js';
 
 export interface ClientOptions<S extends SendResult = boolean> {
   transport: Transport<S>;
-  /** Records counts and redacted samples of what goes by. `false` turns it off. Default: a new `Inspector`. */
-  inspector?: Inspector | false;
   /** Frames longer than this are ignored (and counted in the inspector). The default is large on purpose: `welcome` can be several MB. */
   maxPacketBytes?: number;
   /** Options of `client.actions`: dry run, rate limit, spending cap. */
@@ -32,11 +29,9 @@ export interface ClientOptions<S extends SendResult = boolean> {
 }
 
 /**
- * The entry point: turns the game's frames into packets and delivers them to your listeners. You only care about
- * "what came in" (`on`) and, later, "what to send"; how the frames travel is the transport's job.
+ * Internal parsing/state/action kernel. Consumer diagnostics and public subscription lifecycles live in the facade.
  */
 export class PokeIdleClient<S extends SendResult = boolean> {
-  readonly inspector: Inspector | null;
   /** The player's state, kept up to date from the game's packets. */
   readonly state: GameState;
   /** What you can DO in the game (buy...), with safety nets: see `ActionsOptions`. */
@@ -48,7 +43,6 @@ export class PokeIdleClient<S extends SendResult = boolean> {
   readonly #anyPacket = new Set<PacketListener>();
   readonly #outgoing = new Set<PacketListener>();
   readonly #battleByKind = new Map<string, Set<(event: never) => void>>();
-  readonly #anyBattle = new Set<(event: BattleEvent) => void>();
   readonly #connection = new Set<(connected: boolean) => void>();
   #started = false;
   #run = 0;
@@ -59,7 +53,6 @@ export class PokeIdleClient<S extends SendResult = boolean> {
 
   constructor(options: ClientOptions<S>) {
     this.#transport = options.transport;
-    this.inspector = options.inspector === false ? null : (options.inspector ?? new Inspector());
     this.#maxBytes = options.maxPacketBytes ?? DEFAULT_MAX_PACKET_BYTES;
     this.#onError = options.onError ?? defaultErrorHandler;
     this.state = new GameState({ onError: this.#onError });
@@ -159,12 +152,6 @@ export class PokeIdleClient<S extends SendResult = boolean> {
     return () => void set.delete(listener);
   }
 
-  /** Every battle event, whatever its kind: switch on `event.k`. */
-  onAnyBattleEvent(listener: (event: BattleEvent) => void): Unsubscribe {
-    this.#anyBattle.add(listener);
-    return () => void this.#anyBattle.delete(listener);
-  }
-
   /** Every incoming packet, whatever its type. */
   onPacket(listener: PacketListener): Unsubscribe {
     this.#anyPacket.add(listener);
@@ -221,13 +208,11 @@ export class PokeIdleClient<S extends SendResult = boolean> {
   #handleIncoming(text: string): void {
     const frame = readFrame(text, this.#maxBytes);
     if ('ignored' in frame) {
-      this.inspector?.recordIgnored(frame.ignored); // never silent: a dropped packet shows up in the inspector
       this.#onIgnored?.(frame.ignored);
       return;
     }
     const packet = deepFreeze(frame.packet);
-    this.inspector?.recordReceived(packet);
-    this.#safely(() => this.state.applyPacket(packet)); // before the listeners, so they see the new state
+    guarded(this.#onError, () => this.state.applyPacket(packet)); // before the listeners, so they see the new state
     if (packet.t === 'batalha') this.#dispatchBattle(packet);
     this.#call(this.#byType.get(packet.t), packet);
     this.#call(this.#anyPacket, packet);
@@ -239,10 +224,8 @@ export class PokeIdleClient<S extends SendResult = boolean> {
     for (const event of events) {
       if (event === null || typeof event !== 'object' || typeof (event as { k?: unknown }).k !== 'string') continue;
       const typed = event as BattleEvent;
-      this.inspector?.recordBattleEvent(typed.k, typed);
       for (const listener of [...(this.#battleByKind.get(typed.k) ?? [])])
-        this.#safely(() => (listener as (e: BattleEvent) => void)(typed));
-      for (const listener of [...this.#anyBattle]) this.#safely(() => listener(typed));
+        guarded(this.#onError, () => (listener as (e: BattleEvent) => void)(typed));
     }
   }
 
@@ -251,36 +234,19 @@ export class PokeIdleClient<S extends SendResult = boolean> {
     const frame = readFrame(text, this.#maxBytes);
     if ('ignored' in frame) return;
     const packet = deepFreeze(frame.packet);
-    this.inspector?.recordSent(packet);
     this.#call(this.#outgoing, packet);
   }
 
   #emitConnection(connected: boolean): void {
     for (const listener of [...this.#connection]) {
-      try {
-        listener(connected);
-      } catch (error) {
-        report(this.#onError, error);
-      }
-    }
-  }
-
-  #safely(fn: () => void): void {
-    try {
-      fn();
-    } catch (error) {
-      report(this.#onError, error);
+      guarded(this.#onError, () => listener(connected));
     }
   }
 
   #call(listeners: Set<PacketListener> | undefined, packet: Packet): void {
     if (!listeners) return;
     for (const listener of [...listeners]) {
-      try {
-        listener(packet);
-      } catch (error) {
-        report(this.#onError, error);
-      }
+      guarded(this.#onError, () => listener(packet));
     }
   }
 }

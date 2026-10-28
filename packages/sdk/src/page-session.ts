@@ -6,7 +6,7 @@ import type { ActionCallOptions, ActionsOptions, BuyResult, SellResult, Schedule
 import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
 import { deepFreeze } from './immutable.js';
 import type { GameState } from './state.js';
-import { PageSessionError } from './page-session-error.js';
+import { PageSessionError, refusePageSession } from './page-session-error.js';
 
 export type SharedActionsOptions = Omit<ActionsOptions, 'scheduler'>;
 
@@ -47,24 +47,24 @@ const ABI = 1;
 const CAPABILITIES = ['shared-state', 'shared-writer', 'consumer-lifecycle'] as const;
 
 function policyOf(options: BootstrapOptions): Policy {
-  if (options === null || typeof options !== 'object' || 'transport' in options) throw new PageSessionError('invalid-options');
+  if (options === null || typeof options !== 'object' || 'transport' in options) refusePageSession('invalid-options');
   const action = options.actions ?? {};
-  if (action === null || typeof action !== 'object' || 'scheduler' in action) throw new PageSessionError('invalid-options');
-  if (action.dryRun !== undefined && typeof action.dryRun !== 'boolean') throw new PageSessionError('invalid-options');
+  if (action === null || typeof action !== 'object' || 'scheduler' in action) refusePageSession('invalid-options');
+  if (action.dryRun !== undefined && typeof action.dryRun !== 'boolean') refusePageSession('invalid-options');
   if (action.rateLimit !== undefined && action.rateLimit !== false && (action.rateLimit === null || typeof action.rateLimit !== 'object'))
-    throw new PageSessionError('invalid-options');
+    refusePageSession('invalid-options');
   if (action.checks !== undefined && typeof action.checks !== 'boolean' && (action.checks === null || typeof action.checks !== 'object'))
-    throw new PageSessionError('invalid-options');
+    refusePageSession('invalid-options');
   const checks = resolveChecks(action.checks);
-  if (Object.values(checks).some((value) => typeof value !== 'boolean')) throw new PageSessionError('invalid-options');
+  if (Object.values(checks).some((value) => typeof value !== 'boolean')) refusePageSession('invalid-options');
   try {
     validateOptions(action);
   } catch (error) {
-    if (error instanceof RangeError) throw new PageSessionError('invalid-options');
+    if (error instanceof RangeError) refusePageSession('invalid-options');
     throw error;
   }
   const maxPacketBytes = options.maxPacketBytes ?? DEFAULT_MAX_PACKET_BYTES;
-  if (!Number.isSafeInteger(maxPacketBytes) || maxPacketBytes < 0) throw new PageSessionError('invalid-options');
+  if (!Number.isSafeInteger(maxPacketBytes) || maxPacketBytes < 0) refusePageSession('invalid-options');
   return deepFreeze({
     maxPacketBytes,
     actions: {
@@ -104,7 +104,6 @@ class Runtime implements PageSession {
   constructor(page: PageLike, policy: Policy, scheduler?: Scheduler) {
     this.#core = new Core({
       transport: new PageTransport(page),
-      inspector: false,
       maxPacketBytes: policy.maxPacketBytes,
       actions: { ...policy.actions, ...(scheduler ? { scheduler } : {}) },
       onError: () => defaultErrorHandler(new PageSessionError('core-failure')),
@@ -113,20 +112,20 @@ class Runtime implements PageSession {
         if (owner) guarded(owner.onError, () => owner.onError(error));
         else defaultErrorHandler(new PageSessionError('core-failure'));
       },
-      onIgnored: (reason) => this.each((consumer) => consumer.ignored(reason)),
+      onIgnored: (reason) => this.#each((consumer) => consumer.ignored(reason)),
     });
     this.#snapshot = this.#core.state.snapshot();
     this.#core.state.onChange(() => {
       this.#dirty = true;
     });
     this.#core.onPacket((packet) => {
-      const changed = this.refresh();
-      this.each((consumer) => consumer.packet(packet, changed));
+      const changed = this.#refresh();
+      this.#each((consumer) => consumer.packet(packet, changed));
     });
-    this.#core.onOutgoing((packet) => this.each((consumer) => consumer.outgoing(packet)));
+    this.#core.onOutgoing((packet) => this.#each((consumer) => consumer.outgoing(packet)));
     this.#core.onConnectionChange((connected) => {
-      this.refresh();
-      this.each((consumer) => consumer.connection(connected));
+      this.#refresh();
+      this.#each((consumer) => consumer.connection(connected));
     });
     this.#core.start();
   }
@@ -158,7 +157,7 @@ class Runtime implements PageSession {
   }
 
   send(text: string): boolean {
-    if (this.#operation || this.#core.actions.busy) throw new PageSessionError('busy');
+    if (this.#operation || this.#core.actions.busy) refusePageSession('busy');
     try {
       const sent = this.#core.sendRaw(text);
       if (sent) this.#core.markLowLevelWrite();
@@ -170,13 +169,13 @@ class Runtime implements PageSession {
   }
 
   buy(owner: Consumer, kind: 'ball' | 'item', id: number, quantity: number, options: ActionCallOptions): Promise<BuyResult> {
-    return this.execute(owner, options, (call) =>
+    return this.#execute(owner, options, (call) =>
       kind === 'ball' ? this.#core.actions.buyBall(id, quantity, call) : this.#core.actions.buyItem(id, quantity, call),
     ) as Promise<BuyResult>;
   }
 
   sell(owner: Consumer, id: number, options: ActionCallOptions & { confirmIrreversible?: boolean }): Promise<SellResult> {
-    return this.execute(owner, options, (call) =>
+    return this.#execute(owner, options, (call) =>
       this.#core.actions.sellPokemon(id, {
         ...call,
         ...(options.confirmIrreversible === undefined ? {} : { confirmIrreversible: options.confirmIrreversible }),
@@ -184,7 +183,7 @@ class Runtime implements PageSession {
     ) as Promise<SellResult>;
   }
 
-  private execute(
+  #execute(
     owner: Consumer,
     options: ActionCallOptions,
     invoke: (options: ActionCallOptions) => Promise<ActionResult>,
@@ -232,7 +231,7 @@ class Runtime implements PageSession {
     return local;
   }
 
-  private refresh(): boolean {
+  #refresh(): boolean {
     if (this.#dirty) {
       this.#snapshot = this.#core.state.snapshot();
       this.#dirty = false;
@@ -240,7 +239,7 @@ class Runtime implements PageSession {
     }
     return false;
   }
-  private each(deliver: (consumer: Consumer) => void): void {
+  #each(deliver: (consumer: Consumer) => void): void {
     const generation = this.generation;
     for (const consumer of [...this.#consumers]) {
       if (this.generation !== generation) break;
@@ -253,15 +252,15 @@ class Runtime implements PageSession {
 export function ensurePageSession(page: PageLike, options?: BootstrapOptions, scheduler?: Scheduler): PageSession {
   const policy = options === undefined ? undefined : policyOf(options);
   if (typeof page.WebSocket !== 'function' || typeof page.location?.host !== 'string' || typeof page.location?.href !== 'string')
-    throw new PageSessionError('unsupported-context');
+    refusePageSession('unsupported-context');
   const occupied = Object.getOwnPropertyDescriptor(page, SLOT);
   if (occupied) {
     const slot: unknown = occupied.value;
-    if (slot === null || typeof slot !== 'object') throw new PageSessionError('incompatible-runtime');
+    if (slot === null || typeof slot !== 'object') refusePageSession('incompatible-runtime');
     const descriptor = slot as { abi?: unknown; capabilities?: unknown; policy?: unknown; runtime?: unknown };
     const capabilities = descriptor.capabilities;
     if (descriptor.abi !== ABI || !Array.isArray(capabilities) || !CAPABILITIES.every((capability) => capabilities.includes(capability)))
-      throw new PageSessionError('incompatible-runtime');
+      refusePageSession('incompatible-runtime');
     const runtime = descriptor.runtime as PageSession | undefined;
     if (
       !runtime ||
@@ -269,11 +268,11 @@ export function ensurePageSession(page: PageLike, options?: BootstrapOptions, sc
       typeof descriptor.policy !== 'string' ||
       !['attach', 'detach', 'capture', 'send', 'buy', 'sell'].every((name) => typeof Reflect.get(runtime, name) === 'function')
     )
-      throw new PageSessionError('incompatible-runtime');
-    if (policy !== undefined && descriptor.policy !== JSON.stringify(policy)) throw new PageSessionError('configuration-conflict');
+      refusePageSession('incompatible-runtime');
+    if (policy !== undefined && descriptor.policy !== JSON.stringify(policy)) refusePageSession('configuration-conflict');
     return runtime;
   }
-  if (Object.getOwnPropertyDescriptor(page, LEGACY)) throw new PageSessionError('incompatible-runtime');
+  if (Object.getOwnPropertyDescriptor(page, LEGACY)) refusePageSession('incompatible-runtime');
   const effective = policy ?? policyOf({});
   const runtime = new Runtime(page, effective, scheduler);
   Object.defineProperty(page, SLOT, {

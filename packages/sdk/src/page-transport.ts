@@ -27,44 +27,44 @@ type WithHook = PageLike & { [HOOK_KEY]?: SharedHook };
  * The game's socket is the one on the page's own host with the path `/`; any other socket is left alone.
  */
 export class PageTransport implements Transport {
-  private hook: SharedHook | null = null;
-  private handlers: TransportHandlers | null = null;
-  private subscription: TransportHandlers | null = null;
+  #hook: SharedHook | null = null;
+  #handlers: TransportHandlers | null = null;
+  #subscription: TransportHandlers | null = null;
 
   constructor(private readonly page: PageLike = globalThis) {}
 
   get readyState(): number {
-    return this.hook?.socket?.readyState ?? -1;
+    return this.#hook?.socket?.readyState ?? -1;
   }
 
   start(handlers: TransportHandlers): void {
-    if (this.handlers) return;
-    this.handlers = handlers;
-    this.hook = installHook(this.page);
+    if (this.#handlers) return;
+    this.#handlers = handlers;
+    this.#hook = installHook(this.page);
     // Each subscriber is guarded with ITS error handler: one that throws reaches its owner and never the other subscribers.
     const onError = handlers.onError ?? defaultErrorHandler;
-    this.subscription = {
+    this.#subscription = {
       onMessage: (text) => guarded(onError, () => handlers.onMessage(text)),
       onOutgoing: (text) => guarded(onError, () => handlers.onOutgoing?.(text)),
       onBoundary: () => guarded(onError, () => handlers.onBoundary?.()),
       onOpen: () => guarded(onError, () => handlers.onOpen?.()),
       onClose: () => guarded(onError, () => handlers.onClose?.()),
     };
-    this.hook.subscribers.add(this.subscription);
+    this.#hook.subscribers.add(this.#subscription);
     // A socket adopted before this transport started is already open: say so, or the client would think it is offline.
-    if (this.hook.socket?.readyState === 1) handlers.onOpen?.();
+    if (this.#hook.socket?.readyState === 1) handlers.onOpen?.();
   }
 
   stop(): void {
-    if (!this.handlers || !this.hook) return;
-    if (this.subscription) this.hook.subscribers.delete(this.subscription);
-    this.subscription = null;
-    this.handlers = null;
-    this.hook = null; // the page patch stays: other copies may share it and it is harmless without subscribers
+    if (!this.#handlers || !this.#hook) return;
+    if (this.#subscription) this.#hook.subscribers.delete(this.#subscription);
+    this.#subscription = null;
+    this.#handlers = null;
+    this.#hook = null; // the page patch stays: other copies may share it and it is harmless without subscribers
   }
 
   send(text: string): boolean {
-    const hook = this.hook;
+    const hook = this.#hook;
     const socket = hook?.socket;
     if (!hook || !socket || socket.readyState !== 1) return false;
     hook.originalSend.call(socket, text); // the original send: the SDK's own frames are not reported as the game's
