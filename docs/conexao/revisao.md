@@ -216,3 +216,48 @@ version and observed stage assertions when the reserved run actually occurs.
 Skill `webapp-testing` was invoked for this preparation; its inspect/wait/
 cleanup guidance informed explicit stage synchronization and owned-helper
 cleanup. Its Playwright examples are not evidence that Playwright is installed.
+
+## Independent review of the standalone/harness front
+
+Reviewed `925e31b490fbd7dc6ef74f6d1d386186e4a892b0` via Git objects, without
+editing its implementation. The example uses explicit bootstrap and no
+transport; distribution consumers test independent IIFE evaluations and
+relocated type/runtime consumption. The native harness implements the planned
+held-upgrade observation, native welcome-before-attach signal, stopped
+snapshot, successor-only send and bounded output. These are inspection
+findings, not runtime passes against an integrated core.
+
+One execution blocker was reported to its author: Playwright defaults to
+disabled Chromium sandbox unless `chromiumSandbox: true` is specified. The
+coordinator expressly forbids `--no-sandbox`. Confirmed independently in the
+provisioned `playwright-core@1.64.1` implementation: its Chromium argument
+builder appends that flag when the option is not true. The author reports
+the correction locally; its final committed integration must be checked
+before execution. A sandbox launch failure must not trigger weakened flags.
+The author's subsequent `d4c06d812e42aa5b93d9bceae652683a1223d329` additionally
+moves PASS output after helper cleanup and handles server bind failure; these
+changes were inspected, not executed.
+
+The coordinator authorized disposable tooling provisioning outside the
+checkout, without authorizing browser/server execution. Provisioned official
+Node `22.23.4` (npm `10.9.9`), Playwright and playwright-core `1.64.1`, and
+ws `8.22.0` into the review session's `files/sdk-native-tools` directory.
+The Node archive matched its official SHA-256 checksum. npm install used
+`--ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org`.
+The isolated package lock records registry URLs and SHA-512 integrities;
+its SHA-256 is
+`8132bf454e426d234e1fe667c2cd226a337fef40a94e79a670913a64be438659`.
+
+Playwright downloaded its Chromium revision `1248` (Chrome for Testing
+`156.0.8078.4` according to download metadata), headless shell and FFmpeg
+only into that directory's `browsers/` cache. The browser executable SHA-256
+is `c8509aee32abd6977968e9999769980b7a420dea05402d90042d9e5b41db15ef`.
+Download sources, versions, commands and package integrities are retained
+in the session artifact `sdk-native-tools/provenance.json` and package lock.
+No browser, server, installed Chrome profile or authentication was used.
+The SDK package manifest/lockfile and runtime remain unchanged.
+
+Execution remains conditional on the corrected integrated SHA, green build
+and coordinator's serial window. The owner and coordinator receive the
+absolute tooling path and exact environment command through session messages;
+machine-specific paths do not belong in the repository's portable commands.
