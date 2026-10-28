@@ -178,6 +178,68 @@ test('independent browser bundles retain early state and isolate stop and socket
   });
 });
 
+test('independent IIFE consumers stop old-generation fan-out after a listener creates a successor', { skip: !built }, () => {
+  const context = vm.createContext({ URL, structuredClone, EventTarget, Event, MessageEvent, setTimeout, clearTimeout, console });
+  vm.runInContext(
+    `class Socket extends EventTarget {
+       constructor(url) { super(); this.url = url; this.readyState = 0; }
+       send() {}
+       open() { this.readyState = 1; this.dispatchEvent(new Event('open')); }
+       receive(gold) {
+         this.dispatchEvent(new MessageEvent('message', {
+           data:JSON.stringify({t:'welcome',estado:{cheio:true,gold,pokemons:[]}})
+         }));
+       }
+     }
+     globalThis.WebSocket = Socket;
+     globalThis.location = {host:'game.test',href:'https://game.test/'};
+    `,
+    context,
+  );
+  const bundle = fs.readFileSync(path.join(SDK, 'dist/pokeidle-sdk.iife.js'), 'utf8');
+  vm.runInContext(bundle, context);
+  vm.runInContext('globalThis.copyA = PokeIdleSDK; copyA.bootstrapPageSession();', context);
+  vm.runInContext(bundle, context);
+  const actual = vm.runInContext(
+    `(() => {
+       const a = new copyA.PokeIdleClient({inspector:false});
+       const b = new PokeIdleSDK.PokeIdleClient({inspector:false});
+       let successor;
+       let firstWelcome = true;
+       const aPackets = [];
+       const bPackets = [];
+       const bWelcomes = [];
+       a.on('welcome', () => {
+         if (!firstWelcome) return;
+         firstWelcome = false;
+         successor = new WebSocket('wss://game.test/');
+       });
+       a.onPacket(packet => aPackets.push(packet.estado.gold));
+       b.on('welcome', packet => bWelcomes.push(packet.estado.gold));
+       b.onPacket(packet => bPackets.push(packet.estado.gold));
+       a.start(); b.start();
+       const first = new WebSocket('wss://game.test/');
+       first.open();
+       first.receive(101);
+       const boundary = {aPackets:[...aPackets],bPackets:[...bPackets],bWelcomes:[...bWelcomes],
+         generation:b.generation,connected:b.connected,complete:b.state.complete};
+       successor.open();
+       successor.receive(202);
+       const result = {boundary,aPackets,bPackets,bWelcomes,current:[b.state.gold,b.state.complete,b.connected]};
+       a.stop(); b.stop();
+       return JSON.stringify(result);
+     })()`,
+    context,
+  );
+  assert.deepEqual(JSON.parse(actual), {
+    boundary: { aPackets: [], bPackets: [], bWelcomes: [], generation: 2, connected: false, complete: false },
+    aPackets: [202],
+    bPackets: [202],
+    bWelcomes: [202],
+    current: [202, true, true],
+  });
+});
+
 test(
   'a relocated distribution runs and typechecks as both ESM and CommonJS without the source checkout',
   { skip: built ? false : 'run npm run build first' },

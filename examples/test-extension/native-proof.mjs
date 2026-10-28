@@ -187,6 +187,31 @@ async function run() {
     await deadline(commandReceived);
     check('exactly-one-send-on-current-socket', frames, [{ socket: 1, text: '{"t":"ping"}' }]);
     check('no-extra-game-connections', peers.length, 2);
+    await page.evaluate(() => {
+      proof.b.stop();
+      proof.a.start();
+      proof.b.start();
+      proof.reentrantAPackets = [];
+      proof.reentrantBPackets = [];
+      proof.reentrantBWelcomes = [];
+      proof.a.on('welcome', () => {
+        const previous = proof.b.generation;
+        proof.third = new WebSocket('ws://' + location.host + '/');
+        proof.reentrantBoundary = [proof.third.readyState, proof.b.generation > previous, proof.b.connected, proof.b.state.complete];
+      });
+      proof.a.onPacket((packet) => proof.reentrantAPackets.push(packet.estado.gold));
+      proof.b.on('welcome', (packet) => proof.reentrantBWelcomes.push(packet.estado.gold));
+      proof.b.onPacket((packet) => proof.reentrantBPackets.push(packet.estado.gold));
+    });
+    peers[1].send(JSON.stringify({ t: 'welcome', estado: { cheio: true, gold: 301, pokemons: [] } }));
+    await page.waitForFunction(() => Array.isArray(proof.reentrantBoundary));
+    check(
+      'reentrant-replacement-stops-old-generation-fan-out',
+      await page.evaluate(() => [proof.reentrantBoundary, proof.reentrantAPackets, proof.reentrantBPackets, proof.reentrantBWelcomes]),
+      [[0, true, false, false], [], [], []],
+    );
+    await page.waitForFunction(() => proof.third.readyState === WebSocket.OPEN);
+    check('only-page-owned-reentrant-successor', peers.length, 3);
     report = {
       status: 'PASS',
       stages,

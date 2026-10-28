@@ -60,6 +60,9 @@ readiness invalidation when a CONNECTING successor is constructed. The server
 holds the successor's HTTP upgrade until that observation is complete.
 OPEN alone must not restore completeness; a fresh welcome does. Old socket
 traffic/close must be ignored and exactly one ping must reach the successor.
+Finally, A creates a third page-owned CONNECTING socket from inside a welcome
+listener. The old-generation packet must not continue to A's catch-all or B's
+typed/catch-all listeners after that boundary.
 
 Synchronization uses explicit page flags and server handshake/message signals,
 not arbitrary sleeps or global networkidle while an upgrade is held.
