@@ -2,6 +2,11 @@
 
 ## Status and scope
 
+Implementation and the final author/independent gates are recorded in
+[`revisao.md`](revisao.md). The baseline, planned commands and documentary
+phase notes below are retained as history, not descriptions of the current
+runtime or substitutes for the checkpoint-specific results.
+
 The coordinator froze the contract and authorized implementation after the
 architecture/review round. The final architecture is recorded in
 `proposta-arquitetura.md`; the independent gates are in `revisao.md`.
