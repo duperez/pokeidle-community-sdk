@@ -21,16 +21,16 @@ another WebSocket mechanism or a public transport option.
 
 Baseline evidence:
 
-| Location | Relevant behavior |
-| --- | --- |
-| `packages/sdk/src/page-transport.ts:17,74-76,97-139` | Global-symbol rendezvous; constructor/send adoption; replaced socket silenced; existing version not validated. |
-| `packages/sdk/src/client.ts:53-60,193-210` | Each client creates state/Actions and parses independently. Sharing only the hook does not satisfy the goal. |
-| `packages/sdk/src/client.ts:66-111` | Idempotent start/stop and per-run guards; stale on open/close, not immediately on adopting a CONNECTING successor. |
-| `packages/sdk/src/client.ts:245-256` | Exceptions are isolated, but listeners receive the same mutable object. |
-| `packages/sdk/src/state.ts:49-60,99-103` | Private frozen copies already exist; markStale retains old values. |
-| `packages/sdk/src/actions.ts:39-55,181-225` | inFlight, floors, limits and ledger are per Actions instance; listeners are armed before sending and onSend precedes the terminal result. |
-| `packages/sdk/src/confirmations.ts:28-113,117-169` | Event/inventory evidence without a request id; not a transaction receipt. |
-| `examples/test-extension/manifest.json:7-13` | The independent extension already declares MAIN/document_start. |
+| Location                                             | Relevant behavior                                                                                                                         |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/sdk/src/page-transport.ts:17,74-76,97-139` | Global-symbol rendezvous; constructor/send adoption; replaced socket silenced; existing version not validated.                            |
+| `packages/sdk/src/client.ts:53-60,193-210`           | Each client creates state/Actions and parses independently. Sharing only the hook does not satisfy the goal.                              |
+| `packages/sdk/src/client.ts:66-111`                  | Idempotent start/stop and per-run guards; stale on open/close, not immediately on adopting a CONNECTING successor.                        |
+| `packages/sdk/src/client.ts:245-256`                 | Exceptions are isolated, but listeners receive the same mutable object.                                                                   |
+| `packages/sdk/src/state.ts:49-60,99-103`             | Private frozen copies already exist; markStale retains old values.                                                                        |
+| `packages/sdk/src/actions.ts:39-55,181-225`          | inFlight, floors, limits and ledger are per Actions instance; listeners are armed before sending and onSend precedes the terminal result. |
+| `packages/sdk/src/confirmations.ts:28-113,117-169`   | Event/inventory evidence without a request id; not a transaction receipt.                                                                 |
+| `examples/test-extension/manifest.json:7-13`         | The independent extension already declares MAIN/document_start.                                                                           |
 
 ## Proposed public API
 
@@ -57,18 +57,18 @@ client.stop(); // Does not close the socket, stop peers or remove the runtime.
 
 Proposed contract:
 
-| Surface | Semantics |
-| --- | --- |
-| `bootstrapPageSession(options?): void` | Installs/adopts the runtime early; idempotent for equal normalized configuration. Returns neither a socket nor a mutable runtime. |
-| `new PokeIdleClient(options?)` | Creates only a stopped facade; no hook, DOM, connection or global subscription. Accepts local `onError` and `inspector`. |
-| `start(): void` | Synchronous, idempotent attach. Without bootstrap, installs with defaults; this cannot recover missed traffic. Context/version/configuration failures are explicit and leave the client stopped. |
-| `stop(): void` | Idempotent detach; local connected/complete become false before notification. Local values remain last-known; explicit subscriptions survive for restart. |
-| `connected: boolean` | Client started and current socket OPEN. Does not imply complete state. |
-| `generation: number` | Generation observed in this document, 0 before adoption; readable metadata, not a global account identifier. |
-| `state.complete: boolean` | Complete snapshot collected by the runtime in this generation, with the client attached. |
-| `state` | Read-only view preserving getters and onChange; do not expose `applyPacket`/`markStale` through this view. |
-| `actions` | Consumer-bound facade forwarding to the single coordinator. No publicly shared mutable Actions object. |
-| `sendCommand`/`sendRaw` | Always `Promise<boolean>`; true = accepted for sending, false = definitely not sent because connection/attachment is absent. Validation errors remain synchronous; uncertain failure rejects. |
+| Surface                                | Semantics                                                                                                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bootstrapPageSession(options?): void` | Installs/adopts the runtime early; idempotent for equal normalized configuration. Returns neither a socket nor a mutable runtime.                                                                |
+| `new PokeIdleClient(options?)`         | Creates only a stopped facade; no hook, DOM, connection or global subscription. Accepts local `onError` and `inspector`.                                                                         |
+| `start(): void`                        | Synchronous, idempotent attach. Without bootstrap, installs with defaults; this cannot recover missed traffic. Context/version/configuration failures are explicit and leave the client stopped. |
+| `stop(): void`                         | Idempotent detach; local connected/complete become false before notification. Local values remain last-known; explicit subscriptions survive for restart.                                        |
+| `connected: boolean`                   | Client started and current socket OPEN. Does not imply complete state.                                                                                                                           |
+| `generation: number`                   | Generation observed in this document, 0 before adoption; readable metadata, not a global account identifier.                                                                                     |
+| `state.complete: boolean`              | Complete snapshot collected by the runtime in this generation, with the client attached.                                                                                                         |
+| `state`                                | Read-only view preserving getters and onChange; do not expose `applyPacket`/`markStale` through this view.                                                                                       |
+| `actions`                              | Consumer-bound facade forwarding to the single coordinator. No publicly shared mutable Actions object.                                                                                           |
+| `sendCommand`/`sendRaw`                | Always `Promise<boolean>`; true = accepted for sending, false = definitely not sent because connection/attachment is absent. Validation errors remain synchronous; uncertain failure rejects.    |
 
 A uniform asynchronous send return removes the transport generic and avoids a
 future API rewrite when a bridge exists. Do not introduce a command queue.
@@ -133,22 +133,22 @@ a facade execution. Capture callbacks and waiters check both where applicable.
 Before any boundary callback, change generation/socket, invalidate complete and
 finish affected reconciliation. Only then notify state/connection observers.
 
-| Event | Runtime/generation | Facade and actions |
-| --- | --- | --- |
-| Client constructor | No global change | Stopped, disconnected, incomplete. |
-| Bootstrap without socket | Hook installed, incomplete state | Zero clients are allowed; opens no connection. |
-| New eligible socket, still CONNECTING | Generation advances immediately; complete false; previous socket loses authority | Observers never see previous data as current; old pending operations do not migrate. |
-| Current socket OPEN | Same generation; connected true; does not restore complete | Actions return no-state until valid complete state. |
-| Valid complete `welcome` | Applies state/catalogs before notification; complete true | Actions can use this generation. Partial/malformed welcome does not fabricate complete. |
-| Attach after bootstrap collected welcome + deltas | Does not restart generation or parsing | Immediately current view; no synthetic welcome event or historical event replay. |
-| Attach without collected welcome | Socket may be OPEN; complete false | Only actual partial values; recovery through next welcome/reload by host/game, without automatic login/query. |
-| Socket predating the hook | Adopts on first observed send if no live successor exists | No magic socket enumeration or recovery of missed welcome. |
-| Replaced socket message/open/close/send | Ignored for state/events/adoption | Does not resurrect a generation or disconnect the successor. |
-| Current socket CLOSE | complete false, connected false before notification | Possibly sent pending operations end unconfirmed, except for already conclusive evidence under the existing rule. |
-| A stops, B remains | Runtime and generation unchanged | A stale/disconnected; B stays current; only A's own action is locally cancelled. |
-| Last consumer stops | Hook, parser and collection continue | Does not close socket; releases facade-internal subscriptions, not limit/risk history. |
-| A restarts | Adopts current runtime state if complete in the current generation | Does not reuse old callbacks; no command repetition. |
-| New navigation/document | New runtime and session identity | No state/pending operation from the previous page is current. |
+| Event                                             | Runtime/generation                                                               | Facade and actions                                                                                                |
+| ------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Client constructor                                | No global change                                                                 | Stopped, disconnected, incomplete.                                                                                |
+| Bootstrap without socket                          | Hook installed, incomplete state                                                 | Zero clients are allowed; opens no connection.                                                                    |
+| New eligible socket, still CONNECTING             | Generation advances immediately; complete false; previous socket loses authority | Observers never see previous data as current; old pending operations do not migrate.                              |
+| Current socket OPEN                               | Same generation; connected true; does not restore complete                       | Actions return no-state until valid complete state.                                                               |
+| Valid complete `welcome`                          | Applies state/catalogs before notification; complete true                        | Actions can use this generation. Partial/malformed welcome does not fabricate complete.                           |
+| Attach after bootstrap collected welcome + deltas | Does not restart generation or parsing                                           | Immediately current view; no synthetic welcome event or historical event replay.                                  |
+| Attach without collected welcome                  | Socket may be OPEN; complete false                                               | Only actual partial values; recovery through next welcome/reload by host/game, without automatic login/query.     |
+| Socket predating the hook                         | Adopts on first observed send if no live successor exists                        | No magic socket enumeration or recovery of missed welcome.                                                        |
+| Replaced socket message/open/close/send           | Ignored for state/events/adoption                                                | Does not resurrect a generation or disconnect the successor.                                                      |
+| Current socket CLOSE                              | complete false, connected false before notification                              | Possibly sent pending operations end unconfirmed, except for already conclusive evidence under the existing rule. |
+| A stops, B remains                                | Runtime and generation unchanged                                                 | A stale/disconnected; B stays current; only A's own action is locally cancelled.                                  |
+| Last consumer stops                               | Hook, parser and collection continue                                             | Does not close socket; releases facade-internal subscriptions, not limit/risk history.                            |
+| A restarts                                        | Adopts current runtime state if complete in the current generation               | Does not reuse old callbacks; no command repetition.                                                              |
+| New navigation/document                           | New runtime and session identity                                                 | No state/pending operation from the previous page is current.                                                     |
 
 Preserve the page-host and `/` path filter, with valid WebSocket schemes;
 do not start accepting every socket in the document. The constructor must
@@ -207,9 +207,9 @@ from the previous generation.
 
 ## Rejected alternative and migration
 
-| Option | Consequence | Decision |
-| --- | --- | --- |
-| Single MAIN runtime with facades and shared policy | Less per-client flexibility, but coherent late readiness and serialization; a future bridge uses the same owner. | Recommended for this increment. |
+| Option                                                                             | Consequence                                                                                                                                | Decision                                      |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| Single MAIN runtime with facades and shared policy                                 | Less per-client flexibility, but coherent late readiness and serialization; a future bridge uses the same owner.                           | Recommended for this increment.               |
 | Only a factory without public transport, retaining per-client parser/state/Actions | Smaller initial migration, but duplicates CPU, misses welcome before attach and permits two independent actions against the same evidence. | Rejected: does not deliver committed sharing. |
 
 Do not add a cross-extension broker, daemon, mandatory worker or another repo.
@@ -245,19 +245,19 @@ before runtime installation/adoption; removing only its TypeScript type is insuf
 
 ## Acceptance matrix and execution
 
-| Case | Minimum required proof |
-| --- | --- |
-| Bootstrap/construction | Constructor installs no hook; MAIN bootstrap before game captures welcome without a client; two equal calls do not repatch. |
-| Filter/constructor | Host/path/scheme, protocols, instanceof/subclass, constants and native throws; unrelated sockets untouched. |
-| Adoption/late attach | Old socket adopted on send; attach with/without welcome; two clients read the same state without duplicate parse/apply. |
-| Generation | CONNECTING successor invalidates before callbacks; old events ignored; later welcome does not confirm an old order. |
-| stop/restart | A does not stop B; stopped snapshot stale; restart uses current generation; zero consumers keeps collection; no command replay. |
-| Bundles | Two independent compiled copies in the same MAIN share; incompatibility/legacy slot/configuration conflict fail without repatch. |
-| Isolation | Nested packet/battle/state mutation cannot affect peers; throwing listener/onError/onSend; reentrant stop prevents old callbacks. |
-| Concurrency | Two actions compete for the same inFlight; floors/cooldown outlive owner; low-level busy; interfering manual/raw writes do not become strong confirmation. |
-| Send/reconciliation | Immediate response, false, accepted, uncertain throw, rejection, timeout, stop and disconnect; onSend/terminal ordering and budgets preserved. |
-| Hostile data/volume | Invalid JSON, invalid type, large frame and valid large welcome; drops observable by controlled reason, without diagnostic payload. |
-| Real standalone | Local extension/IIFE and synthetic game: early bootstrap, welcome before attach, two compatible copies and successor; no launcher/CDP/real account. |
+| Case                   | Minimum required proof                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bootstrap/construction | Constructor installs no hook; MAIN bootstrap before game captures welcome without a client; two equal calls do not repatch.                                |
+| Filter/constructor     | Host/path/scheme, protocols, instanceof/subclass, constants and native throws; unrelated sockets untouched.                                                |
+| Adoption/late attach   | Old socket adopted on send; attach with/without welcome; two clients read the same state without duplicate parse/apply.                                    |
+| Generation             | CONNECTING successor invalidates before callbacks; old events ignored; later welcome does not confirm an old order.                                        |
+| stop/restart           | A does not stop B; stopped snapshot stale; restart uses current generation; zero consumers keeps collection; no command replay.                            |
+| Bundles                | Two independent compiled copies in the same MAIN share; incompatibility/legacy slot/configuration conflict fail without repatch.                           |
+| Isolation              | Nested packet/battle/state mutation cannot affect peers; throwing listener/onError/onSend; reentrant stop prevents old callbacks.                          |
+| Concurrency            | Two actions compete for the same inFlight; floors/cooldown outlive owner; low-level busy; interfering manual/raw writes do not become strong confirmation. |
+| Send/reconciliation    | Immediate response, false, accepted, uncertain throw, rejection, timeout, stop and disconnect; onSend/terminal ordering and budgets preserved.             |
+| Hostile data/volume    | Invalid JSON, invalid type, large frame and valid large welcome; drops observable by controlled reason, without diagnostic payload.                        |
+| Real standalone        | Local extension/IIFE and synthetic game: early bootstrap, welcome before attach, two compatible copies and successor; no launcher/CDP/real account.        |
 
 Unit fakes do not prove extension worlds. Require synthetic browser evidence for
 MAIN distribution; if not demonstrated, record it as unproven, never infer it
