@@ -339,3 +339,27 @@ repro output are kept in review-session artifacts. Native success is an
 early integration proof only: R1/R2 fixes, documentation migration, bundle
 budget, mutation/coverage and the exact final clean SHA still require
 independent closure. No performance improvement is claimed from this run.
+
+### Focused R1/R2 correction check
+
+Subsequently reviewed exact correction
+`fc0fb1f36d5e026be02d6643dc7f23e16360e19c` without editing it. Runtime fan-out
+now captures generation and aborts when it changes. Facade delivery captures
+both attach/run and generation across state, typed packet, catch-all, battle,
+outgoing and connection phases. Stop notification uses a stopped-run token
+and respects listener removal, so a restart invalidates its remaining tail.
+
+Executed on that exact SHA with Node `22.23.4` and npm `10.8.2`:
+
+```sh
+npm run build -w pokeidle-community-sdk
+SDK_REVIEW_WORKTREE="$PWD" node --test "$REVIEW_ARTIFACTS/core-reentrancy-review.test.mjs"
+node --import tsx --test packages/sdk/test/page-session.test.ts
+```
+
+Results: SDK build passed; **both independent public-IIFE repro assertions
+passed (2/2)**, versus 0/2 on ff459f5; page-session suite **26/26 passed**.
+R1 and R2 are closed for this focused correction, subject to preservation in
+the final integrated SHA. No browser/server was started for this check.
+R3 migration, R4 budget and final broad/mutation/distribution gates remain
+separate; the 13-stage native proof still identifies ae4f514, not fc0fb1f.
