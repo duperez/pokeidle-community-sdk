@@ -120,6 +120,7 @@ test('independent browser bundles retain early state and isolate stop and socket
   vm.runInContext(bundle, context);
   vm.runInContext('globalThis.copyB = PokeIdleSDK; copyB.bootstrapPageSession();', context);
   assert.equal(context.WebSocket, context.hookA, 'a separately evaluated bundle must reuse the installed constructor');
+  assert.notEqual(context.copyA.GameState, context.copyB.GameState, 'the bundles must contain independently evaluated state classes');
   const actual = await vm.runInContext(
     `(async () => {
        const first = new WebSocket('wss://game.test/');
@@ -137,7 +138,32 @@ test('independent browser bundles retain early state and isolate stop and socket
        a.start(); b.start();
        const late = [a.connected,a.state.complete,a.state.gold,b.connected,b.state.complete,b.state.gold];
        const lateWelcomes = welcomes.slice();
-       first.receive({t:'estado',estado:{gold:102}});
+       const frame = '{"t":"estado","estado":{"gold":102}}';
+       const processing = {parses:0,applyA:0,applyB:0};
+       const parse = JSON.parse;
+       const applyA = copyA.GameState.prototype.applyPacket;
+       const applyB = copyB.GameState.prototype.applyPacket;
+       JSON.parse = function(...args) {
+         if (args[0] === frame) processing.parses++;
+         return Reflect.apply(parse,this,args);
+       };
+       copyA.GameState.prototype.applyPacket = function(...args) {
+         processing.applyA++;
+         return Reflect.apply(applyA,this,args);
+       };
+       copyB.GameState.prototype.applyPacket = function(...args) {
+         processing.applyB++;
+         return Reflect.apply(applyB,this,args);
+       };
+       try {
+         first.dispatchEvent(new MessageEvent('message', {data:frame}));
+       } finally {
+         JSON.parse = parse;
+         copyA.GameState.prototype.applyPacket = applyA;
+         copyB.GameState.prototype.applyPacket = applyB;
+       }
+       const sharedProcessing = {parses:processing.parses,applies:processing.applyA + processing.applyB,
+         aGold:a.state.gold,bGold:b.state.gold};
        a.stop();
        first.receive({t:'estado',estado:{gold:103}});
        const stopped = [a.connected,a.state.complete,a.state.gold,b.connected,b.state.complete,b.state.gold,first.readyState];
@@ -150,7 +176,7 @@ test('independent browser bundles retain early state and isolate stop and socket
        const opened = [b.connected,b.state.complete,b.state.gold];
        second.receive({t:'welcome',estado:{cheio:true,gold:201,pokemons:[]}});
        const accepted = await b.sendCommand({t:'ping'});
-       const result = {late,lateWelcomes,welcomes,deltasA,deltasB,stopped,connecting,opened,
+       const result = {late,lateWelcomes,sharedProcessing,welcomes,deltasA,deltasB,stopped,connecting,opened,
          current:[b.connected,b.state.complete,b.state.gold],accepted,oldFrames:first.sent,newFrames:second.sent};
        b.stop();
        second.receive({t:'estado',estado:{gold:202}});
@@ -164,6 +190,7 @@ test('independent browser bundles retain early state and isolate stop and socket
   assert.deepEqual(JSON.parse(actual), {
     late: [true, true, 101, true, true, 101],
     lateWelcomes: [],
+    sharedProcessing: { parses: 1, applies: 1, aGold: 102, bGold: 102 },
     welcomes: ['b'],
     deltasA: [102],
     deltasB: [102, 103],
