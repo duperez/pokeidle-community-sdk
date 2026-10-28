@@ -73,3 +73,21 @@ and empty profile directory.
 This proves neither isolated-world bridging, internal parse counts, action
 transaction attribution nor production performance. Internal sharing and
 action outcome ordering remain separate core-test responsibilities.
+
+### Executed early checkpoint
+
+The initial integrated proof ran against clean revision
+`ae4f5141d7197b70c292168c24fa772a3545088b` with core checkpoint
+`ff459f5a2562e5a09a830b898071ade6ea61e285` and its boundary prerequisites.
+Node 22.23.4, npm 10.9.9, Playwright 1.64.1 and Chromium 156.0.8078.4
+were used, with sandboxing enabled and a disposable empty profile.
+`npm run distribution -- --require-clean` passed with `dirty=false`;
+`npm run test:distribution` passed all 8 tests without skips.
+`node examples/test-extension/native-proof.mjs` passed all 13 stages,
+observing 2 page-owned connections and exactly 1 command on the successor.
+All owned helpers closed before PASS was emitted.
+
+This was discovery evidence, not final SDK acceptance: the parallel core
+still had its existing 40 KiB bundle budget and mutation-target updates
+pending. Rerun against the final integrated revision; do not transfer this
+checkpoint's result to later bytes without checking them.
