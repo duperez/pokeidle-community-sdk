@@ -28,11 +28,13 @@ test('the browser bundle runs standalone and delivers market packets through the
   const bundle = fs.readFileSync(path.join(SDK, 'dist/pokeidle-sdk.iife.js'), 'utf8');
   vm.runInContext(bundle, context);
   assert.equal(context.WebSocket, original, 'loading exports alone does not install a hook');
+  vm.runInContext('globalThis.constructed = new PokeIdleSDK.PokeIdleClient();', context);
+  assert.equal(context.WebSocket, original, 'constructing a stopped facade does not install a hook');
   const actual = vm.runInContext(
     `(async () => {
-       const {PokeIdleClient, bootstrapPageSession} = PokeIdleSDK;
+       const {bootstrapPageSession} = PokeIdleSDK;
        bootstrapPageSession();
-       const client = new PokeIdleClient();
+       const client = constructed;
        let market;
        client.on('market', packet => { market = packet; });
        client.start();
@@ -40,7 +42,9 @@ test('the browser bundle runs standalone and delivers market packets through the
        socket.dispatchEvent(new Event('open'));
        socket.dispatchEvent(new MessageEvent('message', {data:'{"t":"market","medias":{"1":42},"resumo":[]}' }));
        const accepted = await client.sendCommand({t:'market.itens'});
-       const result = JSON.stringify({market, accepted, sent:socket.sent, connected:client.connected});
+       const action = await client.actions.buyBall(1,1,{dryRun:true});
+       const result = JSON.stringify({market, accepted, sent:socket.sent, connected:client.connected,
+         complete:client.state.complete,action:action.status});
        client.stop();
        return result;
      })()`,
@@ -51,6 +55,8 @@ test('the browser bundle runs standalone and delivers market packets through the
     accepted: true,
     sent: ['{"t":"market.itens"}'],
     connected: true,
+    complete: false,
+    action: 'no-state',
   });
 });
 
