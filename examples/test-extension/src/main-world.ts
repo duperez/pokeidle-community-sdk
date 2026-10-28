@@ -96,7 +96,7 @@ function mountOverlay(): void {
     const { state } = client;
     const rows: string[] = [];
     if (state.player && !state.complete)
-      rows.push('PARTIAL STATE: the welcome packet was missed.\nReload the game page (F5) to receive it.', '');
+      rows.push('CURRENT STATE UNAVAILABLE: waiting for a full welcome.\nIf capture started late, reload the game page (F5).', '');
     if (state.player) {
       // Just a look at what the SDK reads; this stays on your screen.
       rows.push(`level ${state.level} · gold ${state.gold} · diamonds ${state.diamonds}`);
