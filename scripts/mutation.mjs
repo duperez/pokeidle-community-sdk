@@ -46,7 +46,10 @@ export function testsFailed(output) {
 }
 
 export function applyMutation(source, mutation) {
-  return source.includes(mutation.from) ? source.replace(mutation.from, mutation.to) : null;
+  const eol = source.includes('\r\n') ? '\r\n' : '\n';
+  const from = mutation.from.replace(/\r?\n/g, eol);
+  const to = mutation.to.replace(/\r?\n/g, eol);
+  return source.includes(from) ? source.replace(from, to) : null;
 }
 
 function runTests(mutated = false) {
@@ -55,7 +58,7 @@ function runTests(mutated = false) {
     .readdirSync(path.join(ROOT, 'packages/sdk/test'))
     .filter((name) => name.endsWith('.test.ts') && (!mutated || name !== 'bundle-size.test.ts'))
     .map((name) => path.join('test', name));
-  const run = spawnSync(process.execPath, ['--import', 'tsx', '--test', `--test-reporter=${fileURLToPath(import.meta.url)}`, ...tests], {
+  const run = spawnSync(process.execPath, ['--import', 'tsx', '--test', `--test-reporter=${import.meta.url}`, ...tests], {
     cwd: path.join(ROOT, 'packages/sdk'),
     encoding: 'utf8',
   });

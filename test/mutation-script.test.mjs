@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseAllFiles } from '../scripts/check-coverage.mjs';
 import { applyMutation, classifyTestRun, testsFailed } from '../scripts/mutation.mjs';
 import { MUTATIONS } from '../scripts/mutations.mjs';
@@ -14,7 +14,12 @@ const SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), '../packages
 test('every listed mutation still applies to the current source (a stale one would prove nothing)', () => {
   for (const mutation of MUTATIONS) {
     const source = fs.readFileSync(path.join(SRC, mutation.file), 'utf8');
-    assert.notEqual(applyMutation(source, mutation), null, `${mutation.file}: ${mutation.from}`);
+    for (const eol of ['\n', '\r\n']) {
+      const normalized = source.replace(/\r?\n/g, eol);
+      const mutated = applyMutation(normalized, mutation);
+      assert.notEqual(mutated, null, `${mutation.file} (${JSON.stringify(eol)}): ${mutation.from}`);
+      if (eol === '\r\n') assert.doesNotMatch(mutated, /(?<!\r)\n/, mutation.file);
+    }
     assert.notEqual(mutation.from, mutation.to);
   }
 });
@@ -29,7 +34,12 @@ test('mutation classification rejects missing or incomplete reporter output', ()
 test('the real Node runner distinguishes semantic failures from import, syntax and no-test runs', (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-mutation-classification-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-  const reporter = fileURLToPath(new URL('../scripts/mutation.mjs', import.meta.url));
+  const reporterDirectory = path.join(directory, 'reporter # %');
+  fs.mkdirSync(reporterDirectory);
+  for (const name of ['mutation.mjs', 'mutations.mjs']) {
+    fs.copyFileSync(new URL(`../scripts/${name}`, import.meta.url), path.join(reporterDirectory, name));
+  }
+  const reporter = pathToFileURL(path.join(reporterDirectory, 'mutation.mjs')).href;
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
   const prelude = "import test from 'node:test'; import assert from 'node:assert/strict';\n";
@@ -78,6 +88,11 @@ test('the real Node runner distinguishes semantic failures from import, syntax a
 test('applyMutation replaces only the first occurrence and reports a missing pattern', () => {
   assert.equal(applyMutation('a b a', { from: 'a', to: 'x' }), 'x b a');
   assert.equal(applyMutation('abc', { from: 'zzz', to: 'x' }), null);
+  const multiline = { from: 'first\nsecond', to: 'third\nfourth' };
+  assert.equal(applyMutation('first\nsecond\nfirst\nsecond', multiline), 'third\nfourth\nfirst\nsecond');
+  assert.equal(applyMutation('first\r\nsecond\r\nfirst\r\nsecond', multiline), 'third\r\nfourth\r\nfirst\r\nsecond');
+  assert.equal(applyMutation('first\r\nsecond\r\n', { from: 'first', to: 'third\nfourth' }), 'third\r\nfourth\r\nsecond\r\n');
+  assert.equal(applyMutation('first\r\nsecond', { from: 'absent\npattern', to: 'x' }), null);
 });
 
 test('parseAllFiles reads the totals line of the coverage report', () => {

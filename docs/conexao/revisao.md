@@ -690,3 +690,42 @@ CI. The live protocol drift recorded above is not a green check or a codec
 data-loss finding. No authenticated account, host policy/profile system,
 isolated-world/IPC bridge, additional socket, publication or CPU/network
 performance benefit was established or introduced.
+
+### Post-publication Windows tooling correction
+
+The explicitly dispatched CI run
+[40744469121](https://github.com/duperez/pokeidle-community-sdk/actions/runs/40744469121)
+tested published revision `237fc3a837c176daf999c6243b8dea6d21b7f315`.
+Linux Node20/22/24 and macOS Node22 passed. Windows Node22 passed all 268
+SDK tests but failed two of 34 repository tests; the dependent distribution
+job was skipped. This is not a successful complete remote matrix.
+
+Both failures were tooling portability defects, not upstream drift or
+transient runner provisioning. Multiline mutation patterns contain LF,
+whereas a Windows checkout can have CRLF. The same source applied with LF
+and failed with CRLF in an in-memory reproduction. The reporter argument
+also used an absolute Windows filesystem path, which the ESM loader
+interpreted as a `d:` URL scheme and rejected with
+`ERR_UNSUPPORTED_ESM_URL_SCHEME`.
+
+The coordinated correction changes only mutation tooling, its regression
+tests and this report. Matching/replacement converts the pattern and
+replacement to the source file's EOL convention, preserves the rest of the
+source and still replaces only the first occurrence. Missing patterns
+remain failures. The CLI passes the reporter's `import.meta.url`, not a
+decoded filesystem path. Real-process regressions load a copied reporter
+through a file URL from a directory containing spaces, `#` and `%`.
+
+All 77 listed targets are tested against both LF and CRLF, including
+preservation of CRLF when a single-line match inserts multiple lines.
+The real classifier suite passed 5/5 on Node20.19.0 and Node22.23.4;
+all 34 repository tests passed on Node22.23.4/npm10.8.2. The complete
+mutation run was repeated after the runner change: 77/77 killed, zero
+invalid runs, survivors, missing targets or problems, with exact source
+restoration. No mutation, expected-survivor exemption, coverage floor,
+size threshold, SDK runtime, protocol snapshot or API was changed.
+
+The follow-up remote matrix must identify the correction's own commit and
+run; it cannot inherit a Windows PASS from local macOS checks or from the
+earlier partial matrix. No weekly/drift/CodeQL run, PR, main merge or
+release is part of this correction.
