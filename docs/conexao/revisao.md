@@ -375,3 +375,33 @@ unimplemented, without a second parser or CDP fallback. Native and VM proof
 lanes remain distinct and no final budget result is claimed.
 R3 is closed for that documentation checkpoint, subject to preservation in
 the consolidated revision. No runtime tests were run for this docs-only check.
+
+### Focused generated-name codec review
+
+Reviewed `d2e20b27c1b04a93fded097c4ebfc2087a002738`: a small pure decoder
+expands generated constant name prefixes; no payload parser, action guard or
+runtime ownership code is changed in this commit. The extractor already
+restricts the relevant identifiers to letters/digits/dots, excluding the
+codec's space/colon/comma delimiters. Generated readonly tuple types preserve
+the public literal unions and runtime name lists are frozen.
+
+Independent checks under Node `22.23.4`:
+
+- `node --test test/generate-protocol.test.mjs`: **9/9 passed**, including
+  sorted identifiers, empty suffix and empty-list round-trip.
+- Transpiled the exact original registry from fc0fb1f and the codec registry
+  from d2e20b2 into separate VMs; deep-compared **all five exports**: 51 packet
+  names, 133 event names, 216 commands and 51/133 field maps were identical.
+- Compared both registry representations in the **same d2e20b2 kernel**,
+  replacing only the registry through an esbuild in-memory onLoad seam.
+  Used the bundle-size test's entry and flags (browser/ESM/chrome111, minify,
+  `new PokeIdleClient().start()`). Literal registry: 43,798 raw bytes /
+  14,287 gzip bytes; prefix registry: 41,833 raw / 14,348 gzip.
+
+The localized tradeoff is acceptable for the existing raw-size gate: 1,965
+raw bytes saved with 61 extra gzip bytes on this reviewed graph. It is not
+a network/performance improvement claim or approval of opaque compression.
+This graph is not the author's pending simplified kernel and still exceeds
+40,960 bytes; **R4 remains open until the exact consolidated build passes
+the unchanged strict budget**. No codec/runtime implementation was edited
+by the reviewer.
