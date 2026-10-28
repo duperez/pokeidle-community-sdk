@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  PokeIdleClient,
   type BattlePacket,
   type ChatPacket,
   type FieldInitPacket,
@@ -9,10 +8,10 @@ import {
   type MarketPacket,
   type MiniGamePacket,
   type StatePacket,
-  type Transport,
-  type TransportHandlers,
   type WelcomePacket,
 } from '../src/index.js';
+import { PokeIdleClient } from '../src/client-core.js';
+import type { Transport, TransportHandlers } from '../src/transport.js';
 
 // Samples with the SHAPE of real traffic and INVENTED values. The `satisfies` clauses make the compiler check that the
 // types accept a real-looking packet: if a type is too narrow, this file stops compiling.

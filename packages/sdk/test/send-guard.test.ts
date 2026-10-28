@@ -5,12 +5,11 @@ import {
   CommandRefusedError,
   FORBIDDEN_COMMANDS,
   IRREVERSIBLE_COMMANDS,
-  PokeIdleClient,
   isForbiddenCommand,
   isIrreversibleCommand,
-  type Transport,
-  type TransportHandlers,
 } from '../src/index.js';
+import { PokeIdleClient } from '../src/client-core.js';
+import type { Transport, TransportHandlers } from '../src/transport.js';
 
 class FakeTransport implements Transport {
   sent: string[] = [];

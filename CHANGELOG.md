@@ -15,6 +15,18 @@ The SDK reads a game that changes without notice. A change in the game's packets
 
 ## [Unreleased]
 
+### Breaking (shared page session)
+
+- Extensions use `bootstrapPageSession(options?)` in MAIN/document_start and `new PokeIdleClient(options?)` with no
+  transport. Public transport/socket types and the client generic are removed. Sends always return `Promise<boolean>`;
+  validation and busy refusals remain synchronous. JavaScript legacy transport options fail before page changes.
+- One document/MAIN runtime owns capture, parsing, state and Actions. Bootstrap fixes immutable capture/action policy;
+  consumers retain local Inspector/error handlers, immutable state views and frozen packet/event payloads.
+- Stopping a consumer preserves peer state and collection. Restart can use continuously collected current state.
+  An owner's early terminal result does not free its runtime writer reservation or restart the original timeout.
+- All public low-level sends are busy while a managed action is reserved. Observed low-level/manual interference disables
+  inventory-only confirmation and prevents certain event attribution; matching events are not transaction receipts.
+
 ### Distribution
 
 - Clean SDK builds remove obsolete output; reproducible tarballs include external revision/toolchain/file-hash manifests.

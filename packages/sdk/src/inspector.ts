@@ -98,134 +98,134 @@ const DEFAULT_SOCIAL_PREFIXES = [
  * Use `counts-only` for automatic diagnostics: no payloads or unrecognized server-controlled names are retained.
  */
 export class Inspector {
-  private readonly received = new Map<string, number>();
-  private readonly sent = new Map<string, number>();
-  private readonly samples = new Map<string, unknown[]>();
-  private readonly ignored = new Map<IgnoredReason | typeof UNKNOWN, number>();
-  private readonly battleEvents = new Map<string, number>();
-  private readonly battleSamples = new Map<string, unknown[]>();
-  private readonly maxTypes: number;
-  private readonly maxSamples: number;
-  private readonly redactOptions: RedactOptions;
-  private readonly socialPrefixes: readonly string[];
-  private readonly maskedPaths: readonly string[];
-  private readonly countsOnly: boolean;
+  readonly #received = new Map<string, number>();
+  readonly #sent = new Map<string, number>();
+  readonly #samples = new Map<string, unknown[]>();
+  readonly #ignored = new Map<IgnoredReason | typeof UNKNOWN, number>();
+  readonly #battleEvents = new Map<string, number>();
+  readonly #battleSamples = new Map<string, unknown[]>();
+  readonly #maxTypes: number;
+  readonly #maxSamples: number;
+  readonly #redactOptions: RedactOptions;
+  readonly #socialPrefixes: readonly string[];
+  readonly #maskedPaths: readonly string[];
+  readonly #countsOnly: boolean;
 
   constructor(options: InspectorOptions = {}) {
     const mode = options.mode === undefined ? 'redacted-samples' : options.mode;
     if (mode !== 'redacted-samples' && mode !== 'counts-only')
       throw new TypeError('Inspector mode must be "redacted-samples" or "counts-only"');
-    this.countsOnly = mode === 'counts-only';
-    this.maxTypes = options.maxTypes === undefined ? 200 : options.maxTypes;
-    this.maxSamples = this.countsOnly ? 0 : options.maxSamplesPerType === undefined ? 3 : options.maxSamplesPerType;
+    this.#countsOnly = mode === 'counts-only';
+    this.#maxTypes = options.maxTypes === undefined ? 200 : options.maxTypes;
+    this.#maxSamples = this.#countsOnly ? 0 : options.maxSamplesPerType === undefined ? 3 : options.maxSamplesPerType;
     for (const [name, value] of [
-      ['maxTypes', this.maxTypes],
-      ['maxSamplesPerType', this.maxSamples],
+      ['maxTypes', this.#maxTypes],
+      ['maxSamplesPerType', this.#maxSamples],
     ] as const) {
       if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`Inspector ${name} must be a non-negative safe integer`);
     }
-    this.redactOptions = options.redact ?? {};
-    this.socialPrefixes = options.socialTypePrefixes ?? DEFAULT_SOCIAL_PREFIXES;
-    this.maskedPaths = options.maskedPaths ?? DEFAULT_MASKED_PATHS;
+    this.#redactOptions = options.redact ?? {};
+    this.#socialPrefixes = options.socialTypePrefixes ?? DEFAULT_SOCIAL_PREFIXES;
+    this.#maskedPaths = options.maskedPaths ?? DEFAULT_MASKED_PATHS;
   }
 
   recordReceived(packet: Packet): void {
-    this.record(this.received, packet, true);
+    this.#record(this.#received, packet, true);
   }
 
   recordSent(packet: Packet): void {
-    this.record(this.sent, packet, false);
+    this.#record(this.#sent, packet, false);
   }
 
   /** One battle event (`ev[].k` of a `batalha` packet). */
   recordBattleEvent(rawKind: string, event?: unknown): void {
-    const kind = this.countsOnly ? (KNOWN_EVENTS.has(rawKind) ? rawKind : UNKNOWN) : rawKind.slice(0, 60);
-    const key = this.battleEvents.has(kind) || this.battleEvents.size < this.maxTypes ? kind : OTHER;
-    this.battleEvents.set(key, (this.battleEvents.get(key) ?? 0) + 1);
-    if (this.countsOnly || event === undefined || key === OTHER) return;
-    const kept = this.battleSamples.get(key) ?? [];
-    if (kept.length < this.maxSamples) {
-      kept.push(redact(event, this.optionsForEvent(key)));
-      this.battleSamples.set(key, kept);
+    const kind = this.#countsOnly ? (KNOWN_EVENTS.has(rawKind) ? rawKind : UNKNOWN) : rawKind.slice(0, 60);
+    const key = this.#battleEvents.has(kind) || this.#battleEvents.size < this.#maxTypes ? kind : OTHER;
+    this.#battleEvents.set(key, (this.#battleEvents.get(key) ?? 0) + 1);
+    if (this.#countsOnly || event === undefined || key === OTHER) return;
+    const kept = this.#battleSamples.get(key) ?? [];
+    if (kept.length < this.#maxSamples) {
+      kept.push(redact(event, this.#optionsForEvent(key)));
+      this.#battleSamples.set(key, kept);
     }
   }
 
   /** Strings in an event are masked unless it is one of the events known to carry only game data (never a person's text). */
-  private optionsForEvent(kind: string): RedactOptions {
-    return GAME_ONLY_EVENTS.has(kind) ? this.redactOptions : { ...this.redactOptions, maskStrings: true };
+  #optionsForEvent(kind: string): RedactOptions {
+    return GAME_ONLY_EVENTS.has(kind) ? this.#redactOptions : { ...this.#redactOptions, maskStrings: true };
   }
 
   /**
    * A `batalha` packet carries the events: the same per-event policy as `battleEventSamples` must apply to them here, or
    * the very text that one side masks stays readable in the other. `sample` is the already redacted copy and is fixed in place.
    */
-  private applyEventPolicy(packet: Packet, sample: unknown): void {
+  #applyEventPolicy(packet: Packet, sample: unknown): void {
     if (packet.t !== 'batalha' || sample === null || typeof sample !== 'object') return;
     const events = packet['ev'];
     const kept = (sample as { ev?: unknown }).ev;
     if (!Array.isArray(events) || !Array.isArray(kept)) return;
-    const limit = this.redactOptions.maxArrayItems ?? 3;
+    const limit = this.#redactOptions.maxArrayItems ?? 3;
     for (let i = 0; i < Math.min(kept.length, events.length, limit); i++) {
       const event: unknown = events[i];
       const kind = typeof event === 'object' && event !== null ? (event as { k?: unknown }).k : undefined;
-      kept[i] = redact(event, typeof kind === 'string' ? this.optionsForEvent(kind) : { ...this.redactOptions, maskStrings: true }, 2);
+      kept[i] = redact(event, typeof kind === 'string' ? this.#optionsForEvent(kind) : { ...this.#redactOptions, maskStrings: true }, 2);
     }
   }
 
   recordIgnored(reason: IgnoredReason): void {
-    const key = this.countsOnly && reason !== 'oversized' && reason !== 'not-a-packet' ? UNKNOWN : reason;
-    this.ignored.set(key, (this.ignored.get(key) ?? 0) + 1);
+    const key = this.#countsOnly && reason !== 'oversized' && reason !== 'not-a-packet' ? UNKNOWN : reason;
+    this.#ignored.set(key, (this.#ignored.get(key) ?? 0) + 1);
   }
 
-  private record(counts: Map<string, number>, packet: Packet, keepSample: boolean): void {
+  #record(counts: Map<string, number>, packet: Packet, keepSample: boolean): void {
     const rawType = packet.t;
     const known = keepSample ? isKnownPacketType(rawType) : KNOWN_COMMANDS.has(rawType);
-    const type = this.countsOnly && !known ? UNKNOWN : rawType;
-    const key = counts.has(type) || counts.size < this.maxTypes ? type : OTHER;
+    const type = this.#countsOnly && !known ? UNKNOWN : rawType;
+    const key = counts.has(type) || counts.size < this.#maxTypes ? type : OTHER;
     counts.set(key, (counts.get(key) ?? 0) + 1);
-    if (this.countsOnly || !keepSample || key === OTHER) return;
-    const kept = this.samples.get(key) ?? [];
-    if (kept.length < this.maxSamples) {
-      const social = this.socialPrefixes.some((prefix) => key.startsWith(prefix));
-      const sample = redact(packet, social ? { ...this.redactOptions, maskStrings: true } : this.redactOptions);
-      this.applyEventPolicy(packet, sample);
-      for (const path of this.maskedPaths) maskPath(sample, path);
+    if (this.#countsOnly || !keepSample || key === OTHER) return;
+    const kept = this.#samples.get(key) ?? [];
+    if (kept.length < this.#maxSamples) {
+      const social = this.#socialPrefixes.some((prefix) => key.startsWith(prefix));
+      const sample = redact(packet, social ? { ...this.#redactOptions, maskStrings: true } : this.#redactOptions);
+      this.#applyEventPolicy(packet, sample);
+      for (const path of this.#maskedPaths) maskPath(sample, path);
       kept.push(sample);
-      this.samples.set(key, kept);
+      this.#samples.set(key, kept);
     }
   }
 
   /** Plain, redacted, JSON-serializable. */
   dump(): InspectorDump {
-    const received = Object.fromEntries(this.received);
+    const received = Object.fromEntries(this.#received);
     return {
       received,
-      sent: Object.fromEntries(this.sent),
+      sent: Object.fromEntries(this.#sent),
       unknownTypes: Object.keys(received)
         .filter((t) => t !== OTHER && !isKnownPacketType(t))
         .sort(),
-      unknownSentTypes: Object.keys(this.sentCounts())
+      unknownSentTypes: Object.keys(this.#sentCounts())
         .filter((t) => t !== OTHER && !KNOWN_COMMANDS.has(t))
         .sort(),
-      battleEvents: Object.fromEntries(this.battleEvents),
-      battleEventSamples: Object.fromEntries(this.battleSamples),
-      unknownBattleEvents: [...this.battleEvents.keys()].filter((k) => k !== OTHER && !KNOWN_EVENTS.has(k)).sort(),
-      samples: Object.fromEntries(this.samples),
-      ignored: Object.fromEntries(this.ignored),
+      battleEvents: Object.fromEntries(this.#battleEvents),
+      battleEventSamples: Object.fromEntries(this.#battleSamples),
+      unknownBattleEvents: [...this.#battleEvents.keys()].filter((k) => k !== OTHER && !KNOWN_EVENTS.has(k)).sort(),
+      samples: Object.fromEntries(this.#samples),
+      ignored: Object.fromEntries(this.#ignored),
     };
   }
 
   reset(): void {
-    this.received.clear();
-    this.sent.clear();
-    this.samples.clear();
-    this.ignored.clear();
-    this.battleEvents.clear();
-    this.battleSamples.clear();
+    this.#received.clear();
+    this.#sent.clear();
+    this.#samples.clear();
+    this.#ignored.clear();
+    this.#battleEvents.clear();
+    this.#battleSamples.clear();
   }
 
-  private sentCounts(): Record<string, number> {
-    return Object.fromEntries(this.sent);
+  #sentCounts(): Record<string, number> {
+    return Object.fromEntries(this.#sent);
   }
 }
 

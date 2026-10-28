@@ -31,6 +31,8 @@ export type ActionsState = Pick<
 export interface ActionsHost {
   readonly connected: boolean;
   readonly state: ActionsState;
+  /** @internal Observed interference makes request-less confirmation weaker. */
+  evidenceInterfered?(): boolean;
   /** Called with `false` when the connection drops and `true` when one opens. */
   onConnectionChange(listener: (connected: boolean) => void): Unsubscribe;
   /** Listens for packets of any type name (used for the game's `erro`). */

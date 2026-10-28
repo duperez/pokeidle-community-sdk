@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PokeIdle Community SDK test extension",
   "version": "0.0.1",
-  "description": "Development tool for the unofficial community SDK. Read-only. Not affiliated with or endorsed by PokeIdle.",
+  "description": "Unofficial SDK development tool with manual purchase/sale buttons. Startup sends nothing. Not endorsed by PokeIdle.",
   "content_scripts": [
     {
       "matches": ["https://pokeidle.io/*"],

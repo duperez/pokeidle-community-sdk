@@ -12,7 +12,7 @@ import { runNpm } from '../scripts/npm.mjs';
 const SDK = fileURLToPath(new URL('../packages/sdk/', import.meta.url));
 const built = fs.existsSync(path.join(SDK, 'dist/index.cjs'));
 
-test('the browser bundle runs without a module loader and delivers market packets through PageTransport', { skip: !built }, () => {
+test('the browser bundle runs standalone and delivers market packets through the shared page runtime', { skip: !built }, async () => {
   const context = vm.createContext({ URL, structuredClone, EventTarget, Event, MessageEvent });
   vm.runInContext(
     `class Socket extends EventTarget {
@@ -29,23 +29,24 @@ test('the browser bundle runs without a module loader and delivers market packet
   vm.runInContext(bundle, context);
   assert.equal(context.WebSocket, original, 'loading exports alone does not install a hook');
   const actual = vm.runInContext(
-    `(() => {
-       const {PokeIdleClient, PageTransport} = PokeIdleSDK;
-       const client = new PokeIdleClient({transport:new PageTransport(globalThis)});
+    `(async () => {
+       const {PokeIdleClient, bootstrapPageSession} = PokeIdleSDK;
+       bootstrapPageSession();
+       const client = new PokeIdleClient();
        let market;
        client.on('market', packet => { market = packet; });
        client.start();
        const socket = new WebSocket('wss://game.test/');
        socket.dispatchEvent(new Event('open'));
        socket.dispatchEvent(new MessageEvent('message', {data:'{"t":"market","medias":{"1":42},"resumo":[]}' }));
-       const accepted = client.sendCommand({t:'market.itens'});
+       const accepted = await client.sendCommand({t:'market.itens'});
        const result = JSON.stringify({market, accepted, sent:socket.sent, connected:client.connected});
        client.stop();
        return result;
      })()`,
     context,
   );
-  assert.deepEqual(JSON.parse(actual), {
+  assert.deepEqual(JSON.parse(await actual), {
     market: { t: 'market', medias: { 1: 42 }, resumo: [] },
     accepted: true,
     sent: ['{"t":"market.itens"}'],
@@ -89,18 +90,10 @@ test(
         execFileSync(process.execPath, [`--input-type=${mode}`, '-e', code], { cwd: root, stdio: 'pipe' });
       }
       const usage = `
-        const vendored: import('./vendor/sdk-types/index.js').Transport<Promise<boolean>> = {
-          readyState: 1, start() {}, stop() {}, async send() { return true; }
-        };
-        declare const vendorClient: import('./vendor/sdk-types/index.js').PokeIdleClient<Promise<boolean>>;
+        declare const vendorClient: import('./vendor/sdk-types/index.js').PokeIdleClient;
         const vendorAccepted: Promise<boolean> = vendorClient.sendCommand({t:'ping'});
-        const transport: sdk.Transport<Promise<boolean>> = {
-          readyState: 1,
-          start(handlers: sdk.TransportHandlers) { handlers.onMessage('{"t":"pong"}'); },
-          stop() {},
-          async send(text: string) { return text.length > 0; }
-        };
-        const client = new sdk.PokeIdleClient({ transport });
+        sdk.bootstrapPageSession({actions:{rateLimit:false}});
+        const client = new sdk.PokeIdleClient();
         const accepted: Promise<boolean> = client.sendCommand({t:'shop.buy',kind:'ball',id:1,qty:1});
         const full: boolean = client.state.complete;
         const name: string | null = client.state.huntName('test');
@@ -114,7 +107,14 @@ test(
         const purchase: Promise<sdk.BuyResult> = client.actions.buyBall(1,1,sendOptions);
         // @ts-expect-error a real SDK declaration must reject invalid command fields
         client.sendCommand({t:'shop.buy',kind:'invalid',id:1,qty:1});
-        void [accepted, full, name, vendored, vendorAccepted, quantity, automation, twitch, inCenter, purchase];
+        const generation: number = client.generation;
+        // @ts-expect-error transport selection is no longer public
+        new sdk.PokeIdleClient({transport:{}});
+        // @ts-expect-error the public state view cannot feed itself
+        client.state.applyPacket({t:'welcome'});
+        // @ts-expect-error no public PageTransport export
+        new sdk.PageTransport();
+        void [accepted, full, name, vendorAccepted, quantity, automation, twitch, inCenter, purchase, generation];
       `;
       const files = ['consumer.mts', 'consumer.cts'].map((name) => {
         const filename = path.join(root, name);

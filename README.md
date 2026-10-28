@@ -22,9 +22,10 @@ It is a helper, not a gatekeeper: it does not try to limit what you can build.
 ## Quick look
 
 ```ts
-import { Ball, Item, PageTransport, PokeIdleClient } from 'pokeidle-community-sdk';
+import { Ball, Item, bootstrapPageSession, PokeIdleClient } from 'pokeidle-community-sdk';
 
-const client = new PokeIdleClient({ transport: new PageTransport() });
+bootstrapPageSession(); // MAIN/document_start: capture can begin before your feature attaches.
+const client = new PokeIdleClient();
 client.start();
 
 // The state is kept up to date from the game's packets: just read it.
@@ -41,7 +42,7 @@ client.on('welcome', (packet) => packet.estado?.gold); // typed raw packets for 
 client.onPacket((packet) => {
   /* every packet, typed as a plain Packet */
 });
-console.log(client.inspector?.dump()); // counts and redacted samples, safe to share
+console.log(client.inspector?.dump()); // review sampled dumps before sharing
 ```
 
 All nested `state.player` data is held as frozen private copies: writing to it throws a `TypeError`.
@@ -59,7 +60,7 @@ missing/malformed values `null`. Text fields accept only nonempty trimmed string
 from other fields. It imposes no UI text/list caps; presentation limits belong to the consumer.
 
 Nothing a listener throws can break the SDK or another listener. Every error the SDK has to swallow (a listener, a state
-callback, a transport handler) goes to one place: `new PokeIdleClient({ transport, onError: (error) => ... })`. Without
+callback) goes to that consumer's handler: `new PokeIdleClient({ onError: (error) => ... })`. Without
 `onError` it is logged with `console.error`, and if your handler throws too, the error falls back to the console.
 `client.onAnyBattleEvent(listener)` delivers every battle event; `client.onBattleEvent(kind, listener)` one kind.
 
@@ -79,7 +80,7 @@ not confirmed in time_: it may still have happened, so the SDK waits 30 s before
 risking paying twice (the same wait follows a `rejected`: the game's errors carry no request id, so an error can be about
 something else). A purchase is confirmed by the game's own `compra` event (verified in real traffic: `nome`, `qtd` and `gasto`; same quantity and name: `confidence: 'certain'`; it arrives before the inventory update, so the SDK waits `confirmGraceMs` (default 1 s) for that update before answering and `after` reflects it when it comes)
 or by the inventory growing by at least the quantity (`'probable'`), whichever comes first. Safety nets, all configurable
-and none of them stops you from turning it off (`new PokeIdleClient({ actions: { ... } })`; they live in memory, so a page
+and none of them stops you from turning it off (`bootstrapPageSession({ actions: { ... } })`; they live in memory, so a page
 reload starts them over):
 
 - `dryRun`: say what would be sent and send nothing (also per call). It goes through the same limits, so it tells you
@@ -87,8 +88,9 @@ reload starts them over):
 - A rate limit: 3 s between actions and at most 10 per minute (`rateLimit: false` turns it off).
 - `maxGoldPerHour`: a spending cap, counted when the order is sent (an order whose price is unknown is refused while a cap is set).
 - Checks before sending: not for sale, not enough gold (`checks: false`, or `{ notForSale, gold, sellable }` one by one, lets the game decide).
-- One action in flight at a time. Invalid quantities throw a `RangeError`.
-- A new connection invalidates the state: `state.complete` turns `false` when a socket opens or closes and stays so until the next `welcome`, and actions answer `no-state` meanwhile. An order still waiting when the connection drops ends as `unconfirmed`.
+- One managed action in flight per document runtime, across consumers. Other calls return `busy`, with no queue.
+- Adopting a successor invalidates completeness immediately, including while CONNECTING. Actions answer `no-state`
+  until current full state arrives. A pending order cannot use a later generation's evidence.
 
 The inventory fallback never reuses quantities already expected from earlier sent or possibly sent purchases of the same
 item, even when their update arrives after the grace window. This is deliberately conservative: simultaneous consumption
@@ -110,13 +112,16 @@ const result = await client.actions.buyBall(Ball.UltraBall, 10, {
 `onSend` runs synchronously once the send settles and before the terminal action result, even if game evidence arrived
 first. Preflight refusals and dry runs do not call it; a dispatch guard calls it with `not-sent` before the action rejects.
 An observer that throws is reported through `onError` but cannot undo the send or interrupt reconciliation. It is not an
-async persistence hook: the host must handle persistence failures and prevent unsafe retries itself. With a transport
-that never settles, neither the send hook nor the terminal result arrives.
+async persistence hook: the host must handle persistence failures and prevent unsafe retries itself. Page sends settle
+locally; the public Promise does not wait for a server ACK.
 
 Acceptance and game evidence are separate: an uncertain send can later have matching game evidence. Even
 `confidence: 'certain'` means a matching event under the SDK's rules, not a transaction receipt or request-id correlation.
 Identical manual/concurrent commands can produce indistinguishable events. Keep account persistence, feature scheduling
 and application budgets in the host; the SDK's configurable in-memory limits are not a replacement for them.
+Observed game writes during reconciliation, or accepted/uncertain low-level SDK writes in the generation, disable
+inventory-only confirmation and limit matching events to `probable`. This deliberately includes queries/pings rather than
+guessing their effects. Unobservable third-party/manual writes cannot be excluded.
 
 `sellPokemon(id, { confirmIrreversible: true })` sells ONE pokémon from your Depot to the NPC shop and cannot be undone, so
 it needs the explicit confirmation (not for a dry run). It refuses, with the reason, what the game's own client refuses to
@@ -132,7 +137,7 @@ the SDK cannot predict from the client.
 
 ### Sending commands
 
-`client.sendCommand({ t: 'shop.buy', kind: 'ball', id: Ball.UltraBall, qty: 10 })` sends a command the game's client knows,
+`await client.sendCommand({ t: 'shop.buy', kind: 'ball', id: Ball.UltraBall, qty: 10 })` sends a command the game's client knows,
 checked by the compiler for the typed ones. It sends exactly what you pass, right away, and guards against accidents (not
 against someone who wants to bypass them: `sendRaw` exists):
 
@@ -142,6 +147,11 @@ against someone who wants to bypass them: `sendRaw` exists):
   listings, selling pokémon, discarding items, refining, evolving, guild leadership...). They need
   `{ confirmIrreversible: true }`.
 - Numbers must be finite and `qty`/`qtd` positive integers (`JSON.stringify(NaN)` would send `null`).
+
+Both `sendCommand` and `sendRaw` return `Promise<boolean>`: `true` is local acceptance, `false` means definitely not
+sent because the facade/socket is unavailable, and a native failure rejects with its original uncertain error.
+Validation and `PageSessionError` with code `busy` throw synchronously. All public low-level sends, including queries,
+are refused while a managed action reserves the writer. Nothing is queued or replayed after reconnect.
 
 ### What is typed
 
@@ -163,7 +173,7 @@ the game fails the build until someone classifies it.
 Items and balls are named by enums generated from the game's own catalogs (682 items and 5 balls today):
 `Item.SmallPotion`, `Item.MaxRevive`, `Item.BronzeBossToken`, `Item.ShinyVenusaurite`, `Ball.UltraBall`, `Ball.BeastBall`... `itemInfo(id)` gives name, category and price; `itemsInCategory('heal')` lists a category.
 `client.state.itemName(id)` does not pull that full catalog in: it uses what the server sent plus a small generated table of the NPC shop's potions and revives.
-The client plus `PageTransport` bundle is about 30 KB minified, and a test fails above 40 KB, so the catalogs only ship if you import them.
+The standalone client bundle has a 40 KB minified test budget; the full catalogs only ship if you import them.
 `npm run catalog` regenerates them from the game's public data, and `npm run catalog:check` tells if they are stale.
 
 It has to run in the page's own world, before the game opens its socket. In a Chrome extension (Manifest V3):
@@ -174,10 +184,25 @@ It has to run in the page's own world, before the game opens its socket. In a Ch
 
 ### Public API
 
-Use one client/transport per account. `stop()` detaches the transport, makes `connected` and `state.complete` false, and
-notifies connection/state observers; the last known values remain readable. A restarted client ignores callbacks retained
-from its previous run and needs a new full state. `state.player`, wire rows, normalized lists and server catalogs are deeply
-frozen, owned snapshots: never mutate them. A new `welcome` clears catalogs/protections omitted by that session.
+Use one runtime per game document/MAIN realm and one consumer facade per feature. Construction is inert; `start()` attaches
+and installs default capture only if bootstrap was absent. It never opens a game connection or logs in.
+Explicit bootstrap fixes `actions` and `maxPacketBytes` for that document. Equivalent normalized policies reuse the
+runtime; a later divergent bootstrap throws `configuration-conflict`, never reconfigures peers. Local constructor options
+are only `inspector` and `onError`; old JavaScript `transport` options fail before patching.
+
+`stop()` makes only that facade disconnected/incomplete and retains its last-known values. Peers and collection continue,
+including after the last stop. Restart uses current continuously collected state without replaying old events/commands.
+If bootstrap missed the full state, late adoption does not reconstruct it. An owner's conservative early action result
+does not release the runtime waiter/reservation: peers stay busy until evidence, the original timeout or a generation
+boundary, even with zero cooldown. Existing risk/floors and in-memory budgets are not reset by stop.
+
+`generation` counts socket adoptions in this document, not accounts or globally unique sessions. State views have no
+`applyPacket`/`markStale`; nested state and event payloads are frozen. `onChange` is about state/lifecycle changes, not
+every packet. A new full state clears catalogs/protections omitted by that session.
+
+Runtime ABI/capability mismatches, malformed occupied slots and a legacy hook are refused explicitly without overwriting
+the live runtime or stacking a patch. This sharing contract covers compatible copies in the same MAIN global, not
+isolated worlds, other documents or a security sandbox against arbitrary JavaScript in the page.
 
 Everything public is listed by name in `packages/sdk/src/index.ts`. A test snapshots the exported names and signatures
 (`packages/sdk/test/api-surface.snapshot.json`), so the API cannot change by accident; after an intended change run
@@ -185,11 +210,12 @@ Everything public is listed by name in `packages/sdk/src/index.ts`. A test snaps
 
 ### Integrating a launcher or another IPC host
 
-Implement `Transport<Promise<boolean>>` and construct `PokeIdleClient` with it; `sendRaw`/`sendCommand` then return
-`Promise<boolean>`. `true` is acceptance for sending, **not** confirmation of an effect. Return `false` only if nothing was
-sent; reject on an uncertain IPC/socket failure. Guards still throw synchronously before sending. Actions report uncertain
-send errors through `onError`, charge their budgets conservatively when the send settles and wait for game evidence.
-Never forward callbacks from another account or a replaced webview to the same handlers.
+Run the SDK in the page's MAIN world, just as a standalone extension does. A host bridge can project already normalized
+facts/snapshots and ordered operation receipts/results from that facade. Do not forward raw frames into another SDK parser
+in the host, construct a client with a bridge transport, or add another socket hook. The host owns document identity,
+profiles, windows, accounts, authorization, durable budgets and automation. Bridge request correlation is local, not a game
+transaction id. Arbitrary `unknown` errors/callbacks are not a JSON protocol; project controlled outcomes as needed.
+Isolated-world/IPC integration is a later consumer boundary, not implemented by this SDK increment.
 
 `npm run build -w pokeidle-community-sdk` produces ESM (`dist/index.js`), a self-contained CommonJS bundle
 (`dist/index.cjs`), a classic browser script (`dist/pokeidle-sdk.iife.js`), and ESM/CommonJS declarations.
@@ -205,19 +231,20 @@ revision and verification status in the consuming application's installation dia
 See [distribution and consumer diagnostics](docs/distribution.md) for the schema, limits and launcher mapping.
 
 For an extension without a bundler, vendor `dist/pokeidle-sdk.iife.js` and load it before your page adapter, in the page's
-MAIN world at `document_start`. It exposes `globalThis.PokeIdleSDK` and does not install a hook until a client starts:
+MAIN world at `document_start`. Loading exports is inert; bootstrap starts capture before a consumer needs to attach:
 
 ```js
-const { PokeIdleClient, PageTransport } = globalThis.PokeIdleSDK;
-const client = new PokeIdleClient({ transport: new PageTransport(window) });
+const { PokeIdleClient, bootstrapPageSession } = globalThis.PokeIdleSDK;
+bootstrapPageSession();
+const client = new PokeIdleClient();
 client.on('market', (packet) => {
   /* consume packet.medias / packet.resumo */
 });
 client.start();
-// When your feature needs it: client.sendCommand({ t: 'market.itens' });
+// When your feature needs it: await client.sendCommand({ t: 'market.itens' });
 ```
 
-The IIFE includes all public runtime exports and catalogs, unlike a tree-shaken ESM integration. Use the SDK's transport
+The IIFE includes all public runtime exports and catalogs, unlike a tree-shaken ESM integration. Use the SDK's
 and typed packet/command APIs rather than a second WebSocket proxy or protocol parser in the feature. DOM reads and
 application-specific calculations still belong in page adapters, not in the SDK or an Electron bridge.
 
@@ -263,7 +290,6 @@ Use the opt-in counts-only inspector for automatic local collection, not the def
 const inspector = new Inspector({ mode: 'counts-only', maxTypes: 256 });
 let sdkErrors = 0;
 const client = new PokeIdleClient({
-  transport,
   inspector,
   onError: () => {
     sdkErrors += 1;
@@ -283,7 +309,7 @@ non-negative safe integers; invalid modes/limits throw. `maxSamplesPerType` is i
 `dump()` is cumulative until `reset()`, which preserves the mode. Let the host own collection cadence, durable append,
 bounded rotation, restrictive local permissions and any reset after persistence; do not silently discard failed writes.
 
-Track connection/generation locally with `onConnectionChange`, completeness with `state.complete`, and known/unknown
+Track document-local generation with `generation`/`onConnectionChange`, completeness with `state.complete`, and known/unknown
 quality through normalized getters. Log only allowlisted field identifiers, validated catalog ids and aggregate parity
 counts, not the compared values. Never serialize player snapshots, packet callbacks, error messages/stacks or page-console
 contents into the collection. Counts-only protects Inspector retention, not other application logging or the live state.

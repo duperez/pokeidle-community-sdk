@@ -50,6 +50,7 @@ function publicSurface(): Record<string, string[]> {
         for (const member of checker.getPropertiesOfType(declared)) {
           const memberDecl = member.declarations?.[0];
           if (memberDecl && ts.getCombinedModifierFlags(memberDecl) & ts.ModifierFlags.Private) continue;
+          if (memberDecl && ts.isPropertyDeclaration(memberDecl) && ts.isPrivateIdentifier(memberDecl.name)) continue;
           const optional = member.flags & ts.SymbolFlags.Optional ? '?' : '';
           lines.push(
             `  ${member.name}${optional}: ${checker.typeToString(checker.getTypeOfSymbolAtLocation(member, decl), undefined, flags)}`,

@@ -3,7 +3,9 @@ import test from 'node:test';
 import { tick } from './helpers/actions-setup.js';
 import { FakeScheduler } from './helpers/fake-scheduler.js';
 import { welcome } from './helpers/fixtures.js';
-import { Ball, PokeIdleClient, type SendOutcome, type Transport, type TransportHandlers } from '../src/index.js';
+import { Ball, type SendOutcome } from '../src/index.js';
+import { PokeIdleClient } from '../src/client-core.js';
+import type { Transport, TransportHandlers } from '../src/transport.js';
 
 // A transport whose `send` is asynchronous (a host where the write reaches the game's socket over IPC, like a launcher).
 

@@ -25,9 +25,9 @@ async function bundle(code: string): Promise<{ bytes: number; text: string }> {
   return { bytes: out.contents.length, text: out.text };
 }
 
-test(`client + PageTransport bundle under ${BUDGET_BYTES / 1024} KB minified`, async () => {
-  const { bytes, text } = await bundle(`import { PokeIdleClient, PageTransport } from ${JSON.stringify(entry)};
-    new PokeIdleClient({ transport: new PageTransport() }).start();`);
+test(`standalone shared client bundle under ${BUDGET_BYTES / 1024} KB minified`, async () => {
+  const { bytes, text } = await bundle(`import { PokeIdleClient } from ${JSON.stringify(entry)};
+    new PokeIdleClient().start();`);
   assert.ok(bytes < BUDGET_BYTES, `${(bytes / 1024).toFixed(1)} KB, budget ${BUDGET_BYTES / 1024} KB`);
   assert.equal(text.includes('Armadillo Claw'), false, 'the full items catalog leaked into the client bundle');
 });

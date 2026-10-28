@@ -38,7 +38,10 @@ export function waitForPurchase(
   const graceMs = options.confirmGraceMs ?? DEFAULTS.confirmGraceMs;
   // Set when the game's `compra` event arrived: the order is confirmed from then on, whatever else happens.
   let byEvent: BuyResult | null = null;
-  const unconfirmed = (): BuyResult => byEvent ?? { status: 'unconfirmed', request, waitedMs: scheduler.now() - startedAt };
+  const unconfirmed = (): BuyResult =>
+    byEvent?.status === 'confirmed'
+      ? { ...byEvent, confidence: host.evidenceInterfered?.() ? 'probable' : byEvent.confidence }
+      : { status: 'unconfirmed', request, waitedMs: scheduler.now() - startedAt };
   return waitForFirst<BuyResult>(
     scheduler,
     options.confirmTimeoutMs ?? DEFAULTS.confirmTimeoutMs,
@@ -57,7 +60,7 @@ export function waitForPurchase(
             status: 'confirmed',
             request,
             confirmedBy: 'event',
-            confidence: 'certain',
+            confidence: host.evidenceInterfered?.() ? 'probable' : 'certain',
             before,
             after: count(),
             spent,
@@ -74,6 +77,7 @@ export function waitForPurchase(
         state.onChange(() => {
           if (!state.complete) return;
           const after = count();
+          if (host.evidenceInterfered?.() && byEvent === null) return;
           // At least the quantity ordered: a drop or a purchase made elsewhere that adds a little must not confirm this order.
           if (after - inventoryBefore < request.quantity) return;
           if (byEvent !== null)
@@ -81,7 +85,7 @@ export function waitForPurchase(
               status: 'confirmed',
               request,
               confirmedBy: 'event',
-              confidence: 'certain',
+              confidence: host.evidenceInterfered?.() ? 'probable' : 'certain',
               before,
               after,
               spent: byEvent.status === 'confirmed' ? byEvent.spent : null,
@@ -140,7 +144,7 @@ export function waitForSale({ host, scheduler, options }: Deps, request: SellReq
             status: 'confirmed',
             request,
             confirmedBy: 'event',
-            confidence: sameKind === 1 ? 'certain' : 'probable',
+            confidence: sameKind === 1 && !host.evidenceInterfered?.() ? 'certain' : 'probable',
             gained: typeof event['ganho'] === 'number' ? event['ganho'] : null,
           });
         }),
@@ -148,11 +152,15 @@ export function waitForSale({ host, scheduler, options }: Deps, request: SellReq
       onCleanup(
         state.onChange(() => {
           if (!state.complete) return;
+          if (host.evidenceInterfered?.()) return;
           if (state.pokemon(request.pokemonId) !== undefined || graceTimer !== undefined) return;
           const byState: SellResult = { status: 'confirmed', request, confirmedBy: 'state', confidence: 'probable', gained: null };
           if (graceMs <= 0) return finish(byState);
           // the pokémon is gone; give the `venda` event a moment to arrive with the gold (it keeps listening until then)
-          graceTimer = scheduler.setTimeout(() => finish(byState), graceMs);
+          graceTimer = scheduler.setTimeout(
+            () => finish(host.evidenceInterfered?.() ? { status: 'unconfirmed', request, waitedMs: scheduler.now() - startedAt } : byState),
+            graceMs,
+          );
         }),
       );
       onCleanup(host.onType('erro', (packet) => finish({ status: 'rejected', request, confidence: 'probable', error: errorOf(packet) })));

@@ -1,17 +1,18 @@
-export { type Actions } from './actions.js';
+export { type ClientActions as Actions } from './client.js';
 export {
   type ActionCallOptions,
-  type ActionsOptions,
   type BuyRequest,
   type BuyResult,
   type RateLimit,
   type RateLimited,
-  type Scheduler,
   type SellRequest,
   type SellResult,
   type SendOutcome,
 } from './actions-types.js';
 export { PokeIdleClient, type ClientOptions, type Unsubscribe } from './client.js';
+export { bootstrapPageSession, type BootstrapOptions, type SharedActionsOptions as ActionsOptions } from './page-session.js';
+export { PageSessionError, type PageSessionErrorCode } from './page-session-error.js';
+export type { StateView } from './state-view.js';
 export { Inspector, type InspectorDump, type InspectorOptions } from './inspector.js';
 export {
   KNOWN_PACKET_TYPES,
@@ -24,9 +25,7 @@ export {
   type KnownPacketType,
   type Packet,
 } from './packets.js';
-export { PageTransport, type PageLike } from './page-transport.js';
 export { REDACTED, TEXT_MASK, cleanText, redact, type RedactOptions } from './redact.js';
-export type { SendResult, Transport, TransportHandlers } from './transport.js';
 export {
   Ball,
   BALL_CATALOG,

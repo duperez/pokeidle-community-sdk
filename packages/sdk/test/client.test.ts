@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PokeIdleClient, type Transport, type TransportHandlers } from '../src/index.js';
+import { PokeIdleClient } from '../src/client-core.js';
+import type { Transport, TransportHandlers } from '../src/transport.js';
 
 class FakeTransport implements Transport {
   handlers: TransportHandlers | null = null;

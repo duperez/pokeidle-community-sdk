@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PageTransport, type PageLike } from '../src/index.js';
+import { PageTransport, type PageLike } from '../src/page-transport.js';
 
 /** A tiny WebSocket stand-in: enough surface for the hook (url, readyState, send, listeners). */
 class FakeWebSocket extends EventTarget {

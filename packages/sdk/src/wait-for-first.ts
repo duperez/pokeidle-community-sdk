@@ -4,6 +4,7 @@ import type { Scheduler } from './actions-types.js';
 export interface Waiter<R> {
   result: Promise<R>;
   cancel: () => void;
+  snapshot: () => R;
 }
 
 /**
@@ -22,6 +23,7 @@ export function waitForFirst<R>(
   const cleanups: Array<() => void> = [];
   let done = false;
   let timer: unknown;
+  let settled: { value: R } | undefined;
   // Every cleanup runs even if an earlier one throws; the first error is rethrown afterwards.
   const runAll = (fns: Array<() => void>): void => {
     let failure: { error: unknown } | null = null;
@@ -44,6 +46,8 @@ export function waitForFirst<R>(
     settle = resolve;
   });
   const finish = (value: R): void => {
+    if (done) return;
+    settled = { value };
     cleanup(); // idempotent; settling an already settled promise is a no-op, so a late `finish` changes nothing
     settle(value);
   };
@@ -53,5 +57,5 @@ export function waitForFirst<R>(
     else cleanups.push(fn);
   });
   if (!done) timer = scheduler.setTimeout(() => finish(onTimeout()), timeoutMs);
-  return { result, cancel: cleanup };
+  return { result, cancel: cleanup, snapshot: () => (settled ? settled.value : onTimeout()) };
 }

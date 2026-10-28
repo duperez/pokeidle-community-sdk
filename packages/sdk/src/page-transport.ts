@@ -86,7 +86,7 @@ function installHook(page: WithHook): SharedHook {
   const isGameSocket = (ws: { url?: unknown }): boolean => {
     try {
       const url = new URL(String(ws.url), page.location.href);
-      return url.host === page.location.host && url.pathname === '/';
+      return (url.protocol === 'ws:' || url.protocol === 'wss:') && url.host === page.location.host && url.pathname === '/';
     } catch {
       return false;
     }

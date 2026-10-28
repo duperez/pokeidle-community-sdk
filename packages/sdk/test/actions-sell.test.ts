@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PokeIdleClient } from '../src/index.js';
+import { PokeIdleClient } from '../src/client-core.js';
 import { FakeTransport, tick, setup, setupSell, SELL, charmander, saleEvent } from './helpers/actions-setup.js';
 import { pokemon, sellWelcome, welcome } from './helpers/fixtures.js';
 import { CommandRefusedError } from '../src/index.js';

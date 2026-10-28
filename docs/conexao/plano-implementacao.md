@@ -1,12 +1,12 @@
-# Proposed implementation plan: shared page connector
+# Implementation plan: shared page connector
 
 ## Status and scope
 
-This is the implementation owner's proposal, not the architecture decision.
-Baseline: `cd3261d996db9b1f8ea7cacf81ac53fe026667f9`.
-Only this documentation checkpoint is authorized before the coordinator
-freezes the lifecycle and ownership contract after architecture/review.
-No runtime, public API, package or distribution change is part of this checkpoint.
+The coordinator froze the contract and authorized implementation after the
+architecture/review round. The final architecture is recorded in
+`proposta-arquitetura.md`; the independent gates are in `revisao.md`.
+Baseline: `cd3261d996db9b1f8ea7cacf81ac53fe026667f9`. The increments below
+remain the executable plan, not claims that all acceptance gates have passed.
 
 The committed destination is a shared page runtime, not one hidden transport
 and parser per client. The recommended first increment shares one document's
@@ -33,7 +33,7 @@ No new game connection, login, account coordinator, worker or framework.
 - Action receipt ordering, uncertainty and conservative inventory floors
   already have dedicated tests. Preserve these semantics across consumers.
 
-## Proposed ownership to arbitrate
+## Frozen ownership
 
 | Resource                                                       | Proposed owner                 | Required consequence                                                     |
 | -------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------ |
@@ -60,8 +60,9 @@ with another consumer's private context.
 For commands, prefer rejecting an overlapping write explicitly over adding
 a queue/retry subsystem. All SDK send paths must reach the generation-aware
 dispatcher; a low-level send must not silently bypass an active reconciled
-write. The exact rejection shape and the treatment of non-writing queries
-remain decisions, not guesses based on command names.
+write. Every public low-level send, including queries, is synchronously
+refused with `PageSessionError('busy')` while a managed action is reserved.
+There is no speculative command-name classifier.
 
 ## Executable increments and proofs
 
@@ -262,26 +263,35 @@ code metadata, never a substitute for public runtime behavior tests.
 Browser/performance results must name their command, artifact SHA and proof
 boundary separately from node:test and the launcher's later bridge tests.
 
-## Decisions requiring arbitration before runtime edits
+## Final decisions and implementation ownership
 
-1. Public construction and bootstrap names/side effects; whether constructor
-   or start implicitly ensures bootstrap while explicit early bootstrap also
-   remains available. No transport option in either alternative.
-2. Confirm same-document MAIN sharing for the first increment and the exact
-   attachment boundary reserved for subsequent isolated-world/host bridges.
-   Do not claim that latter bridge already exists.
-3. Shared Actions policy versus per-consumer protections: conflict behavior
-   for differing action options, capture limits and schedulers; low-level
-   command exclusion/refusal shape; owner-stop settlement and observers.
-4. Diagnostic/core error ownership before consumers exist, privacy defaults,
-   local Inspector behavior and immutable packet/state facade semantics.
-5. Rendezvous version/capability compatibility with the existing version-1
-   hook: explicit rejection versus a demonstrated safe migration; no silent
-   replacement of a live old hook.
+1. `bootstrapPageSession(options?): void` starts early MAIN collection;
+   `new PokeIdleClient(options?)` is inert. `start()` attaches and bootstraps
+   defaults only if absent. Last stop preserves collection/socket/state.
+2. Sharing is same-document MAIN/global, including compatible independently
+   evaluated bundles. There is no isolated-world bridge or JavaScript sandbox.
+3. Bootstrap fixes copied/frozen `actions` and `maxPacketBytes`. Equivalent
+   normalized policies reuse the runtime; conflicting later configuration
+   fails explicitly. Inspector and error handlers belong to each consumer.
+4. Stop preserves the originating invocation's receipt ordering and can
+   finish its local result conservatively. Runtime reservation, waiter,
+   original timeout, floors, budgets and risk survive until safe settlement.
+   Peers remain busy even with zero cooldown. No queue or replay.
+5. ABI/capability, occupied-slot and legacy-hook errors are synchronous and
+   never replace a live runtime/patch. Legacy JavaScript `transport` options
+   fail before global changes. Unowned asynchronous core errors use a
+   controlled code, not arbitrary frame/error data.
+6. Public sends are `Promise<boolean>` of local acceptance, not network ACKs.
+   Accepted/not-sent/uncertain and onSend-before-terminal remain distinct.
+   Matching events are not transactional receipts; observed interference
+   weakens evidence instead of asserting exclusive control of page writes.
 
-Each residual goes through at most two discussion rounds, then coordinator
-arbitration. Once frozen, routine implementation/testing/checkpoints proceed
-without another user permission gate.
+The runtime owner edits SDK source/unit tests, API snapshot, root README,
+architecture, changelog and mutation targets. The consumer implementer edits
+the standalone example, distribution smoke/type consumers and synthetic
+native harness. The reviewer remains independent. Browser execution is
+serial and coordinated separately; these assignments do not reopen the
+functional contract or authorize a real account/publication.
 
 ## Skills actually read and applied in this phase
 

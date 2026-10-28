@@ -1,14 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  BATTLE_EVENT_KINDS,
-  CLIENT_COMMAND_TYPES,
-  KNOWN_PACKET_TYPES,
-  Inspector,
-  PokeIdleClient,
-  TEXT_MASK,
-  type TransportHandlers,
-} from '../src/index.js';
+import { BATTLE_EVENT_KINDS, CLIENT_COMMAND_TYPES, KNOWN_PACKET_TYPES, Inspector, TEXT_MASK } from '../src/index.js';
+import { PokeIdleClient } from '../src/client-core.js';
+import type { TransportHandlers } from '../src/transport.js';
 
 test('counts received and sent packets and flags unknown types', () => {
   const inspector = new Inspector();

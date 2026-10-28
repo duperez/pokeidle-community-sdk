@@ -5,23 +5,14 @@
     "  onSend?: ((outcome: SendOutcome) => void) | undefined"
   ],
   "Actions": [
-    "value: typeof Actions",
-    "type: Actions",
-    "  buyBall: (ball: number, quantity: number, options?: ActionCallOptions) => Promise<BuyResult>",
-    "  buyItem: (item: number, quantity: number, options?: ActionCallOptions) => Promise<BuyResult>",
-    "  spentLastHour: number",
-    "  sellPokemon: (pokemonId: number, options?: ActionCallOptions & { confirmIrreversible?: boolean | undefined; }) => Promise<SellResult>"
+    "type: ClientActions",
+    "  buyBall: (id: number, quantity: number, options?: ActionCallOptions | undefined) => Promise<BuyResult>",
+    "  buyItem: (id: number, quantity: number, options?: ActionCallOptions | undefined) => Promise<BuyResult>",
+    "  sellPokemon: (id: number, options?: (ActionCallOptions & { confirmIrreversible?: boolean | undefined; }) | undefined) => Promise<SellResult>",
+    "  spentLastHour: number"
   ],
   "ActionsOptions": [
-    "type: ActionsOptions",
-    "  dryRun?: boolean | undefined",
-    "  rateLimit?: false | RateLimit | undefined",
-    "  maxGoldPerHour?: number | undefined",
-    "  confirmTimeoutMs?: number | undefined",
-    "  confirmGraceMs?: number | undefined",
-    "  unconfirmedCooldownMs?: number | undefined",
-    "  checks?: boolean | { notForSale?: boolean | undefined; gold?: boolean | undefined; sellable?: boolean | undefined; } | undefined",
-    "  scheduler?: Scheduler | undefined"
+    "type: { dryRun?: boolean | undefined; rateLimit?: false | RateLimit | undefined;… [369 chars, sha1 f026842171f7]"
   ],
   "ActorWire": [
     "type: ActorWire",
@@ -149,6 +140,14 @@
     "  lista?: unknown[] | undefined",
     "  max?: number | undefined"
   ],
+  "BootstrapOptions": [
+    "type: BootstrapOptions",
+    "  maxPacketBytes?: number | undefined",
+    "  actions?: SharedActionsOptions | undefined"
+  ],
+  "bootstrapPageSession": [
+    "value: (options?: BootstrapOptions) => void"
+  ],
   "BuyRequest": [
     "type: BuyRequest",
     "  kind: \"ball\" | \"item\"",
@@ -244,11 +243,8 @@
     "type: \"shop.buy\" | \"shop.sellPokemon\" | \"chat.historico\" | \"chat.mute\" | \"afilia… [4214 chars, sha1 3abfebcf25ff]"
   ],
   "ClientOptions": [
-    "type: ClientOptions<S>",
-    "  transport: Transport<S>",
+    "type: ClientOptions",
     "  inspector?: false | Inspector | undefined",
-    "  maxPacketBytes?: number | undefined",
-    "  actions?: ActionsOptions | undefined",
     "  onError?: ErrorHandler | undefined"
   ],
   "commandCoverage": [
@@ -357,6 +353,7 @@
   "GameState": [
     "value: typeof GameState",
     "type: GameState",
+    "  snapshot: () => GameState",
     "  complete: boolean",
     "  markStale: () => void",
     "  ballCatalog: readonly BallEntry[]",
@@ -391,7 +388,11 @@
     "  itemName: (id: number) => string | null",
     "  ballName: (id: number) => string | null",
     "  onChange: (listener: () => void) => () => void",
-    "  applyPacket: (packet: Packet) => void"
+    "  applyPacket: (packet: Packet) => void",
+    "  #readCatalogs: (packet: Packet) => void",
+    "  #merge: (partial: unknown, full: boolean) => void",
+    "  #mergeInto: (partial: unknown, full: boolean) => void",
+    "  #notify: () => void"
   ],
   "GenericCommand": [
     "type: { readonly [field: string]: unknown; readonly t: K; }"
@@ -419,9 +420,13 @@
     "  recordReceived: (packet: Packet) => void",
     "  recordSent: (packet: Packet) => void",
     "  recordBattleEvent: (rawKind: string, event?: unknown) => void",
+    "  #optionsForEvent: (kind: string) => RedactOptions",
+    "  #applyEventPolicy: (packet: Packet, sample: unknown) => void",
     "  recordIgnored: (reason: IgnoredReason) => void",
+    "  #record: (counts: Map<string, number>, packet: Packet, keepSample: boolean) => void",
     "  dump: () => InspectorDump",
-    "  reset: () => void"
+    "  reset: () => void",
+    "  #sentCounts: () => Record<string, number>"
   ],
   "InspectorDump": [
     "type: InspectorDump",
@@ -620,18 +625,17 @@
   "PacketMap": [
     "type: { amigos: FriendsPacket; batalha: BattlePacket; \"bicicletas.lista\": Client… [2087 chars, sha1 2ce36f694f2a]"
   ],
-  "PageLike": [
-    "type: PageLike",
-    "  WebSocket: { new (url: string | URL, protocols?: string | string[] | undefined): WebSocket; prototype: WebSocket; readonly CONNECTING: 0; readonly OPEN: 1; readonly CLOSING: 2; readonly CLOSED: 3; }",
-    "  location: { host: string; href: string; }"
+  "PageSessionError": [
+    "value: typeof PageSessionError",
+    "type: PageSessionError",
+    "  code: \"busy\" | \"unsupported-context\" | \"incompatible-runtime\" | \"configuration-conflict\" | \"invalid-options\" | \"core-failure\"",
+    "  name: string",
+    "  message: string",
+    "  stack?: string | undefined",
+    "  cause?: unknown"
   ],
-  "PageTransport": [
-    "value: typeof PageTransport",
-    "type: PageTransport",
-    "  readyState: number",
-    "  start: (handlers: TransportHandlers) => void",
-    "  stop: () => void",
-    "  send: (text: string) => boolean"
+  "PageSessionErrorCode": [
+    "type: \"busy\" | \"unsupported-context\" | \"incompatible-runtime\" | \"configuration-conflict\" | \"invalid-options\" | \"core-failure\""
   ],
   "parsePacket": [
     "value: (text: string, maxBytes?: number) => Packet | null"
@@ -677,22 +681,23 @@
   ],
   "PokeIdleClient": [
     "value: typeof PokeIdleClient",
-    "type: PokeIdleClient<S>",
+    "type: PokeIdleClient",
     "  inspector: Inspector | null",
-    "  state: GameState",
-    "  actions: Actions",
+    "  state: StateView",
+    "  actions: ClientActions",
     "  start: () => void",
     "  stop: () => void",
     "  connected: boolean",
+    "  generation: number",
     "  on: <K extends keyof PacketMap>(type: K, listener: (packet: PacketMap[K]) => void) => Unsubscribe",
     "  onType: (type: string, listener: PacketListener) => Unsubscribe",
-    "  onBattleEvent: <K extends BattleEventKind>(kind: K, listener: (event: BattleEventMap[K]) => void) => Unsubscribe",
-    "  onAnyBattleEvent: (listener: (event: BattleEvent) => void) => Unsubscribe",
     "  onPacket: (listener: PacketListener) => Unsubscribe",
     "  onOutgoing: (listener: PacketListener) => Unsubscribe",
     "  onConnectionChange: (listener: (connected: boolean) => void) => Unsubscribe",
-    "  sendRaw: (text: string) => S",
-    "  sendCommand: (command: SendableCommand, options?: { confirmIrreversible?: boolean | undefined; }) => S"
+    "  onBattleEvent: <K extends BattleEventKind>(kind: K, listener: (event: BattleEventMap[K]) => void) => Unsubscribe",
+    "  onAnyBattleEvent: (listener: (event: BattleEvent) => void) => Unsubscribe",
+    "  sendRaw: (text: string) => Promise<boolean>",
+    "  sendCommand: (command: SendableCommand, options?: { confirmIrreversible?: boolean | undefined; }) => Promise<boolean>"
   ],
   "Pokemon": [
     "type: Pokemon",
@@ -795,12 +800,6 @@
     "  ganho?: number | undefined",
     "  qtd?: number | undefined"
   ],
-  "Scheduler": [
-    "type: Scheduler",
-    "  now: () => number",
-    "  setTimeout: (callback: () => void, ms: number) => unknown",
-    "  clearTimeout: (handle: unknown) => void"
-  ],
   "SellRequest": [
     "type: SellRequest",
     "  pokemonId: number",
@@ -816,9 +815,6 @@
   ],
   "SendOutcome": [
     "type: { readonly status: \"accepted\"; } | { readonly status: \"not-sent\"; } | { readonly status: \"uncertain\"; readonly error: unknown; }"
-  ],
-  "SendResult": [
-    "type: boolean | Promise<boolean>"
   ],
   "SERVER_PACKET_READS": [
     "value: { readonly amigos: readonly [\"busca\", \"coins\", \"conversa\", \"dm\", \"dmAtual… [4258 chars, sha1 672387e9bd3f]"
@@ -869,6 +865,43 @@
     "  t: \"estado\"",
     "  estado?: PlayerStateWire | undefined"
   ],
+  "StateView": [
+    "value: typeof StateView",
+    "type: StateView",
+    "  complete: boolean",
+    "  player: PlayerState | null",
+    "  ballCatalog: readonly BallEntry[]",
+    "  shopItems: readonly ShopEntry[]",
+    "  extraItems: readonly ExtraItemEntry[]",
+    "  xpShareItemId: number | null",
+    "  activePokemonId: number | null",
+    "  pokemons: readonly Pokemon[]",
+    "  pokemonCount: number",
+    "  nick: string | null",
+    "  level: number | null",
+    "  xp: number | null",
+    "  gold: number | null",
+    "  diamonds: number | null",
+    "  orbs: number | null",
+    "  huntSlug: string | null",
+    "  inCenter: boolean | null",
+    "  automation: AutomationState | null",
+    "  twitch: TwitchState | null",
+    "  findPokemon: (id: number) => PokemonWire | undefined",
+    "  pokemon: (id: number) => Readonly<Pokemon> | undefined",
+    "  isActive: (id: number) => boolean | null",
+    "  isInTeam: (id: number) => boolean | null",
+    "  isInCollection: (id: number) => boolean | null",
+    "  holdsExpShare: (id: number) => boolean | null",
+    "  huntName: (slug: string) => string | null",
+    "  itemQuantity: (id: number) => number | null",
+    "  ballQuantity: (id: number) => number | null",
+    "  itemCount: (id: number) => number",
+    "  ballCount: (id: number) => number",
+    "  itemName: (id: number) => string | null",
+    "  ballName: (id: number) => string | null",
+    "  onChange: (listener: () => void) => () => void"
+  ],
   "StatsWire": [
     "type: StatsWire",
     "  hp?: number | undefined",
@@ -913,22 +946,6 @@
     "  guild: GuildPacket",
     "  mg: MiniGameRoundPacket | MiniGameStagePacket | MiniGameRevealPacket | MiniGameSnapshotPacket | MiniGameOtherPacket",
     "  pong: Packet & { readonly t: \"pong\"; }"
-  ],
-  "Transport": [
-    "type: Transport<S>",
-    "  start: (handlers: TransportHandlers) => void",
-    "  stop: () => void",
-    "  send: (text: string) => S",
-    "  readyState: number"
-  ],
-  "TransportHandlers": [
-    "type: TransportHandlers",
-    "  onMessage: (text: string) => void",
-    "  onOutgoing?: ((text: string) => void) | undefined",
-    "  onBoundary?: (() => void) | undefined",
-    "  onOpen?: (() => void) | undefined",
-    "  onClose?: (() => void) | undefined",
-    "  onError?: ErrorHandler | undefined"
   ],
   "TwitchChannel": [
     "type: TwitchChannel",

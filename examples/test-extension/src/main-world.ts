@@ -1,8 +1,9 @@
-// Runs in the page's own world, before the game opens its socket (see manifest.json). READ-ONLY: it never sends anything.
-import { Ball, Inspector, Item, PageTransport, PokeIdleClient } from 'pokeidle-community-sdk';
+// Captures at document_start. Startup sends nothing; the labeled action buttons can perform real purchases and sales.
+import { Ball, Inspector, Item, bootstrapPageSession, PokeIdleClient } from 'pokeidle-community-sdk';
 
+bootstrapPageSession();
 const inspector = new Inspector();
-const client = new PokeIdleClient({ transport: new PageTransport(), inspector });
+const client = new PokeIdleClient({ inspector });
 client.start();
 
 // Handle for experiments in the DevTools console: window.__pokeidleSdk.inspector.dump()

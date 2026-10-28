@@ -2,7 +2,7 @@ import * as sdk from '../src/index.js';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PokeIdleClient } from '../src/index.js';
+import { PokeIdleClient } from '../src/client-core.js';
 import { FakeTransport, setup } from './helpers/actions-setup.js';
 import { Ball, Item } from '../src/index.js';
 

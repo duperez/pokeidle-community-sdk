@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Actions } from '../src/actions.js';
-import { PageTransport, PokeIdleClient, type PageLike } from '../src/index.js';
+import { PageTransport, type PageLike } from '../src/page-transport.js';
+import { PokeIdleClient } from '../src/client-core.js';
 import { SELL, setupSell } from './helpers/actions-setup.js';
 import { FakeHost } from './helpers/fake-host.js';
 import { FakeScheduler } from './helpers/fake-scheduler.js';

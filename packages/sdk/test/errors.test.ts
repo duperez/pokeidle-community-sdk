@@ -3,7 +3,9 @@ import test, { mock } from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defaultErrorHandler, guarded } from '../src/errors.js';
-import { GameState, PageTransport, PokeIdleClient, type PageLike } from '../src/index.js';
+import { GameState } from '../src/index.js';
+import { PageTransport, type PageLike } from '../src/page-transport.js';
+import { PokeIdleClient } from '../src/client-core.js';
 import { welcome } from './helpers/fixtures.js';
 
 test('guarded sends a throw to the handler and returns normally', () => {

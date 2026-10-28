@@ -1,4 +1,4 @@
-import type { Scheduler } from '../../src/index.js';
+import type { Scheduler } from '../../src/actions-types.js';
 
 /** A clock the test moves by hand. `pending` counts the timers still waiting: a leaked timer shows up as a number. */
 export class FakeScheduler implements Scheduler {

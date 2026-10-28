@@ -18,6 +18,7 @@ import { SpendLedger } from './spend-ledger.js';
 import { defaultErrorHandler, guarded, report, type ErrorHandler } from './errors.js';
 import { isIrreversibleCommand, type SendableCommand } from './protocol/commands.js';
 import { CommandRefusedError } from './protocol/send-guard.js';
+import type { Waiter } from './wait-for-first.js';
 
 // Actions: the things you DO in the game, as functions that tell you what happened. Each one checks what it can before
 // sending, sends the game's own command, and then waits for the game to confirm it instead of assuming it worked.
@@ -32,13 +33,29 @@ const MAX_PER_ORDER = 9999; // the game's own client never asks for more
 
 /** Created for you as `client.actions`; it depends only on `ActionsHost`, not on the client class. The limits live in memory and are per instance: a page reload starts them over. */
 export class Actions {
-  private readonly options: ActionsOptions;
-  private readonly scheduler: Scheduler;
-  private readonly limiter: RateLimiter;
-  private readonly ledger = new SpendLedger();
-  private inFlight = false;
-  private connectionGeneration = 0;
-  private readonly inventoryFloors = new Map<string, number>();
+  readonly #options: ActionsOptions;
+  readonly #scheduler: Scheduler;
+  readonly #limiter: RateLimiter;
+  readonly #ledger = new SpendLedger();
+  #inFlight = false;
+  #connectionGeneration = 0;
+  readonly #inventoryFloors = new Map<string, number>();
+  #detachPending: (() => BuyResult | SellResult) | null = null;
+  #detachedRisk = false;
+
+  get busy(): boolean {
+    return this.#inFlight;
+  }
+
+  /** @internal Detaches the caller, not the runtime's waiter or reservation. */
+  detach(): BuyResult | SellResult | null {
+    const result = this.#detachPending?.() ?? null;
+    if (result?.status === 'unconfirmed' || result?.status === 'rejected') {
+      this.#detachedRisk = true;
+      this.#limiter.startCooldown(this.#scheduler.now());
+    }
+    return result;
+  }
 
   constructor(
     private readonly host: ActionsHost,
@@ -46,37 +63,37 @@ export class Actions {
     private readonly onError: ErrorHandler = defaultErrorHandler,
   ) {
     validateOptions(options);
-    this.options = options;
-    this.scheduler = options.scheduler ?? realScheduler;
-    this.limiter = new RateLimiter(options);
+    this.#options = options;
+    this.#scheduler = options.scheduler ?? realScheduler;
+    this.#limiter = new RateLimiter(options);
     // This subscription belongs to the host's lifetime; per-order listeners are owned by the confirmation waiter.
     host.onConnectionChange(() => {
-      this.connectionGeneration += 1;
-      this.inventoryFloors.clear();
+      this.#connectionGeneration += 1;
+      this.#inventoryFloors.clear();
     });
   }
 
   /** Buys balls from the NPC shop. Use the `Ball` enum for the id. */
   buyBall(ball: number, quantity: number, options: ActionCallOptions = {}): Promise<BuyResult> {
-    return this.buy('ball', ball, quantity, options);
+    return this.#buy('ball', ball, quantity, options);
   }
 
   /** Buys items (potions, revives) from the NPC shop. Use the `Item` enum for the id. */
   buyItem(item: number, quantity: number, options: ActionCallOptions = {}): Promise<BuyResult> {
-    return this.buy('item', item, quantity, options);
+    return this.#buy('item', item, quantity, options);
   }
 
   /** Estimated gold sent in orders during the last hour. */
   get spentLastHour(): number {
-    return this.ledger.spentLastHour(this.scheduler.now());
+    return this.#ledger.spentLastHour(this.#scheduler.now());
   }
 
-  private async buy(kind: 'ball' | 'item', id: number, quantity: number, options: ActionCallOptions): Promise<BuyResult> {
+  async #buy(kind: 'ball' | 'item', id: number, quantity: number, options: ActionCallOptions): Promise<BuyResult> {
     if (!Number.isInteger(id) || id < 0) throw new RangeError(`the ${kind} id must be a non-negative integer, got ${String(id)}`);
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_PER_ORDER)
       throw new RangeError(`the quantity must be an integer from 1 to ${MAX_PER_ORDER}, got ${String(quantity)}`);
 
-    if (this.inFlight) return { status: 'busy' };
+    if (this.#inFlight) return { status: 'busy' };
     if (!this.host.connected) return { status: 'not-connected' };
     const state = this.host.state;
     if (!state.complete) return { status: 'no-state' };
@@ -90,21 +107,21 @@ export class Actions {
       totalPrice: price.unit === null ? null : price.unit * quantity,
     };
     const command = { t: 'shop.buy', kind, id, qty: quantity } as const;
-    const dryRun = options.dryRun ?? this.options.dryRun ?? false;
+    const dryRun = options.dryRun ?? this.#options.dryRun ?? false;
 
-    const checks = resolveChecks(this.options.checks);
+    const checks = resolveChecks(this.#options.checks);
     if (checks.notForSale && price.reason) return { status: 'not-for-sale', request, reason: price.reason };
     const gold = state.gold;
     if (checks.gold && request.totalPrice !== null && gold !== null && gold < request.totalPrice)
       return { status: 'insufficient-gold', request, needed: request.totalPrice, have: gold };
 
     // A dry run predicts the real outcome: it goes through the same limits, but does not record anything.
-    const now = this.scheduler.now();
-    const limited = this.limiter.check(now);
+    const now = this.#scheduler.now();
+    const limited = this.#limiter.check(now);
     if (limited) return limited;
-    const cap = this.options.maxGoldPerHour;
+    const cap = this.#options.maxGoldPerHour;
     if (cap !== undefined) {
-      const spent = this.ledger.spentLastHour(now);
+      const spent = this.#ledger.spentLastHour(now);
       // Fail closed: with a cap set, an order whose price is unknown cannot be counted, so it is not allowed.
       if (request.totalPrice === null || spent + request.totalPrice > cap)
         return { status: 'spend-cap', request, spentLastHour: spent, cap };
@@ -113,17 +130,17 @@ export class Actions {
 
     const before = kind === 'ball' ? state.ballCount(id) : state.itemCount(id);
     const key = `${kind}:${id}`;
-    const generation = this.connectionGeneration;
-    const inventoryBefore = Math.max(before, this.inventoryFloors.get(key) ?? before);
-    return this.dispatch({
+    const generation = this.#connectionGeneration;
+    const inventoryBefore = Math.max(before, this.#inventoryFloors.get(key) ?? before);
+    return this.#dispatch({
       command: { ...command },
       confirmIrreversible: false,
       spendGold: request.totalPrice,
       onSend: options.onSend,
       onSent: () => {
-        if (generation === this.connectionGeneration) this.inventoryFloors.set(key, inventoryBefore + quantity);
+        if (generation === this.#connectionGeneration) this.#inventoryFloors.set(key, inventoryBefore + quantity);
       },
-      wait: () => waitForPurchase(this.confirmationDeps, request, before, inventoryBefore),
+      wait: () => waitForPurchase(this.#confirmationDeps, request, before, inventoryBefore),
     });
   }
 
@@ -135,14 +152,14 @@ export class Actions {
   async sellPokemon(pokemonId: number, options: ActionCallOptions & { confirmIrreversible?: boolean } = {}): Promise<SellResult> {
     if (!Number.isInteger(pokemonId) || pokemonId < 0)
       throw new RangeError(`the pokémon id must be a non-negative integer, got ${String(pokemonId)}`);
-    const dryRun = options.dryRun ?? this.options.dryRun ?? false;
+    const dryRun = options.dryRun ?? this.#options.dryRun ?? false;
     if (!dryRun && options.confirmIrreversible !== true && isIrreversibleCommand('shop.sellPokemon')) {
       throw new CommandRefusedError(
         'shop.sellPokemon',
         'selling a pokémon cannot be undone: pass { confirmIrreversible: true } if you mean it',
       );
     }
-    if (this.inFlight) return { status: 'busy' };
+    if (this.#inFlight) return { status: 'busy' };
     if (!this.host.connected) return { status: 'not-connected' };
     const state = this.host.state;
     if (!state.complete) return { status: 'no-state' };
@@ -150,45 +167,47 @@ export class Actions {
     const pokemon = state.pokemon(pokemonId);
     if (!pokemon) return { status: 'not-found', pokemonId };
     const request: SellRequest = { pokemonId, name: pokemon.name, level: pokemon.level, shiny: pokemon.shiny };
-    if (resolveChecks(this.options.checks).sellable) {
+    if (resolveChecks(this.#options.checks).sellable) {
       const reason = whyNotSellable(state, pokemonId);
       if (reason) return { status: 'not-sellable', request, reason };
     }
 
-    const now = this.scheduler.now();
-    const limited = this.limiter.check(now);
+    const now = this.#scheduler.now();
+    const limited = this.#limiter.check(now);
     if (limited) return limited;
     const command = { t: 'shop.sellPokemon', pokemonId } as const;
     if (dryRun) return { status: 'dry-run', request, command: { ...command } };
 
-    return this.dispatch({
+    return this.#dispatch({
       command: { ...command },
       confirmIrreversible: true,
       spendGold: null,
       onSend: options.onSend,
-      wait: () => waitForSale(this.confirmationDeps, request),
+      wait: () => waitForSale(this.#confirmationDeps, request),
     });
   }
 
-  private get confirmationDeps(): { host: ActionsHost; scheduler: Scheduler; options: ActionsOptions } {
-    return { host: this.host, scheduler: this.scheduler, options: this.options };
+  get #confirmationDeps(): { host: ActionsHost; scheduler: Scheduler; options: ActionsOptions } {
+    return { host: this.host, scheduler: this.#scheduler, options: this.#options };
   }
 
   /**
    * The part every action shares: one at a time, listen BEFORE sending (the answer can be instant), send, record the
    * rate and spending budgets, wait, and after an unconfirmed or rejected order hold the next one back.
    */
-  private async dispatch<R extends { status: string }>(spec: {
+  async #dispatch<R extends BuyResult | SellResult>(spec: {
     command: SendableCommand;
     confirmIrreversible: boolean;
     spendGold: number | null;
     onSend: ActionCallOptions['onSend'];
     onSent?: () => void;
-    wait: () => { result: Promise<R>; cancel: () => void };
+    wait: () => Waiter<R>;
   }): Promise<R | { status: 'not-connected' }> {
-    this.inFlight = true;
+    this.#inFlight = true;
+    this.#detachedRisk = false;
     try {
       const confirmation = spec.wait();
+      this.#detachPending = () => confirmation.snapshot();
       const notify = (outcome: SendOutcome): void => guarded(this.onError, () => spec.onSend?.(Object.freeze(outcome)));
       let sent: boolean;
       let outcome: SendOutcome;
@@ -213,15 +232,17 @@ export class Actions {
         return { status: 'not-connected' };
       }
       spec.onSent?.();
-      const sentAt = this.scheduler.now();
-      this.limiter.recordSend(sentAt);
-      if (spec.spendGold !== null) this.ledger.record(sentAt, spec.spendGold);
+      const sentAt = this.#scheduler.now();
+      this.#limiter.recordSend(sentAt);
+      if (spec.spendGold !== null) this.#ledger.record(sentAt, spec.spendGold);
       notify(outcome);
       const result = await confirmation.result;
-      if (result.status === 'unconfirmed' || result.status === 'rejected') this.limiter.startCooldown(this.scheduler.now());
+      if (result.status === 'unconfirmed' || result.status === 'rejected' || this.#detachedRisk)
+        this.#limiter.startCooldown(this.#scheduler.now());
       return result;
     } finally {
-      this.inFlight = false;
+      this.#detachPending = null;
+      this.#inFlight = false;
     }
   }
 }

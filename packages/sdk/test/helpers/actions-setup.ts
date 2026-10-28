@@ -1,6 +1,8 @@
 import { FakeScheduler } from './fake-scheduler.js';
 import { pokemon, sellWelcome, welcome } from './fixtures.js';
-import { PokeIdleClient, type ActionsOptions, type Transport, type TransportHandlers } from '../../src/index.js';
+import { PokeIdleClient } from '../../src/client-core.js';
+import type { ActionsOptions } from '../../src/actions-types.js';
+import type { Transport, TransportHandlers } from '../../src/transport.js';
 
 // Shared by the actions tests: a real client over a fake transport and a fake clock.
 
