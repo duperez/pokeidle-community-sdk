@@ -261,3 +261,81 @@ Execution remains conditional on the corrected integrated SHA, green build
 and coordinator's serial window. The owner and coordinator receive the
 absolute tooling path and exact environment command through session messages;
 machine-specific paths do not belong in the repository's portable commands.
+
+## Executable review checkpoint: core ff459f5 and integration ae4f514
+
+This checkpoint is **not final acceptance**. The independent reviewer checked
+out exact Git objects in this review worktree, did not edit runtime/harness,
+then returned to the documentation branch. The runtime author owns all fixes.
+
+| ID / severity                 | Evidence and observed defect                                                                                                                                                                                                                                                                                                                 | Required closure                                                                                                                                                                                                       | Status                                                                                             |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| R1 / High / A7                | Core `ff459f5a2562e5a09a830b898071ade6ea61e285`, `page-session.ts:244-247` and `client.ts:78-103`: A's welcome listener constructs a successor CONNECTING socket during fan-out. B still receives the old welcome with gold 101 while already generation 2, incomplete and disconnected. Attach/run checks do not guard delivery generation. | Stop old-generation delivery between consumers and between phases/listeners of the same facade; cover packet, battle/outgoing/connection paths as relevant. The successor's later welcome must still deliver normally. | Open; reproduced independently against built ESM and IIFE, reported to runtime author/coordinator. |
+| R2 / Medium / A4              | Same core, `client.ts:114-122`: A is OPEN/complete; its stop state callback restarts A once. Connection callbacks observe `[true,true,true]` followed by `[false,true,true]` (event, connected, complete). The second callback is the stopped run's tail even though the new run is active.                                                  | Restart/unsubscribe during stop notifications must invalidate remaining old-run delivery. Keep peers and native socket intact. No stale false event after the new run's true event.                                    | Open; independently reproduced, reported to runtime author/coordinator.                            |
+| R3 / Medium / migration       | Integration `ae4f5141d7197b70c292168c24fa772a3545088b`: `docs/architecture.md:7-18,157,224` still teaches public Transport/PageTransport; `docs/distribution.md` still advertises async transport consumption.                                                                                                                               | Update directly related architecture/distribution documentation to the frozen standalone API, without presenting private test seams as consumer choices.                                                               | Open; reported to runtime author.                                                                  |
+| R4 / Existing acceptance gate | Full SDK suite on ff459f5: standalone bundle 42.6 KiB versus unchanged 40 KiB budget; 256/257 pass.                                                                                                                                                                                                                                          | Correct within the existing budget and rerun final checks; do not relax the limit.                                                                                                                                     | Known to author/coordinator before this review; independently confirmed.                           |
+
+R1 and R2 have an independent two-test reproducer in the review session
+artifact `core-reentrancy-review.test.mjs`, outside the repository. It consumes
+the actual built IIFE and creates no browser/server. Both assertions failed
+on the reviewed core as expected; this is red evidence, not proof of a fix.
+The R2 expected sequence is only `[true,true,true]`, with the facade still
+connected; its reproduction is not the socket-generation case in R1.
+
+### Executed checks and native proof
+
+On core ff459f5, SDK build and workspace typecheck passed under Node
+`22.23.4`; that initial supplemental invocation used tooling npm `10.9.9`
+and is not claimed as the repository's prescribed npm toolchain.
+The full SDK suite gave 256 passed, 1 failed, 0 skipped (R4 above).
+
+For integration ae4f514, used Node `22.23.4` and the repository's npm
+`10.8.2`, without changing its package manager or lockfile:
+
+```sh
+npm run distribution -- --require-clean
+npm run test:distribution
+```
+
+Results: clean reproducible distribution passed (`dirty: false`, exact
+revision ae4f514); distribution checks **8 passed, 0 failed, 0 skipped**.
+The generated manifest independently records npm `10.8.2`, TypeScript
+`5.9.3`, esbuild `0.23.1`, darwin/arm64.
+
+After the coordinator released an independent serial window, executed the
+unmodified integrated native harness using the disposable tooling:
+
+```sh
+SDK_PROOF_TOOLS="$TOOLS" PLAYWRIGHT_BROWSERS_PATH="$TOOLS/browsers" \
+  DEBUG=pw:browser "$TOOLS/node-v22.23.4-darwin-arm64/bin/node" \
+  examples/test-extension/native-proof.mjs
+```
+
+Result: **PASS, all 13 named stages**, Chromium `156.0.8078.4`, two page-owned
+connections and one ping exclusively on the successor. This independently
+demonstrates actual MV3 MAIN/document_start execution, welcome capture before
+late attach without replay, two full bundle evaluations, stop isolation,
+held CONNECTING replacement, OPEN versus completeness and stale socket
+traffic/close suppression. It does not cover the callback-reentrant R1/R2.
+
+The exact SDK SHA-256 is
+`831860c9e31740c4b53f50948d052307e6fb4165936d8074d8cf4ec4fb2be687`.
+Full wrapper hashes are
+`7366d2ce60900b12cf3dc3cc13e085152c3387b11eadd8b80d58f8c493a28bce`
+and `92353fffd78f9534c440093fda5e374baa3ca47e7416bcda8995a96d8095b2f4`;
+these match the integrator's separately reported run.
+
+Sandbox correction `469a3957301da57f57787ad3647ca94056e49986` was inspected
+via Git and is present in the executed integration. The actual Playwright
+launch arguments were checked: no `--no-sandbox`, `--disable-web-security`
+or `--ignore-certificate-errors`. The browser exited with code 0; its
+specific PID no longer existed, and both its generated fixture and fresh
+profile paths were absent after cleanup. PASS was emitted after cleanup.
+No installed Chrome/profile was used. The reviewer explicitly returned the
+serial window and will not launch helpers again without a new reservation.
+
+Bounded harness output, lifecycle evidence, distribution output and red
+repro output are kept in review-session artifacts. Native success is an
+early integration proof only: R1/R2 fixes, documentation migration, bundle
+budget, mutation/coverage and the exact final clean SHA still require
+independent closure. No performance improvement is claimed from this run.
