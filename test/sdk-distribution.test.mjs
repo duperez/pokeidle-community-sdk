@@ -6,11 +6,49 @@ import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import ts from 'typescript';
 import { runNpm } from '../scripts/npm.mjs';
 
 const SDK = fileURLToPath(new URL('../packages/sdk/', import.meta.url));
 const built = fs.existsSync(path.join(SDK, 'dist/index.cjs'));
+
+test('the actual standalone example bootstraps before UI mounting and sends nothing at startup', { skip: !built }, async () => {
+  const context = vm.createContext({ URL, structuredClone, EventTarget, Event, MessageEvent, setTimeout, clearTimeout, console });
+  vm.runInContext(
+    `globalThis.window = globalThis;
+     globalThis.document = {readyState:'loading', addEventListener() {}};
+     globalThis.location = {host:'game.test', href:'https://game.test/'};
+     class Socket extends EventTarget {
+       constructor(url) { super(); this.url = url; this.readyState = 1; this.sent = []; }
+       send(text) { this.sent.push(text); }
+     }
+     globalThis.WebSocket = Socket;`,
+    context,
+  );
+  const example = await build({
+    entryPoints: [fileURLToPath(new URL('../examples/test-extension/src/main-world.ts', import.meta.url))],
+    bundle: true,
+    format: 'iife',
+    target: 'chrome111',
+    write: false,
+  });
+  vm.runInContext(example.outputFiles[0].text, context);
+  const actual = vm.runInContext(
+    `(() => {
+       const socket = new WebSocket('wss://game.test/');
+       socket.dispatchEvent(new Event('open'));
+       socket.dispatchEvent(new MessageEvent('message', {
+         data:'{"t":"welcome","estado":{"cheio":true,"gold":301,"pokemons":[]}}'
+       }));
+       return JSON.stringify({connected:__pokeidleSdk.client.connected,complete:__pokeidleSdk.client.state.complete,
+         gold:__pokeidleSdk.client.state.gold,sent:socket.sent});
+     })()`,
+    context,
+  );
+  assert.deepEqual(JSON.parse(actual), { connected: true, complete: true, gold: 301, sent: [] });
+  vm.runInContext('__pokeidleSdk.client.stop()', context);
+});
 
 test('the browser bundle runs standalone and delivers market packets through the shared page runtime', { skip: !built }, async () => {
   const context = vm.createContext({ URL, structuredClone, EventTarget, Event, MessageEvent });
