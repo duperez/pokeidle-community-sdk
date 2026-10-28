@@ -49,6 +49,8 @@ The harness loads the actual built IIFE, not a replacement SDK implementation.
 It generates two independent extension files, each containing the entire same
 SDK segment plus a distinct wrapper. Both execute in MAIN/document_start
 against loopback only; the real-game manifest and profile are never loaded.
+Chromium sandboxing remains enabled. If the sandbox cannot start, the proof
+fails explicitly; do not retry with `--no-sandbox` or weaker security flags.
 
 The first inline page script creates the native socket. Server-delivered
 invented welcome data is collected before either client attaches. Subsequent

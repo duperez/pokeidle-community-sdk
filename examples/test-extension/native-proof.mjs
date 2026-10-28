@@ -106,6 +106,7 @@ async function run() {
     context = await chromium.launchPersistentContext(path.join(directory, 'profile'), {
       channel: 'chromium',
       headless: true,
+      chromiumSandbox: true,
       args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
     });
     const page = await context.newPage();
