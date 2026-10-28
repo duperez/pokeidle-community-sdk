@@ -51,7 +51,7 @@ export class PokeIdleClient {
       () => this.#consumer !== null,
       (listener) => this.add(this.#changes, listener),
     );
-    const client = this;
+    const spentLastHour = () => this.#runtime?.spentLastHour ?? 0;
     this.actions = Object.freeze({
       buyBall: (id: number, quantity: number, call: ActionCallOptions = {}) => this.buy('ball', id, quantity, call),
       buyItem: (id: number, quantity: number, call: ActionCallOptions = {}) => this.buy('item', id, quantity, call),
@@ -60,7 +60,7 @@ export class PokeIdleClient {
           ? this.#runtime.sell(this.#consumer, id, { ...call })
           : Promise.resolve({ status: 'not-connected' } as const),
       get spentLastHour() {
-        return client.#runtime?.spentLastHour ?? 0;
+        return spentLastHour();
       },
     });
   }
@@ -70,45 +70,56 @@ export class PokeIdleClient {
     const runtime = ensurePageSession(globalThis);
     const run = ++this.#run;
     const current = () => this.#consumer !== null && this.#run === run;
+    const delivery = () => {
+      const generation = runtime.generation;
+      return () => current() && runtime.generation === generation;
+    };
     const consumer: Consumer = {
       onError: this.#onError,
       ignored: (reason) => {
         if (current()) this.inspector?.recordIgnored(reason);
       },
       packet: (packet, changed) => {
-        if (!current()) return;
+        const active = delivery();
+        if (!active()) return;
         this.inspector?.recordReceived(packet);
-        if (changed) this.deliver(this.#changes, [], run);
-        this.deliver(this.#types.get(packet.t), [packet], run);
-        this.deliver(this.#packets, [packet], run);
+        if (changed) this.deliver(this.#changes, [], active);
+        this.deliver(this.#types.get(packet.t), [packet], active);
+        this.deliver(this.#packets, [packet], active);
         if (packet.t !== 'batalha' || !Array.isArray(packet['ev'])) return;
-        for (const event of packet['ev']) {
-          if (!current()) return;
-          if (event === null || typeof event !== 'object' || typeof event.k !== 'string') continue;
-          this.inspector?.recordBattleEvent(event.k, event);
+        const events: unknown[] = packet['ev'];
+        for (const event of events) {
+          if (!active()) return;
+          if (event === null || typeof event !== 'object') continue;
+          const kind = (event as { k?: unknown }).k;
+          if (typeof kind !== 'string') continue;
+          this.inspector?.recordBattleEvent(kind, event);
           const typed = event as BattleEvent;
-          this.deliver(this.#battle.get(event.k), [typed as never], run);
-          this.deliver(this.#anyBattle, [typed], run);
+          this.deliver(this.#battle.get(kind), [typed as never], active);
+          this.deliver(this.#anyBattle, [typed], active);
         }
       },
       outgoing: (packet) => {
-        if (!current()) return;
+        const active = delivery();
+        if (!active()) return;
         this.inspector?.recordSent(packet);
-        this.deliver(this.#outgoing, [packet], run);
+        this.deliver(this.#outgoing, [packet], active);
       },
       connection: (connected) => {
-        if (!current()) return;
+        const active = delivery();
+        if (!active()) return;
         this.#generation = runtime.generation;
-        this.deliver(this.#changes, [], run);
-        this.deliver(this.#connection, [connected], run);
+        this.deliver(this.#changes, [], active);
+        this.deliver(this.#connection, [connected], active);
       },
     };
     this.#runtime = runtime;
     this.#generation = runtime.generation;
     this.#consumer = consumer;
     runtime.attach(consumer);
-    this.deliver(this.#changes, [], run);
-    if (runtime.connected) this.deliver(this.#connection, [true], run);
+    const active = delivery();
+    this.deliver(this.#changes, [], active);
+    if (runtime.connected) this.deliver(this.#connection, [true], active);
   }
 
   stop(): void {
@@ -116,10 +127,11 @@ export class PokeIdleClient {
     if (!consumer || !this.#runtime) return;
     this.#last = this.#runtime.capture();
     this.#consumer = null;
-    this.#run++;
+    const run = ++this.#run;
     this.#runtime.detach(consumer);
-    for (const listener of [...this.#changes]) guarded(this.#onError, listener);
-    for (const listener of [...this.#connection]) guarded(this.#onError, () => listener(false));
+    const stopped = () => this.#run === run && this.#consumer === null;
+    this.deliver(this.#changes, [], stopped);
+    this.deliver(this.#connection, [false], stopped);
   }
   get connected(): boolean {
     return this.#consumer !== null && (this.#runtime?.connected ?? false);
@@ -161,7 +173,9 @@ export class PokeIdleClient {
       return Promise.resolve(runtime.send(text));
     } catch (error) {
       if (error instanceof PageSessionError && error.code === 'busy') throw error;
-      return Promise.reject(error);
+      return Promise.resolve().then(() => {
+        throw error;
+      });
     }
   }
   sendCommand(command: SendableCommand, options: { confirmIrreversible?: boolean } = {}): Promise<boolean> {
@@ -179,9 +193,9 @@ export class PokeIdleClient {
       set.delete(listener);
     };
   }
-  private deliver<A extends unknown[]>(listeners: Set<(...args: A) => void> | undefined, args: A, run: number): void {
+  private deliver<A extends unknown[]>(listeners: Set<(...args: A) => void> | undefined, args: A, active: () => boolean): void {
     for (const listener of [...(listeners ?? [])]) {
-      if (!this.#consumer || this.#run !== run) break;
+      if (!active()) break;
       if (listeners?.has(listener)) guarded(this.#onError, () => listener(...args));
     }
   }

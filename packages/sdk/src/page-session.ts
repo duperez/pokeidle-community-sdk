@@ -2,7 +2,6 @@ import { PokeIdleClient as Core } from './client-core.js';
 import { PageTransport, type PageLike } from './page-transport.js';
 import { DEFAULT_MAX_PACKET_BYTES, type Packet, type IgnoredReason } from './packets.js';
 import { DEFAULTS, resolveChecks, validateOptions } from './actions-options.js';
-import type { Actions } from './actions.js';
 import type { ActionCallOptions, ActionsOptions, BuyResult, SellResult, Scheduler, SendOutcome } from './actions-types.js';
 import { defaultErrorHandler, guarded, type ErrorHandler } from './errors.js';
 import { deepFreeze } from './immutable.js';
@@ -242,7 +241,9 @@ class Runtime implements PageSession {
     return false;
   }
   private each(deliver: (consumer: Consumer) => void): void {
+    const generation = this.generation;
     for (const consumer of [...this.#consumers]) {
+      if (this.generation !== generation) break;
       if (this.#consumers.has(consumer)) guarded(consumer.onError, () => deliver(consumer));
     }
   }

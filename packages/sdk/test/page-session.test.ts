@@ -410,6 +410,97 @@ test('two consumers cannot mutate shared event payloads or stop a peer callback 
   assert.equal(Reflect.get(a.state, 'applyPacket'), undefined);
 });
 
+for (const phase of ['packet', 'battle', 'outgoing', 'connection', 'state'] as const) {
+  test(`a reentrant replacement interrupts old-generation ${phase} tails and peer delivery`, (t) => {
+    const fixture = page(t);
+    bootstrap();
+    const a = new SDK.PokeIdleClient();
+    const b = new SDK.PokeIdleClient();
+    a.start();
+    b.start();
+    const ws = fixture.socket();
+    ws.open();
+    ws.feed(welcome());
+    const seen: string[] = [];
+    let replaced = false;
+    const replace = () => {
+      if (replaced) return;
+      replaced = true;
+      seen.push('first');
+      fixture.socket();
+    };
+    if (phase === 'packet') {
+      a.on('welcome', replace);
+      a.on('welcome', () => seen.push('a-type-tail'));
+      a.onPacket(() => seen.push('a-packet-tail'));
+      b.on('welcome', () => seen.push('b-packet'));
+      ws.feed(welcome());
+    } else if (phase === 'battle') {
+      a.onBattleEvent('compra', replace);
+      a.onBattleEvent('compra', () => seen.push('a-battle-tail'));
+      a.onAnyBattleEvent(() => seen.push('a-any-tail'));
+      b.onAnyBattleEvent(() => seen.push('b-battle'));
+      ws.feed({ t: 'batalha', ev: [{ k: 'compra' }, { k: 'compra' }] });
+    } else if (phase === 'outgoing') {
+      a.onOutgoing(replace);
+      a.onOutgoing(() => seen.push('a-outgoing-tail'));
+      b.onOutgoing(() => seen.push('b-outgoing'));
+      ws.send('{"t":"ping"}');
+    } else if (phase === 'connection') {
+      a.onConnectionChange((connected) => {
+        if (connected) replace();
+      });
+      a.onConnectionChange((connected) => {
+        if (connected) seen.push('a-open-tail');
+      });
+      b.onConnectionChange((connected) => {
+        if (connected) seen.push('b-open');
+      });
+      ws.open();
+    } else {
+      a.state.onChange(() => {
+        if (a.state.complete) replace();
+      });
+      a.state.onChange(() => {
+        if (a.state.complete) seen.push('a-state-tail');
+      });
+      a.on('estado', () => seen.push('a-state-packet'));
+      b.on('estado', () => seen.push('b-state-packet'));
+      ws.feed({ t: 'estado', estado: { gold: 101 } });
+    }
+    assert.deepEqual(seen, ['first']);
+    assert.equal(b.generation, 2);
+    assert.equal(b.state.complete, false);
+  });
+}
+
+test('a restart during stop cannot receive a stale false tail or an unsubscribed callback', (t) => {
+  const fixture = page(t);
+  const client = new SDK.PokeIdleClient();
+  client.start();
+  const ws = fixture.socket();
+  ws.open();
+  ws.feed(welcome());
+  const seen: boolean[] = [];
+  let restart = true;
+  client.state.onChange(() => {
+    if (restart) {
+      restart = false;
+      client.start();
+    }
+  });
+  client.onConnectionChange((connected) => seen.push(connected));
+  client.stop();
+  assert.deepEqual(seen, [true]);
+  assert.equal(client.connected, true);
+  let removedCalls = 0;
+  let off = () => {};
+  client.onConnectionChange(() => off());
+  off = client.onConnectionChange(() => removedCalls++);
+  client.stop();
+  assert.equal(removedCalls, 0);
+});
+
 test('owner stop keeps the shared writer reserved until original reconciliation finishes', async (t) => {
   const fixture = page(t);
   bootstrap({ actions: { rateLimit: false, confirmGraceMs: 0, unconfirmedCooldownMs: 0 } });
