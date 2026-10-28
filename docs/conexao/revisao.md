@@ -405,3 +405,88 @@ This graph is not the author's pending simplified kernel and still exceeds
 40,960 bytes; **R4 remains open until the exact consolidated build passes
 the unchanged strict budget**. No codec/runtime implementation was edited
 by the reviewer.
+
+### Consolidated kernel and independent native15 check
+
+Reviewed and executed exact clean revision
+`ca704f2a64dc33ca2e45a13c2c63cfaadbc705a1`, including kernel a74b3ec and
+codec d2e20b2. The integrator's 1500f9d1 has the same Git tree,
+`05c3d7d1bdac213600fa3539cbdeb39804f13223`; this is tree equivalence, not
+permission to reuse results for subsequent runtime edits.
+
+Inspection found no new functional blocker in the kernel reduction.
+Removing the internal duplicate Inspector and any-battle subscriptions
+retains the facade's public diagnostics and subscriptions, now exercised by
+the migrated client/sample/Inspector integration tests. Native private
+members retain encapsulation. Shared argument guards preserve numeric
+validation before offline/busy refusals. The new tests cover definitely
+not-sent owner stop, detached-risk cooldown after eventual reconciliation,
+and generation replacement inside onSend without losing its accepted receipt.
+
+All commands below used Node `22.23.4` and explicit npm `10.8.2`, with the
+Node22 directory first in PATH for subprocesses:
+
+| Independent check                         | Result on ca704f2                                                    |
+| ----------------------------------------- | -------------------------------------------------------------------- |
+| `npm run build`                           | Passed SDK and example                                               |
+| `npm run typecheck`                       | Passed SDK and example                                               |
+| `npm test`                                | 267 SDK and 33 repository tests passed, zero skips                   |
+| Public-IIFE external R1/R2 repros         | 2/2 passed                                                           |
+| `npm run lint`                            | Passed, including its build prerequisite                             |
+| `npm run coverage`                        | Passed: lines 99.28% (floor 94), branches 96.03% (floor 92)          |
+| Exact bundle-size entry and flags         | 40,935 raw bytes / 14,213 gzip; strict 40,960-byte ceiling unchanged |
+| `node scripts/mutation.mjs page-session`  | Two selected mutations killed, zero problems; source restored clean  |
+| `npm run distribution -- --require-clean` | Reproducible, source ca704f2, dirty=false                            |
+| `npm run test:distribution`               | 11/11 passed, zero skips                                             |
+
+R1 and R2 remain closed on this integrated runtime. R3's revised architecture
+and distribution documents are present. R4 is closed on this exact build,
+with only 25 bytes below the strict ceiling: this is a fragile raw-size
+margin, not a latency, parse-cost or wire-size improvement claim.
+
+The coordinator then reserved an exclusive native window for this candidate.
+Ran the unchanged native harness using the disposable tooling and fresh
+profile: **all 15 stages passed**, Chromium `156.0.8078.4`. This includes the
+reentrant old-generation fan-out regression, in addition to the earlier
+13-stage sequence. There were three page-owned sockets and exactly one
+current-socket ping, not a parallel SDK connection.
+
+Artifact SHA-256 values:
+
+- SDK: `960b0802467783beaea0c20756b9a2bd765792ce7ae1e76fb1eca73ef2b2a665`.
+- Wrapper A: `543e3693b7bd3dab6f202999dcefd9105a2241119f37e5057c54d13c8a867b8a`.
+- Wrapper B: `4361e62a9fabde8b9859addafeed1e7f2bee44ff1bb215b93039e5c7786c6560`.
+
+Actual launch arguments again contained none of `--no-sandbox`,
+`--disable-web-security` or `--ignore-certificate-errors`. The specific
+browser PID exited with code 0 and no longer existed; both generated fixture
+and profile were removed. The harness emitted PASS after closing the local
+server/sockets and completing cleanup. The reviewer returned the window;
+no helpers remain. This is new evidence for ca704f2, not a relabeling of the
+ae4f514 native13 or the integrator's earlier native15.
+
+### R5: mutation infrastructure errors counted as semantic kills
+
+The size-filter change itself is appropriate: the mandatory baseline still
+enumerates the full SDK suite including bundle-size; mutated runs exclude
+only `bundle-size.test.ts`. Thus code growth alone no longer kills a
+semantic mutant. Missing source patterns are reported as NOT APPLIED and
+fail the run.
+
+However, `scripts/mutation.mjs` still classifies any TAP `not ok` line as a
+kill. An independent real Node22 repro, outside the checkout, imports a
+nonexistent module from a test file. Node exits 1 with ERR_MODULE_NOT_FOUND
+and a file-level `not ok` / ERR_TEST_FAILURE, before executing any behavioral
+test; `testsFailed(stdout + stderr)` nevertheless returns true. The existing
+test checks only a bare error string without TAP, so it misses this case.
+This predates the size-filter change but violates the final gate's explicit
+requirement to distinguish semantic failures from import/compile failures.
+
+**Status: open, owner notified.** This is an evidence/runner issue, not a
+new SDK runtime defect. The two focused mutation results above do not
+constitute full mutation acceptance. Closure requires runner tests covering
+real loader/transform failures versus behavioral failures, retained
+missing-target handling, and a complete run with no infrastructure false
+kills. The reviewer has not implemented the correction. Runtime/native
+results need not be rerun for a runner-only correction if exact SDK bytes
+remain identical; any runtime change requires a new relevant check.
